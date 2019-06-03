@@ -75,17 +75,9 @@ struct MPTRK {
   MP22I   hitidx;
 };
 
-struct ALLTRKS {
-  MPTRK  btrks[nevts*ntrks];
-};
-
 struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
-};
-
-struct ALLHITS {
-  MPHIT bhits[nevts*ntrks];
 };
 
 float randn(float mu, float sigma) {
@@ -108,12 +100,12 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-MPTRK* bTk(ALLTRKS* tracks, size_t ev, size_t ib) {
-  return &((*tracks).btrks[ib + nb*ev]);
+MPTRK* bTk(MPTRK* tracks, size_t ev, size_t ib) {
+  return &(tracks[ib + nb*ev]);
 }
 
-const MPTRK* bTk(const ALLTRKS* tracks, size_t ev, size_t ib) {
-  return &((*tracks).btrks[ib + nb*ev]);
+const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
+  return &(tracks[ib + nb*ev]);
 }
 
 float q(const MP1I* bq, size_t it){
@@ -140,18 +132,18 @@ float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
 float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
 float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
 //
-float par(const ALLTRKS* tracks, size_t ev, size_t tk, size_t ipar){
+float par(const MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
   const MPTRK* btracks = bTk(tracks, ev, ib);
   size_t it = tk % bsize;
   return par(btracks, it, ipar);
 }
-float x    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
-float y    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
-float z    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
-float ipt  (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
-float phi  (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
-float theta(const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
+float x    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
+float y    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
+float z    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
+float ipt  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
+float phi  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
+float theta(const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
 //
 void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
   (*bpars).data[it + ipar*bsize] = val;
@@ -173,8 +165,8 @@ void setipt  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 
 void setphi  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 4, val); }
 void settheta(MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 5, val); }
 
-const MPHIT* bHit(const ALLHITS* hits, size_t ev, size_t ib) {
-  return &((*hits).bhits[ib + nb*ev]);
+const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
+  return &(hits[ib + nb*ev]);
 }
 //
 float pos(const MP3F* hpos, size_t it, size_t ipar){
@@ -191,51 +183,51 @@ float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
 float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
 float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
 //
-float pos(const ALLHITS* hits, size_t ev, size_t tk, size_t ipar){
+float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
   const MPHIT* bhits = bHit(hits, ev, ib);
   size_t it = tk % bsize;
   return pos(bhits,it,ipar);
 }
-float x(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
-float y(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
-float z(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
+float x(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
+float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
+float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
-ALLTRKS* prepareTracks(ATRK inputtrk) {
-  ALLTRKS* result = (ALLTRKS*) malloc(sizeof(ALLTRKS)); //fixme, align?
+MPTRK* prepareTracks(ATRK inputtrk) {
+  MPTRK* result = (MPTRK*) malloc(nevts*ntrks*sizeof(MPTRK)); //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
 	//par
 	for (size_t ip=0;ip<6;++ip) {
-	  (*result).btrks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
 	}
 	//cov
 	for (size_t ip=0;ip<36;++ip) {
-	  (*result).btrks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
 	}
 	//q
-	(*result).btrks[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+	result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
       }
     }
   }
   return result;
 }
 
-ALLHITS* prepareHits(AHIT inputhit) {
-  ALLHITS* result = (ALLHITS*) malloc(sizeof(ALLHITS));  //fixme, align?
+MPHIT* prepareHits(AHIT inputhit) {
+  MPHIT* result = (MPHIT*) malloc(nevts*ntrks*sizeof(MPHIT));  //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
   	//pos
   	for (size_t ip=0;ip<3;++ip) {
-  	  (*result).bhits[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+  	  result[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
   	}
   	//cov
   	for (size_t ip=0;ip<6;++ip) {
-  	  (*result).bhits[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+  	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
   	}
       }
     }
@@ -393,12 +385,12 @@ int main (int argc, char* argv[]) {
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    
-   ALLTRKS* trk = prepareTracks(inputtrk);
-   ALLHITS* hit = prepareHits(inputhit);
+   MPTRK* trk = prepareTracks(inputtrk);
+   MPHIT* hit = prepareHits(inputhit);
 
    printf("done preparing!\n");
    
-   ALLTRKS* outtrk = (ALLTRKS*) malloc(sizeof(ALLTRKS));
+   MPTRK* outtrk = (MPTRK*) malloc(nevts*ntrks*sizeof(MPTRK));
 
    // for (size_t ie=0;ie<nevts;++ie) {
    //   for (size_t it=0;it<ntrks;++it) {
