@@ -13,6 +13,13 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define bsize 16
 #define ntrks nb*bsize
 #define smear 0.1
+#ifdef _OPENARC_
+#pragma openarc #define nevts 100
+#pragma openarc #define nb    600
+#pragma openarc #define bsize 16
+#pragma openarc #define ntrks nb*bsize
+#pragma openarc #define N bsize
+#endif
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -236,11 +243,12 @@ MPHIT* prepareHits(AHIT inputhit) {
 }
 
 #define N bsize
+#pragma acc routine seq nohost
 void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp simd
+ #pragma acc loop seq
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -282,11 +290,12 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   }
 }
 
+#pragma acc routine seq nohost
 void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp simd
+ #pragma acc loop seq
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -313,12 +322,13 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   }
 }
 
+#pragma acc routine seq nohost
 void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar) {
   //
   MP6x6F errorProp, temp;
-#pragma omp simd
+ #pragma acc loop seq
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z(msP,it);
     const float k = q(inChg,it)*100/3.8;
@@ -407,10 +417,16 @@ int main (int argc, char* argv[]) {
    long start, end;
    struct timeval timecheck;
 
+   printf("Size of struct MPTRK trk[] = %ld\n", nevts*ntrks*sizeof(struct MPTRK));
+   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*ntrks*sizeof(struct MPTRK));
+   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*ntrks*sizeof(struct MPHIT));
+
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-#pragma omp parallel for
+#pragma acc data copyin(trk[0:nevts*ntrks], hit[0:nevts*ntrks]) copyout(outtrk[0:nevts*ntrks])
+{
+#pragma acc parallel loop gang worker collapse(2) present(trk, hit, outtrk)
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
@@ -421,6 +437,7 @@ int main (int argc, char* argv[]) {
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
     }
   }
+}
 
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
