@@ -420,7 +420,7 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-#pragma omp parallel for
+#pragma omp parallel for collapse(2)
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
