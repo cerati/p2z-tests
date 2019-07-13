@@ -1,0 +1,94 @@
+track in pos: -12.806847, -7.723825, 38.130142 
+track in cov: 6.29e-07, 7.53e-07, 9.63e-08 
+hit in pos: -20.782465 -12.241503 57.806763 
+produce nevts=100 ntrks=9600 smearing by=0.100000 
+NITER=100
+done preparing!
+Size of struct MPTRK trk[] = 3072000000
+Size of struct MPTRK outtrk[] = 3072000000
+Size of struct struct MPHIT hit[] = 552960000
+done ntracks=960000 tot time=1.703000 (s) time/trk=1.773958e-06 (s)
+data region time=2.367000 (s)
+memory transter time=0.664000 (s)
+track x avg=-18.914635 std/avg=0.148102
+track y avg=-11.288569 std/avg=0.204796
+track z avg=57.812893 std/avg=0.099857
+track dx/x avg=-0.123457 std=0.205716
+track dy/y avg=-0.132040 std=0.275954
+track dz/z avg=0.000000 std=0.000000
+
+track in pos: -12.806847, -7.723825, 38.130142 
+track in cov: 6.29e-07, 7.53e-07, 9.63e-08 
+hit in pos: -20.782465 -12.241503 57.806763 
+produce nevts=100 ntrks=9600 smearing by=0.100000 
+NITER=100
+done preparing!
+Size of struct MPTRK trk[] = 3072000000
+Size of struct MPTRK outtrk[] = 3072000000
+Size of struct struct MPHIT hit[] = 552960000
+done ntracks=960000 tot time=1.682000 (s) time/trk=1.752083e-06 (s)
+data region time=2.349000 (s)
+memory transter time=0.667000 (s)
+track x avg=-18.913946 std/avg=0.148346
+track y avg=-11.286504 std/avg=0.204885
+track z avg=57.799286 std/avg=0.099970
+track dx/x avg=-0.123852 std=0.206091
+track dy/y avg=-0.131876 std=0.273162
+track dz/z avg=0.000000 std=0.000000
+
+track in pos: -12.806847, -7.723825, 38.130142 
+track in cov: 6.29e-07, 7.53e-07, 9.63e-08 
+hit in pos: -20.782465 -12.241503 57.806763 
+produce nevts=100 ntrks=9600 smearing by=0.100000 
+NITER=100
+done preparing!
+Size of struct MPTRK trk[] = 3072000000
+Size of struct MPTRK outtrk[] = 3072000000
+Size of struct struct MPHIT hit[] = 552960000
+done ntracks=960000 tot time=1.779000 (s) time/trk=1.853125e-06 (s)
+data region time=2.443000 (s)
+memory transter time=0.664000 (s)
+track x avg=-18.916616 std/avg=0.148324
+track y avg=-11.285999 std/avg=0.204948
+track z avg=57.808815 std/avg=0.100080
+track dx/x avg=-0.123381 std=0.206167
+track dy/y avg=-0.131502 std=0.469473
+track dz/z avg=0.000000 std=0.000000
+
+track in pos: -12.806847, -7.723825, 38.130142 
+track in cov: 6.29e-07, 7.53e-07, 9.63e-08 
+hit in pos: -20.782465 -12.241503 57.806763 
+produce nevts=100 ntrks=9600 smearing by=0.100000 
+NITER=100
+done preparing!
+Size of struct MPTRK trk[] = 3072000000
+Size of struct MPTRK outtrk[] = 3072000000
+Size of struct struct MPHIT hit[] = 552960000
+done ntracks=960000 tot time=1.728000 (s) time/trk=1.800000e-06 (s)
+data region time=2.370000 (s)
+memory transter time=0.642000 (s)
+track x avg=-18.915709 std/avg=0.148335
+track y avg=-11.286513 std/avg=0.204935
+track z avg=57.808903 std/avg=0.099986
+track dx/x avg=-0.123601 std=0.206328
+track dy/y avg=-0.132046 std=0.298040
+track dz/z avg=0.000000 std=0.000000
+
+track in pos: -12.806847, -7.723825, 38.130142 
+track in cov: 6.29e-07, 7.53e-07, 9.63e-08 
+hit in pos: -20.782465 -12.241503 57.806763 
+produce nevts=100 ntrks=9600 smearing by=0.100000 
+NITER=100
+done preparing!
+Size of struct MPTRK trk[] = 3072000000
+Size of struct MPTRK outtrk[] = 3072000000
+Size of struct struct MPHIT hit[] = 552960000
+done ntracks=960000 tot time=1.760000 (s) time/trk=1.833333e-06 (s)
+data region time=2.413000 (s)
+memory transter time=0.653000 (s)
+track x avg=-18.911074 std/avg=0.148236
+track y avg=-11.286367 std/avg=0.204859
+track z avg=57.801441 std/avg=0.100008
+track dx/x avg=-0.123848 std=0.206130
+track dy/y avg=-0.131702 std=0.291647
+track dz/z avg=0.000000 std=0.000000
