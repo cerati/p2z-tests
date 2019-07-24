@@ -6,6 +6,10 @@ BENCHMARK = propagate
 #########################################
 # Set macros used for the input program #
 #########################################
+# COMPILER options: pgi, gcc, openarc   #
+# SRCTYPE options: cpp, c               #
+# MODE options: acc, omp, seq           #
+#########################################
 COMPILER ?= pgi
 SRCTYPE ?= cpp
 MODE ?= acc
