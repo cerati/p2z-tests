@@ -14,6 +14,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define ntrks nb*bsize
 #define smear 0.1
 
+#ifndef NITER
+#define NITER 100
+#endif
+
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
 }
@@ -363,6 +367,7 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 
 int main (int argc, char* argv[]) {
 
+   int itr;
    ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
      {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
@@ -384,6 +389,7 @@ int main (int argc, char* argv[]) {
    printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   printf("NITER=%d\n", NITER);
    
    MPTRK* trk = prepareTracks(inputtrk);
    MPHIT* hit = prepareHits(inputhit);
@@ -409,7 +415,7 @@ int main (int argc, char* argv[]) {
 
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-
+   for(itr=0; itr<NITER; itr++) {
 #pragma omp parallel for
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
@@ -421,7 +427,7 @@ int main (int argc, char* argv[]) {
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
     }
   }
-
+  } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 

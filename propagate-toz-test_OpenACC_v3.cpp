@@ -14,6 +14,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define ntrks nb*bsize
 #define smear 0.1
 
+#ifndef NITER
+#define NITER 100
+#endif
+
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
 }
@@ -236,12 +240,12 @@ MPHIT* prepareHits(AHIT inputhit) {
 }
 
 #define N bsize
-#pragma acc routine vector nohost
+#pragma acc routine worker nohost
 void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
- #pragma acc loop seq
+ #pragma acc loop worker
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -283,12 +287,12 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   }
 }
 
-#pragma acc routine vector nohost
+#pragma acc routine worker nohost
 void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
- #pragma acc loop vector
+ #pragma acc loop worker
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -315,13 +319,13 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   }
 }
 
-#pragma acc routine vector nohost
+#pragma acc routine worker nohost
 void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar) {
   //
   MP6x6F errorProp, temp;
- #pragma acc loop vector
+ #pragma acc loop worker
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z(msP,it);
     const float k = q(inChg,it)*100/3.8;
@@ -366,6 +370,7 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 
 int main (int argc, char* argv[]) {
 
+   int itr;
    ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
      {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
@@ -387,6 +392,7 @@ int main (int argc, char* argv[]) {
    printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   printf("NITER=%d\n", NITER);
    
    MPTRK* trk = prepareTracks(inputtrk);
    MPHIT* hit = prepareHits(inputhit);
@@ -422,6 +428,7 @@ int main (int argc, char* argv[]) {
 {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   for(itr=0; itr<NITER; itr++) {
 #pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk)
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
@@ -433,6 +440,7 @@ int main (int argc, char* argv[]) {
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
     }
   }
+  } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 }
