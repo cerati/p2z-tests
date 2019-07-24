@@ -9,8 +9,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <sys/time.h>
 
 #define nevts 100
-#define nb    600
-#define bsize 16
+#define nb    300
+#define bsize 32
 #define ntrks nb*bsize
 #define smear 0.1
 
