@@ -387,14 +387,15 @@ while(n<N)
 __device__ MP6x6F errorProp, temp;
 //cudaMallocManaged((void**)&errorProp,sizeof(MP6x6F));
 //cudaMallocManaged((void**)&temp,sizeof(MP6x6F));
-__global__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
+__device__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar) {
   //
   //MP6x6F errorProp, temp;
   //cudaMallocManaged((void**)&errorProp,sizeof(MP6x6F));
   //cudaMallocManaged((void**)&temp,sizeof(MP6x6F));
-  size_t it = threadIdx.x + blockIdx.x*blockDim.x;
+  //size_t it = threadIdx.x + blockIdx.x*blockDim.x;
+  int it =0;
 //#pragma omp simd
 while(it<bsize){
  // printf("this is a test4: %d\n",it);
@@ -433,7 +434,7 @@ while(it<bsize){
     errorProp.data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
     errorProp.data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
     errorProp.data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
-    it += blockDim.x*gridDim.x;
+    it += 1;// blockDim.x*gridDim.x;
   }
   //
   //MultHelixPropEndcap(&errorProp, inErr, &temp);
@@ -457,8 +458,9 @@ while(ib<nb){
        const MPTRK* btracks = bTk(trk, ie, ib);
        const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib); 
-       propagateToZ<<<1,1>>>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-	cudaDeviceSynchronize();
+       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+       //propagateToZ<<<1,1>>>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+	//cudaDeviceSynchronize();
 	ib += blockDim.x*gridDim.x;
     }
   }
@@ -540,6 +542,10 @@ int main (int argc, char* argv[]) {
    prepareTracks<<<1,1>>>(inputtrk,trk,trkrandos1,trkrandos2,randoq);
    prepareHits<<<1,1>>>(inputhit,hit,hitrandos1,hitrandos2);
    cudaDeviceSynchronize();
+   cudaFree(trkrandos1);
+   cudaFree(trkrandos2);
+   cudaFree(hitrandos1);
+   cudaFree(hitrandos2); 
    //trk = prepareTracks(inputtrk);
    //hit = prepareHits(inputhit);
    printf("done preparing!\n");
@@ -662,10 +668,10 @@ int main (int argc, char* argv[]) {
    cudaFree(trk);
    cudaFree(hit);
    cudaFree(outtrk);
-   cudaFree(trkrandos1);
-   cudaFree(trkrandos2);
-   cudaFree(hitrandos1);
-   cudaFree(hitrandos2); 
+//   cudaFree(trkrandos1);
+//   cudaFree(trkrandos2);
+//   cudaFree(hitrandos1);
+//   cudaFree(hitrandos2); 
 
    return 0;
 }
