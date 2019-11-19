@@ -1,1 +1,1 @@
- nvcc -arch=sm_35 -rdc=true propagate-toz-test.cu -o cudatest
+ nvcc -arch=sm_70 -O3 -rdc=true propagate-toz-test.cu -o cudatest
