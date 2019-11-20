@@ -417,7 +417,16 @@ int main (int argc, char* argv[]) {
 
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-
+//#if USE_ACC
+//#pragma acc parallel loop
+//   for (size_t ie=0;ie<nevts;++ie) { // loop over events
+//     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+//       //
+//       const MPTRK* btracks = bTk(trk, ie, ib);
+//       const MPHIT* bhits = bHit(hit, ie, ib);
+//       MPTRK* obtracks = bTk(outtrk, ie, ib);
+//       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+//#else
 #pragma omp parallel for
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
 #pragma omp parallel for
@@ -434,6 +443,7 @@ int main (int argc, char* argv[]) {
 #else   
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
 #endif
+//#endif
     }
   }
    gettimeofday(&timecheck, NULL);
