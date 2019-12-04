@@ -11,6 +11,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <unistd.h>
 #include <sys/time.h>
 
+#ifdef USE_ACC
+#include <accelmath.h>
+#endif
+
 #define nevts 1000
 #define nb    600
 #define bsize 16

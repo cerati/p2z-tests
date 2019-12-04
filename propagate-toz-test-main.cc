@@ -2,6 +2,8 @@
 icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 */
 
+//#include <cuda_profiler_api.h>
+//#include <cuda.h>
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +12,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <sys/time.h>
 #include "propagate-toz-test.h"
 #include "propagateGPU.cuh"
+//#include <cuda_runtime.h>
 //#define nevts 1000
 //#define nb    600
 //#define bsize 16
@@ -411,41 +414,85 @@ int main (int argc, char* argv[]) {
    //     printf("tz=%f\n",z(&trk,ie,it));
    //   }
    // }
-  
+
    long start, end;
    struct timeval timecheck;
 
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-//#if USE_ACC
-//#pragma acc parallel loop
-//   for (size_t ie=0;ie<nevts;++ie) { // loop over events
-//     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-//       //
-//       const MPTRK* btracks = bTk(trk, ie, ib);
-//       const MPHIT* bhits = bHit(hit, ie, ib);
-//       MPTRK* obtracks = bTk(outtrk, ie, ib);
-//       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-//#else
-#pragma omp parallel for
+#if USEACC
+#pragma acc parallel loop
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
-#pragma omp parallel for
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
        const MPTRK* btracks = bTk(trk, ie, ib);
        const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
-       //
-#if USE_GPU
-//std::cout<< "GPU PREP propagate" <<std::endl;
-
-       GPUpropagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-#else   
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-#endif
-//#endif
     }
   }
+#else
+#pragma omp parallel for
+   for (size_t ie=0;ie<nevts;++ie) { // loop over events
+#pragma omp parallel for
+     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+       //
+#if USE_GPU
+        //MPTRK* btracks;
+	//MPHIT* bhits;
+	//MPTRK* obtracks;
+	//cudaMallocManaged((void**)&btracks,sizeof(MPTRK));
+	//cudaMallocManaged((void**)&bhits,sizeof(MPHIT));
+	//cudaMallocManaged((void**)&obtracks,sizeof(MPTRK));
+	
+       //  ALLTRKS* trk_d;
+       //  ALLHITS* hit_d;
+        // ALLTRKS* outtrk_d;
+        //allocateManagedx(trk_d,hit_d,outtrk_d);
+	//trk_d = trk;
+	//hit_d = hit;
+	//outtrk_d = outtrk;
+       // allocateManaged(btracks,bhits,obtracks);
+        //btracks = bTk(trk, ie, ib);
+        //bhits = bHit(hit, ie, ib);
+        //obtracks = bTk(outtrk, ie, ib);
+	
+//	std::cout<<"test: " <<x(outtrk,1,1)<<std::endl;
+       //
+//std::cout<< "GPU PREP propagate" <<std::endl;
+
+       //MP6x6F errorProp, temp;
+//   	ALLTRKS* outtrk_d = (ALLTRKS*) malloc(sizeof(ALLTRKS));
+//       MPTRK* btracks_d = (MPTRK*)malloc(sizeof(MPTRK));
+//       MPHIT* bhits_d = (MPHIT*)malloc(sizeof(MPHIT));
+//      MPTRK* obtracks_d = (MPTRK*)malloc(sizeof(MPTRK));
+      //obtracks_d =bTk(outtrk_d,ie,ib);
+	
+       //allocateGPU(btracks_d,bhits_d,obtracks_d);
+       //cpyToGPU(btracks,btracks_d, bhits,bhits_d);
+       //GPUSequence(btracks_d,bhits_d,obtracks_d);
+       GPUSequence(trk,hit,outtrk,ie,ib);
+       //GPUSequence(btracks,bhits,obtracks);
+       //GPUpropagateToZ(&(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).par,errorProp); // vectorized function
+       //GPUMultHelixPropEndcap(&errorProp,&(*btracks).cov,&temp);
+       //GPUMultHelixPropTranspEndcap(&errorProp,&temp,&(*obtracks).cov);
+//	cpyFromGPU(obtracks,obtracks_d);
+//       GPUpropagateToZ<<<256,256>>>(/*&(*btracks).cov,*/ &(*btracks).par, &(*btracks).q, &(*bhits).pos,/* &(*obtracks).cov*/, &(*obtracks).par,&errorProp); // vectorized function
+//       //GPUpropagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+//       //cudaDeviceSynchronize();
+//       GPUMultHelixPropEndcap<<<256,256>>>(&errorProp,&(*btracks).cov,&temp);
+//       //cudaDeviceSynchronize();
+//       GPUMultHelixPropTranspEndcap<<<256,256>>>(&errorProp,&temp,&(*obtracks).cov);
+//       //cudaDeviceSynchronize();
+#else   
+       const MPTRK* btracks = bTk(trk, ie, ib);
+       const MPHIT* bhits = bHit(hit, ie, ib);
+       MPTRK* obtracks = bTk(outtrk, ie, ib);
+       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+#endif
+    }
+  }
+#endif
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
