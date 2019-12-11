@@ -1,144 +1,47 @@
-########################
-# Set the program name #
-########################
-BENCHMARK = propagate
+KOKKOS_PATH = ${HOME}/kokkos
+KOKKOS_DEVICES = "OpenMP"
+EXE_NAME = "test"
 
-#########################################
-# Set macros used for the input program #
-#########################################
-# COMPILER options: pgi, gcc, openarc   #
-# SRCTYPE options: cpp, c               #
-# MODE options: acc, omp, seq           #
-#########################################
-COMPILER ?= pgi
-SRCTYPE ?= cpp
-MODE ?= acc
+SRC = $(wildcard *.cpp)
 
-######################################
-# Set the input source files (CSRCS) #
-######################################
-ifeq ($(SRCTYPE),cpp)
-ifeq ($(MODE),acc)
-CSRCS = propagate-toz-test_OpenACC.cpp
+default: build
+	echo "Start Build"
+
+
+ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
+CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
+EXE = ${EXE_NAME}.cuda
+KOKKOS_ARCH = "HSW,Maxwell"
+KOKKOS_CUDA_OPTIONS = "enable_lambda"
 else
-CSRCS = propagate-toz-test.cpp
-endif
-else
-ifeq ($(MODE),acc)
-CSRCS = propagate-toz-test_OpenACC.c
-else
-CSRCS = propagate-toz-test.c
-endif
+CXX = g++-9
+EXE = ${EXE_NAME}.host
+KOKKOS_ARCH = "HSW"
 endif
 
+CXXFLAGS = -O3 -g
+LINK = ${CXX}
+LINKFLAGS =
 
-ifeq ($(COMPILER),pgi)
-###############
-# PGI Setting #
-###############
-ifeq ($(SRCTYPE),cpp)
-CXX=pgc++
-ifeq ($(MODE),acc)
-CFLAGS1 = -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-endif
-ifeq ($(MODE),omp)
-CFLAGS1 = -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
-endif
-ifeq ($(MODE),seq)
-CFLAGS1 = -I. -fast 
-endif
-else
-CXX=pgcc
-ifeq ($(MODE),acc)
-CFLAGS1 = -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-endif
-ifeq ($(MODE),omp)
-CFLAGS1 = -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
-endif
-ifeq ($(MODE),seq)
-CFLAGS1 = -I. -fast -c99
-endif
-endif
-endif
+DEPFLAGS = -M
 
-ifeq ($(COMPILER),gcc)
-###############
-# GCC Setting #
-###############
-ifeq ($(SRCTYPE),cpp)
-CXX=g++
-ifeq ($(MODE),omp)
-CFLAGS1 = -O3 -I. -fopenmp 
-CLIBS1 = -lm -lgomp
-else
-CFLAGS1 = -O3 -I. 
-CLIBS1 = -lm
-endif
-else
-CXX=gcc
-ifeq ($(MODE),omp)
-CFLAGS1 = -O3 -I. -std=c99 -fopenmp
-CLIBS1 = -lm -lgomp
-else
-CFLAGS1 = -O3 -I. -std=c99
-CLIBS1 = -lm
-endif
-endif
-endif
+OBJ = $(SRC:.cpp=.o)
+LIB =
 
-ifeq ($(COMPILER),openarc)
-###################
-# OpenARC Setting #
-###################
-CXX=g++
-CSRCS = ./cetus_output/propagate-toz-test_OpenACC.cpp
-# On Linux with CUDA GPU
-CFLAGS1 = -O3 -I. -I${openarc}/openarcrt 
-CLIBS1 = -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper
-# On macOS
-#CFLAGS1 = -O3 -I. -I${openarc}/openarcrt -arch x86_64
-#CLIBS1 = -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
-endif
+include $(KOKKOS_PATH)/Makefile.kokkos
 
-ifeq ($(COMPILER),intel)
-#################
-# Intel Setting #
-#################
-CXX=icc
-CFLAGS1= -Wall -I. -O3 -fopenmp -fopenmp-simd
-#CFLAGS1= -Wall -I. -O3 -xMIC-AVX512 -qopenmp -qopenmp-offload=host -fimf-precision=low:sqrt,exp,log,/
-endif
+build: $(EXE)
 
-ifeq ($(COMPILER),ibm)
-###############
-# IBM Setting #
-###############
-CXX=xlc
-CFLAGS1= -I. -Wall -v -O3 -qsmp=noauto:omp -qnooffload #host power9
-endif
+$(EXE): $(OBJ) $(KOKKOS_LINK_DEPENDS)
+	$(LINK) $(KOKKOS_LDFLAGS) $(LINKFLAGS) $(EXTRA_PATH) $(OBJ) $(KOKKOS_LIBS) $(LIB) -o $(EXE)
 
-ifeq ($(COMPILER),llvm)
-################
-# LLVM Setting #
-################
-CXX=clang
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=x86_64 -lm
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -lm
-endif
+clean: kokkos-clean
+	rm -f *.o *.cuda *.host
 
-################################################
-# TARGET is where the output binary is stored. #
-################################################
-TARGET = ./bin
+# Compilation rules
 
-$(TARGET)/$(BENCHMARK): $(CSRCS)
-	if [ ! -d "./bin" ]; then mkdir bin; fi
-	$(CXX) $(CFLAGS1) $(CSRCS) $(CLIBS1) -o $(TARGET)/$(BENCHMARK)
-	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
-	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
+%.o:%.cpp $(KOKKOS_CPP_DEPENDS)
+	$(CXX) $(KOKKOS_CPPFLAGS) $(KOKKOS_CXXFLAGS) $(CXXFLAGS) $(EXTRA_INC) -c $<
 
-clean:
-	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
-
-purge: clean
-	rm -rf bin cetus_output openarcConf.txt 
+test: $(EXE)
+	./$(EXE)

@@ -1,0 +1,15 @@
+*.out
+*.txt
+*.bin
+*.o
+*.a
+*.tmp
+KokkosCore_*
+*.host
+*.optrpt
+
+
+
+cali*
+*.json
+
