@@ -71,5 +71,5 @@ typedef Kokkos::View<double**, Layout, MemSpace>  ViewMatrixType;
 typedef Kokkos::View<double**, Kokkos::LayoutLeft,  MemSpace> ViewMatrixTypeL;
 typedef Kokkos::View<double**, Kokkos::LayoutRight, MemSpace> ViewMatrixTypeR;
 
-typedef Kokkos::View<double***, Kokkos::LayoutLeft,  MemSpace> ViewMatrixBatch;
+typedef Kokkos::View<double****, Kokkos::LayoutLeft,  MemSpace> ViewMatrixBatch;
 

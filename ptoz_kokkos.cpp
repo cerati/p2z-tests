@@ -14,16 +14,19 @@
 #define BVAL 6.
 #define TOL 0.0001
 
-void run_batch_test(int N, int M, int nrepeat, int nbatches);
-void init_batches(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches);
-void batch_gemm(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches);
-double check_result_batch(ViewMatrixBatch C, int N, int M, int nbatches);
+void run_batch_test(int N, int M, int nrepeat, int nbatches, int batch_size);
+void init_batches(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches, int batch_size);
+void batch_gemm(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches, int batch_size);
+double check_result_batch(ViewMatrixBatch C, int N, int M, int nbatches, int batch_size);
 
 void run_normal_test(int N, int M, int nrepeat);
 void init_matrices(ViewMatrixTypeL A, ViewMatrixTypeR B, ViewMatrixTypeL C, int N, int M);
 void gemm(ViewMatrixTypeL A, ViewMatrixTypeR B, ViewMatrixTypeL C, int N, int M);
-void read_input(int argc, char* argv[], int &N, int &M, int &S, int &nrepeat, int &batch_size, int &nbatches, bool &use_batches);
 double check_result(ViewMatrixTypeL C, int N, int M);
+
+void read_input(int argc, char* argv[], 
+                int &N, int &M, int &S, int &nrepeat, 
+                int &batch_size, int &nbatches, bool &use_batches);
 
 
 int main( int argc, char* argv[] )
@@ -42,7 +45,7 @@ int main( int argc, char* argv[] )
   {
 
     if (use_batches) {
-      run_batch_test(N, M, nrepeat, nbatches);
+      run_batch_test(N, M, nrepeat, nbatches, batch_size);
     } else {
       run_normal_test(N, M, nrepeat);
     }
@@ -158,13 +161,13 @@ double check_result(ViewMatrixTypeL C, int N, int M) {
 
 
 
-void run_batch_test(int N, int M, int nrepeat, int nbatches) {
+void run_batch_test(int N, int M, int nrepeat, int nbatches, int batch_size) {
   
   // Allocate y, x vectors and Matrix A on device.
-  ViewMatrixBatch A( "A", N, M, nbatches );
-  ViewMatrixBatch B( "B", M, N, nbatches );
-  ViewMatrixBatch C( "C", N, N, nbatches );
-  init_batches(A, B, C, N, M, nbatches);
+  ViewMatrixBatch A( "A", nbatches, N, M, batch_size );
+  ViewMatrixBatch B( "B", nbatches, M, N, batch_size );
+  ViewMatrixBatch C( "C", nbatches, N, N, batch_size );
+  init_batches(A, B, C, N, M, nbatches, batch_size);
 
   // Timer products.
   struct timeval begin, end;
@@ -173,7 +176,7 @@ void run_batch_test(int N, int M, int nrepeat, int nbatches) {
 
   for ( int repeat = 0; repeat < nrepeat; repeat++ ) {
 
-    batch_gemm(A, B, C, N, M, nbatches);
+    batch_gemm(A, B, C, N, M, nbatches, batch_size);
 
   }
 
@@ -189,7 +192,7 @@ void run_batch_test(int N, int M, int nrepeat, int nbatches) {
   // The y vector (of length N) is read once.
   double Gbytes = 1.0e-9 * double( sizeof(double) * ( 2 * M * N + N*N ) );
 
-  double err = check_result_batch(C, N, M, nbatches);
+  double err = check_result_batch(C, N, M, nbatches, batch_size);
   if (err > TOL)  {
     printf("ERROR in computation; result check failed; error = %f\n", err);
   }
@@ -200,74 +203,78 @@ void run_batch_test(int N, int M, int nrepeat, int nbatches) {
 }
 
 
-void init_batches(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches) {
+void init_batches(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches, int batch_size) {
 
-  // Initialize A matrix on host.
-  for ( int j = 0; j < N; ++j ) {
-    for ( int i = 0; i < M; ++i ) {
-      for ( int b = 0; b < nbatches; ++b ) {
-        A(j, i, b) = AVAL;
+  for (int batch = 0; batch < nbatches; batch++) {
+
+    // Initialize A matrix on host.
+    for ( int j = 0; j < N; ++j ) {
+      for ( int i = 0; i < M; ++i ) {
+        for ( int b = 0; b < batch_size; ++b ) {
+          A(batch, j, i, b) = AVAL;
+        }
       }
     }
-  }
 
-  // Initialize B matrix on host.
-  for ( int j = 0; j <M; ++j ) {
-    for ( int i = 0; i < N; ++i ) {
-      for ( int b = 0; b < nbatches; ++b ) {
-        B(j, i, b) = BVAL;
+    // Initialize B matrix on host.
+    for ( int j = 0; j <M; ++j ) {
+      for ( int i = 0; i < N; ++i ) {
+        for ( int b = 0; b < batch_size; ++b ) {
+          B(batch, j, i, b) = BVAL;
+        }
       }
     }
-  }
 
-  // Initialize C matrix on host.
-  for ( int j = 0; j < N; ++j ) {
-    for ( int i = 0; i < N; ++i ) {
-      for ( int b = 0; b < nbatches; ++b ) {
-        C(j, i, b) = 1;
+    // Initialize C matrix on host.
+    for ( int j = 0; j < N; ++j ) {
+      for ( int i = 0; i < N; ++i ) {
+        for ( int b = 0; b < batch_size; ++b ) {
+          C(batch, j, i, b) = 1;
+        }
       }
     }
-  }
+
+  } // batch loop
 
 }
 
-void batch_gemm(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches) {
+void batch_gemm(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches, int batch_size) {
   
-  Kokkos::parallel_for( N, KOKKOS_LAMBDA ( int i ) {
-  // for ( int i = 0; i < N; ++i ) {
+  Kokkos::parallel_for( nbatches, KOKKOS_LAMBDA ( int batch ) {
+  for ( int i = 0; i < N; ++i ) {
     for ( int j = 0; j < N; ++j ) {
 
-      for ( int b = 0; b < nbatches; ++b ) 
-        C(i,j,b) = 0.0;
+      for ( int b = 0; b < batch_size; ++b ) 
+        C(batch,i,j,b) = 0.0;
 
       for ( int k = 0; k < M; ++k ) {
-        for ( int b = 0; b < nbatches; ++b ) {
-          C(i,j,b) += A(i,k,b) * B(k,j,b);
+        for ( int b = 0; b < batch_size; ++b ) {
+          C(batch,i,j,b) += A(batch,i,k,b) * B(batch,k,j,b);
         }
       }
       
     }
-  // }
+  }
   });
 
 }
 
 
-double check_result_batch(ViewMatrixBatch C, int N, int M, int nbatches) {
-
-  int i, j;
+double check_result_batch(ViewMatrixBatch C, int N, int M, int nbatches, int batch_size) {
 
   double e  = 0.0;
   double ee = 0.0;
   double v  = AVAL * BVAL * M;
 
-  for (i=0; i<N; i++) {
-    for (j=0; j<N; j++) {
-      for ( int b = 0; b < nbatches; ++b ) {
-        e = C(i,j,b) - v;
+  for (int batch = 0; batch < nbatches; ++batch) {
+  for (int i=0; i<N; i++) {
+    for (int j=0; j<N; j++) {
+      for ( int b = 0; b < batch_size; ++b ) {
+        e = C(batch,i,j,b) - v;
         ee += e * e;
       }
     }
+  }
   }
 
   return ee;
@@ -364,7 +371,7 @@ void read_input(int argc, char* argv[], int &N, int &M, int &S, int &nrepeat, in
   S = M*N;
 
   printf( "  Total size S = %d N = %d M = %d\n", S, N, M );
-  printf( "  Using %d batches of %d matrices", 1, nbatches );
+  printf( "  Using %d batches of %d matrices\n", nbatches, batch_size );
 
   // Check sizes.
   if ( ( S < 0 ) || ( N < 0 ) || ( M < 0 ) || ( nrepeat < 0 ) ) {
