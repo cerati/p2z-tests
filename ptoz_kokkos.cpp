@@ -17,23 +17,17 @@
 #define TOL 0.0001
 
 
+void prepareTracks(ATRK inputtrk, MPTRK* &result);
+void prepareHits(AHIT inputhit, MPHIT* &result);
+void propagateToZ(const ViewMatrixMP inErr,  // input covariance
+                  const ViewVectorMP inPar,  // input parameters/state
+                  const ViewVectorINT inChg, // input q from track
+                  const ViewVectorMP msP,    // input parameters from hit?
+                  ViewMatrixMP outErr,       // output covariance
+                  ViewVectorMP outPar);      // output parameters/state
+void gemm(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
+void gemm_T(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
 
-MPHIT* prepareHits(AHIT inputhit)
-
-
-size_t PosInMtrx(size_t i, size_t j, size_t D) {
-  return i*D+j;
-}
-
-size_t SymOffsets33(size_t i) {
-  const size_t offs[9] = {0, 1, 3, 1, 2, 4, 3, 4, 5};
-  return offs[i];
-}
-
-size_t SymOffsets66(size_t i) {
-  const size_t offs[36] = {0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
-  return offs[i];
-}
 
 void read_input(int argc, char* argv[], 
                 int &N, int &M, int &S, int &nrepeat, 
@@ -68,23 +62,27 @@ int main( int argc, char* argv[] )
   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
   printf("NITER=%d\n", NITER);
 
+
+  Kokkos::initialize( argc, argv );
+  {
+
   MPTRK* trk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
   prepareTracks(inputtrk, trk);
   MPHIT* hit = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
   prepareHits(inputhit, hit);
 
-  printf("done preparing!\n");
 
   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
-      new(outtrk[ib + nb*ie].par)    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
-      new(outtrk[ib + nb*ie].cov)    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
-      new(outtrk[ib + nb*ie].q)      ViewVectorINT("q", bsize);          // bsize array of int
-      new(outtrk[ib + nb*ie].hitidx) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
+      new(&(outtrk[ib + nb*ie].par))    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
+      new(&(outtrk[ib + nb*ie].cov))    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
+      new(&(outtrk[ib + nb*ie].q))      ViewVectorINT("q", bsize);          // bsize array of int
+      new(&(outtrk[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
     }
   }
 
+  printf("done preparing!\n");
 
   long start, end;
   struct timeval timecheck;
@@ -97,16 +95,16 @@ int main( int argc, char* argv[] )
   for (size_t ie=0;ie<nevts;++ie) { // loop over events
     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
 
-      const MPTRK* btracks = bTk(trk, ie, ib); // bTk picks out a specific track based on the event and bunch
-      const MPHIT* bhits = bHit(hit, ie, ib);
-      MPTRK* obtracks = bTk(outtrk, ie, ib);
+      const MPTRK btracks = trk[ib + nb*ie]; // bTk picks out a specific track based on the event and bunch
+      const MPHIT bhits = hit[ib + nb*ie];
+      MPTRK obtracks = outtrk[ib + nb*ie];
 
-      propagateToZ(&(*btracks).cov,  // MP6x6SF
-                   &(*btracks).par,  // MP6F
-                   &(*btracks).q,    // MP1I
-                   &(*bhits).pos,    // MP3F
-                   &(*obtracks).cov, // MP6x6SF
-                   &(*obtracks).par  // MP6F
+      propagateToZ(btracks.cov,  // MP6x6SF
+                   btracks.par,  // MP6F
+                   btracks.q,    // MP1I
+                   bhits.pos,    // MP3F
+                   obtracks.cov, // MP6x6SF
+                   obtracks.par  // MP6F
                    );
 
     } // nb
@@ -126,85 +124,31 @@ int main( int argc, char* argv[] )
 
   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
 
-  // TODO make sure these loops still make sense
-  float avgx = 0, avgy = 0, avgz = 0;
-  float avgdx = 0, avgdy = 0, avgdz = 0;
-  for (size_t ie=0;ie<nevts;++ie) {
-   for (size_t it=0;it<ntrks;++it) {
-     float x_ = x(outtrk,ie,it);
-     float y_ = y(outtrk,ie,it);
-     float z_ = z(outtrk,ie,it);
-     avgx += x_;
-     avgy += y_;
-     avgz += z_;
-     float hx_ = x(hit,ie,it);
-     float hy_ = y(hit,ie,it);
-     float hz_ = z(hit,ie,it);
-     avgdx += (x_-hx_)/x_;
-     avgdy += (y_-hy_)/y_;
-     avgdz += (z_-hz_)/z_;
-   }
-  }
-  avgx = avgx/float(nevts*ntrks);
-  avgy = avgy/float(nevts*ntrks);
-  avgz = avgz/float(nevts*ntrks);
-  avgdx = avgdx/float(nevts*ntrks);
-  avgdy = avgdy/float(nevts*ntrks);
-  avgdz = avgdz/float(nevts*ntrks);
-
-  float stdx = 0, stdy = 0, stdz = 0;
-  float stddx = 0, stddy = 0, stddz = 0;
-  for (size_t ie=0;ie<nevts;++ie) {
-   for (size_t it=0;it<ntrks;++it) {
-     float x_ = x(outtrk,ie,it);
-     float y_ = y(outtrk,ie,it);
-     float z_ = z(outtrk,ie,it);
-     stdx += (x_-avgx)*(x_-avgx);
-     stdy += (y_-avgy)*(y_-avgy);
-     stdz += (z_-avgz)*(z_-avgz);
-     float hx_ = x(hit,ie,it);
-     float hy_ = y(hit,ie,it);
-     float hz_ = z(hit,ie,it);
-     stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
-     stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
-     stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
-   }
-  }
-
-  stdx = sqrtf(stdx/float(nevts*ntrks));
-  stdy = sqrtf(stdy/float(nevts*ntrks));
-  stdz = sqrtf(stdz/float(nevts*ntrks));
-  stddx = sqrtf(stddx/float(nevts*ntrks));
-  stddy = sqrtf(stddy/float(nevts*ntrks));
-  stddz = sqrtf(stddz/float(nevts*ntrks));
-
-  printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
-  printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
-  printf("track z avg=%f std/avg=%f\n", avgz, fabs(stdz/avgz));
-  printf("track dx/x avg=%f std=%f\n", avgdx, stddx);
-  printf("track dy/y avg=%f std=%f\n", avgdy, stddy);
-  printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
+  // TODO put the error checking back in
 
 
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      delete outtrk[ib + nb*ie].par;
-      delete outtrk[ib + nb*ie].cov;
-      delete outtrk[ib + nb*ie].q;
-      delete outtrk[ib + nb*ie].hitidx;
+  // for (size_t ie=0;ie<nevts;++ie) {
+  //   for (size_t ib=0;ib<nb;++ib) {
+  //     delete &(outtrk[ib + nb*ie].par);
+      // delete &(outtrk[ib + nb*ie].cov);
+      // delete &(outtrk[ib + nb*ie].q);
+      // delete &(outtrk[ib + nb*ie].hitidx);
 
-      delete trk[ib + nb*ie].par;
-      delete trk[ib + nb*ie].cov;
-      delete trk[ib + nb*ie].q;
-      delete trk[ib + nb*ie].hitidx;
+      // delete &(trk[ib + nb*ie].par);
+      // delete &(trk[ib + nb*ie].cov);
+      // delete &(trk[ib + nb*ie].q);
+      // delete &(trk[ib + nb*ie].hitidx);
 
-      delete hit[ib + nb*ie].par;
-      delete hit[ib + nb*ie].cov;
-    }
-  }
+      // delete &(hit[ib + nb*ie].pos);
+      // delete &(hit[ib + nb*ie].cov);
+  //   }
+  // }
   free(trk);
   free(hit);
   free(outtrk);
+
+  }
+  Kokkos::finalize(); 
 
   return 0;
 }
@@ -220,10 +164,10 @@ void prepareTracks(ATRK inputtrk, MPTRK* &result) { // TODO the type on result i
 
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
-      new(result[ib + nb*ie].par)    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
-      new(result[ib + nb*ie].cov)    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
-      new(result[ib + nb*ie].q)      ViewVectorINT("q", bsize);          // bsize array of int
-      new(result[ib + nb*ie].hitidx) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
+      new(&(result[ib + nb*ie].par))    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
+      new(&(result[ib + nb*ie].cov))    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
+      new(&(result[ib + nb*ie].q))      ViewVectorINT("q", bsize);          // bsize array of int
+      new(&(result[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
     }
   }
 
@@ -234,27 +178,26 @@ void prepareTracks(ATRK inputtrk, MPTRK* &result) { // TODO the type on result i
 
   //par
   for (size_t ip=0;ip<6;++ip) {
-    result[ib + nb*ie].par[ip][it] = (1+smear*randn(0,1))*inputtrk.par[ip];
+    result[ib + nb*ie].par(ip,it) = (1+smear*randn(0,1))*inputtrk.par[ip];
   }
   //cov
   for (size_t i=0;i<6;++i)
     for (size_t j=0;j<6;++j)
-      result[ib + nb*ie].cov[i][j][it] = (1+smear*randn(0,1))*inputtrk.cov[SymOffsets66(PosInMtrx(i,j,6))];
+      result[ib + nb*ie].cov(i,j,it) = (1+smear*randn(0,1))*inputtrk.cov[SymOffsets66(PosInMtrx(i,j,6))];
   //q
-  result[ib + nb*ie].q[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+  result[ib + nb*ie].q(it) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
       
       } // block loop
     } // nb
   } // nevts
-  return result;
 }
 
-MPHIT* prepareHits(AHIT inputhit, MPHIT* result) {
+void prepareHits(AHIT inputhit, MPHIT* &result) {
 
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
-      new(result[ib + nb*ie].pos)    ViewVectorMP("pos", 3, bsize);      // batch of len 3 vectors
-      new(result[ib + nb*ie].cov)    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
+      new(&(result[ib + nb*ie].pos))    ViewVectorMP("pos", 3, bsize);      // batch of len 3 vectors
+      new(&(result[ib + nb*ie].cov))    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
     }
   }	
 
@@ -265,74 +208,114 @@ MPHIT* prepareHits(AHIT inputhit, MPHIT* result) {
     
     //pos
     for (size_t ip=0;ip<3;++ip) {
-      result[ib + nb*ie].pos[ip][it] = (1+smear*randn(0,1))*inputhit.pos[ip];
+      result[ib + nb*ie].pos(ip,it) = (1+smear*randn(0,1))*inputhit.pos[ip];
     }
     //cov
     for (size_t i=0;i<6;++i)
       for (size_t j=0;j<6;++j)
-        result[ib + nb*ie].cov[i][j][it] = (1+smear*randn(0,1))*inputtrk.cov[SymOffsets66(PosInMtrx(i,j,6))];
+        result[ib + nb*ie].cov(i,j,it) = (1+smear*randn(0,1))*inputhit.cov[SymOffsets66(PosInMtrx(i,j,6))];
       
       } // bsize
     } // nb
   } // nevts
-  return result;
 }
 
 
-void propagateToZ(const MP6x6SF* inErr, // input covariance
-                  const MP6F* inPar,    // input parameters/state
-                  const MP1I* inChg,    // input q from track
-                  const MP3F* msP,      // input parameters from hit?
-                  MP6x6SF* outErr,      // output covariance
-                  MP6F* outPar) {       // output parameters/state
+void propagateToZ(const ViewMatrixMP inErr,  // input covariance
+                  const ViewVectorMP inPar,  // input parameters/state
+                  const ViewVectorINT inChg, // input q from track
+                  const ViewVectorMP msP,    // input parameters from hit?
+                  ViewMatrixMP outErr,       // output covariance
+                  ViewVectorMP outPar) {     // output parameters/state
   //
-  MP6x6F errorProp, temp; // TODO make views
-#pragma omp simd
+  ViewMatrixMP errorProp("par", 6, 6, bsize), temp("par", 6, 6, bsize);
+
   for (size_t it=0;it<bsize;++it) { 
-    const float zout = msP[Z_IND][it];
-    const float k = inChg[it]*100/3.8;
-    const float deltaZ = zout - inPar[Z_IND][it];
-    const float pt = 1./inPar[IPT_IND][it];
-    const float cosP = cosf(inPar[PHI_IND][it]);
-    const float sinP = sinf(inPar[PHI_IND][it]);
-    const float cosT = cosf(inPar[THETA_IND][it]);
-    const float sinT = sinf(inPar[THETA_IND][it]);
+    const float zout = msP(Z_IND,it);
+    const float k = inChg(it)*100/3.8;
+    const float deltaZ = zout - inPar(Z_IND,it);
+    const float pt = 1./inPar(IPT_IND,it);
+    const float cosP = cosf( inPar(PHI_IND,it) );
+    const float sinP = sinf( inPar(PHI_IND,it) );
+    const float cosT = cosf( inPar(THETA_IND,it) );
+    const float sinT = sinf( inPar(THETA_IND,it) );
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float alpha = deltaZ*sinT*inPar[PHI_IND][it]/(cosT*k);
+    const float alpha = deltaZ*sinT*inPar(PHI_IND,it)/(cosT*k);
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
 
     // array of state
-    outPar[X_IND][it]     = inPar[X_IND][it] + k*(pxin*sina - pyin*(1.-cosa));
-    outPar[Y_IND][it]     = inPar[Y_IND][it] + k*(pyin*sina + pxin*(1.-cosa));
-    outPar[Z_IND][it]     = zout;
-    outPar[IPT_IND][it]   = inPar[PHI_IND][it];
-    outPar[PHI_IND][it]   = inPar[PHI_IND][it]+alpha;
-    outPar[THETA_IND][it] = inPar[THETA_IND][it];
+    outPar(X_IND,it)     = inPar(X_IND,it) + k*(pxin*sina - pyin*(1.-cosa));
+    outPar(Y_IND,it)     = inPar(Y_IND,it) + k*(pyin*sina + pxin*(1.-cosa));
+    outPar(Z_IND,it)     = zout;
+    outPar(IPT_IND,it)   = inPar(PHI_IND,it);
+    outPar(PHI_IND,it)   = inPar(PHI_IND,it)+alpha;
+    outPar(THETA_IND,it) = inPar(THETA_IND,it);
     
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp[i][i][it] = 1.;
-    errorProp[2][0][it] = errorProp[0][2][it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp[3][0][it] = errorProp[0][3][it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inPar[PHI_IND][it])-k*(cosP*sina-sinP*(1.-cCosPsina))/(inPar[PHI_IND][it]*inPar[PHI_IND][it]);
-    errorProp[4][0][it] = errorProp[0][4][it] = (k/inPar[PHI_IND][it])*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp[5][0][it] = errorProp[0][5][it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    errorProp[2][1][it] = errorProp[1][2][it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp[3][1][it] = errorProp[1][3][it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inPar[PHI_IND][it])-k*(sinP*sina+cosP*(1.-cCosPsina))/(inPar[PHI_IND][it]*inPar[PHI_IND][it]);
-    errorProp[4][1][it] = errorProp[1][4][it] = (k/inPar[PHI_IND][it])*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp[5][1][it] = errorProp[1][5][it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp[2][4][it] = errorProp[4][2][it] = -inPar[PHI_IND][it]*sinT/(cosT*k);
-    errorProp[3][4][it] = errorProp[4][3][it] = sinT*deltaZ/(cosT*k);
-    errorProp[5][4][it] = errorProp[4][5][it] = inPar[PHI_IND][it]*deltaZ/(cosT*cosT*k);
+    for (size_t i=0;i<6;++i) errorProp(i,i,it) = 1.;
+    errorProp(2,0,it) = errorProp(0,2,it) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+    errorProp(3,0,it) = errorProp(0,3,it) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inPar(PHI_IND,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(inPar(PHI_IND,it)*inPar(PHI_IND,it));
+    errorProp(4,0,it) = errorProp(0,4,it) = (k/inPar(PHI_IND,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp(5,0,it) = errorProp(0,5,it) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    errorProp(2,1,it) = errorProp(1,2,it) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+    errorProp(3,1,it) = errorProp(1,3,it) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inPar(PHI_IND,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(inPar(PHI_IND,it)*inPar(PHI_IND,it));
+    errorProp(4,1,it) = errorProp(1,4,it) = (k/inPar(PHI_IND,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp(5,1,it) = errorProp(1,5,it) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+    errorProp(2,4,it) = errorProp(4,2,it) = -inPar(PHI_IND,it)*sinT/(cosT*k);
+    errorProp(3,4,it) = errorProp(4,3,it) = sinT*deltaZ/(cosT*k);
+    errorProp(5,4,it) = errorProp(4,5,it) = inPar(PHI_IND,it)*deltaZ/(cosT*cosT*k);
   }
   //
   // TODO make these gemms
-  MultHelixPropEndcap(&errorProp, inErr, &temp);
-  MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
+  gemm(errorProp, inErr, temp);
+  gemm_T(errorProp, temp, outErr);
 }
 
+// TODO make these use kokkos?
+// TODO make them actually fit the gemm standard?
+// TODO maybe don't hardcode 6
+void gemm(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C) {
+
+  for ( int i = 0; i < 6; ++i ) {
+    for ( int j = 0; j < 6; ++j ) {
+
+      for ( int b = 0; b < bsize; ++b ) 
+        C(i,j,b) = 0.0;
+
+      for ( int k = 0; k < 6; ++k ) {
+        for ( int b = 0; b < bsize; ++b ) {
+          C(i,j,b) += A(i,k,b) * B(k,j,b);
+        }
+      }
+      
+    }
+  }
+
+}
+
+
+void gemm_T(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C) {
+
+  for ( int i = 0; i < 6; ++i ) {
+    for ( int j = 0; j < 6; ++j ) {
+
+      for ( int b = 0; b < bsize; ++b ) 
+        C(i,j,b) = 0.0;
+
+      for ( int k = 0; k < 6; ++k ) {
+        for ( int b = 0; b < bsize; ++b ) {
+          C(i,j,b) += A(i,k,b) * B(j,k,b);
+        }
+      }
+      
+    }
+  }
+
+}
 
 
 float randn(float mu, float sigma) {

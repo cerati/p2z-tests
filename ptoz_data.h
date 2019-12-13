@@ -31,7 +31,7 @@
 typedef Kokkos::View<float*, Layout, MemSpace>   ViewVector;
 typedef Kokkos::View<float**, Layout, MemSpace>  ViewMatrix;
 
-typedef Kokkos::View<float**, Kokkos::LayoutLeft,  MemSpace> ViewVectorINT;
+typedef Kokkos::View<int*, Kokkos::LayoutLeft,  MemSpace> ViewVectorINT;
 typedef Kokkos::View<float**, Kokkos::LayoutLeft,  MemSpace> ViewVectorMP;
 typedef Kokkos::View<float***, Kokkos::LayoutLeft,  MemSpace> ViewMatrixMP;
 
@@ -45,15 +45,15 @@ struct MP22I {
 };
 
 struct MPTRK {
-  ViewVectorMP  *par;    // batch of len 6 vectors
-  ViewMatrixMP  *cov;    // 6x6 symmetric batch matrix
-  ViewVectorINT *q;      // bsize array of int
-  ViewVectorINT *hitidx; // unused; array len 22 of int
+  ViewVectorMP  par;    // batch of len 6 vectors
+  ViewMatrixMP  cov;    // 6x6 symmetric batch matrix
+  ViewVectorINT q;      // bsize array of int
+  ViewVectorINT hitidx; // unused; array len 22 of int
 };
 
 struct MPHIT {
-  ViewVectorMP *pos;     // batch of len 3 vectors
-  ViewMatrixMP *cov;     // 6x6 symmetric batch matrix
+  ViewVectorMP pos;     // batch of len 3 vectors
+  ViewMatrixMP cov;     // 6x6 symmetric batch matrix
 };
 
 // for the par vectors
@@ -64,6 +64,8 @@ struct MPHIT {
 #define PHI_IND 4
 #define THETA_IND 5
 
+
+/*
 MPTRK* bTk(MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
@@ -75,9 +77,6 @@ const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
 float q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
-
-
-
 
 // are hits the new data?
 const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
@@ -107,7 +106,7 @@ float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
 float x(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
 float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
 float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
-
+*/
 
 
 
