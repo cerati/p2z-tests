@@ -1,4 +1,5 @@
-
+#ifndef __TYPEDEFS_FOR_KOKKOS__
+#define __TYPEDEFS_FOR_KOKKOS__
 /* Copyright for a lot of the type defs below
 // It comes from the kokkos examples
 // but we have lightly modified it to work with nice small matrices
@@ -73,3 +74,4 @@ typedef Kokkos::View<double**, Kokkos::LayoutRight, MemSpace> ViewMatrixTypeR;
 
 typedef Kokkos::View<double****, Kokkos::LayoutLeft,  MemSpace> ViewMatrixBatch;
 
+#endif

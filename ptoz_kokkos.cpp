@@ -9,277 +9,351 @@
 #include <Kokkos_Core.hpp>
 // our typedefs curtisy of the examples
 #include "kokkos_config.h"
+#include "kokkos_gemm.h"
+#include "ptoz_data.h"
 
 #define AVAL 5.
 #define BVAL 6.
 #define TOL 0.0001
 
-void run_batch_test(int N, int M, int nrepeat, int nbatches, int batch_size);
-void init_batches(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches, int batch_size);
-void batch_gemm(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches, int batch_size);
-double check_result_batch(ViewMatrixBatch C, int N, int M, int nbatches, int batch_size);
 
-void run_normal_test(int N, int M, int nrepeat);
-void init_matrices(ViewMatrixTypeL A, ViewMatrixTypeR B, ViewMatrixTypeL C, int N, int M);
-void gemm(ViewMatrixTypeL A, ViewMatrixTypeR B, ViewMatrixTypeL C, int N, int M);
-double check_result(ViewMatrixTypeL C, int N, int M);
+
+MPHIT* prepareHits(AHIT inputhit)
+
+
+size_t PosInMtrx(size_t i, size_t j, size_t D) {
+  return i*D+j;
+}
+
+size_t SymOffsets33(size_t i) {
+  const size_t offs[9] = {0, 1, 3, 1, 2, 4, 3, 4, 5};
+  return offs[i];
+}
+
+size_t SymOffsets66(size_t i) {
+  const size_t offs[36] = {0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
+  return offs[i];
+}
 
 void read_input(int argc, char* argv[], 
                 int &N, int &M, int &S, int &nrepeat, 
                 int &batch_size, int &nbatches, bool &use_batches);
+float randn(float mu, float sigma);
 
 
 int main( int argc, char* argv[] )
 {
-  int N = -1;         // number of rows 1024
-  int M = -1;         // number of columns 1024
-  int S = -1;         // total size 1024*1024
-  int nrepeat = 100;  // number of repeats of the test
-  int nbatches = 100;  // number of batches
-  int batch_size = 100;  // number of mats per batch
-  bool use_batches = false;
 
-  read_input(argc, argv, N, M, S, nrepeat, batch_size, nbatches, use_batches);
+  int itr;
+  ATRK inputtrk = {
+   {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
+   {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
+    6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
+    0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348},
+   1,
+   {1, 0, 17, 16, 36, 35, 33, 34, 59, 58, 70, 85, 101, 102, 116, 117, 132, 133, 152, 169, 187, 202}
+  };
 
-  Kokkos::initialize( argc, argv );
-  {
+  AHIT inputhit = {
+   {-20.7824649810791, -12.24150276184082, 57.8067626953125},
+   {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
+  };
 
-    if (use_batches) {
-      run_batch_test(N, M, nrepeat, nbatches, batch_size);
-    } else {
-      run_normal_test(N, M, nrepeat);
+  printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
+  printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
+                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
+                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
+  printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
+
+  printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+  printf("NITER=%d\n", NITER);
+
+  MPTRK* trk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  prepareTracks(inputtrk, trk);
+  MPHIT* hit = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
+  prepareHits(inputhit, hit);
+
+  printf("done preparing!\n");
+
+  MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      new(outtrk[ib + nb*ie].par)    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
+      new(outtrk[ib + nb*ie].cov)    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
+      new(outtrk[ib + nb*ie].q)      ViewVectorINT("q", bsize);          // bsize array of int
+      new(outtrk[ib + nb*ie].hitidx) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
     }
-
   }
-  Kokkos::finalize();
+
+
+  long start, end;
+  struct timeval timecheck;
+
+  gettimeofday(&timecheck, NULL);
+  start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
+  for(itr=0; itr<NITER; itr++) {
+  
+  for (size_t ie=0;ie<nevts;++ie) { // loop over events
+    for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+
+      const MPTRK* btracks = bTk(trk, ie, ib); // bTk picks out a specific track based on the event and bunch
+      const MPHIT* bhits = bHit(hit, ie, ib);
+      MPTRK* obtracks = bTk(outtrk, ie, ib);
+
+      propagateToZ(&(*btracks).cov,  // MP6x6SF
+                   &(*btracks).par,  // MP6F
+                   &(*btracks).q,    // MP1I
+                   &(*bhits).pos,    // MP3F
+                   &(*obtracks).cov, // MP6x6SF
+                   &(*obtracks).par  // MP6F
+                   );
+
+    } // nb
+  } // evnts
+  } // end of itr loop
+  gettimeofday(&timecheck, NULL);
+  end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
+  // for (size_t ie=0;ie<nevts;++ie) {
+  //   for (size_t it=0;it<ntrks;++it) {
+  //     printf("ie=%lu it=%lu\n",ie,it);
+  //     printf("tx=%f\n",x(&outtrk,ie,it));
+  //     printf("ty=%f\n",y(&outtrk,ie,it));
+  //     printf("tz=%f\n",z(&outtrk,ie,it));
+  //   }
+  // }
+
+  printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
+
+  // TODO make sure these loops still make sense
+  float avgx = 0, avgy = 0, avgz = 0;
+  float avgdx = 0, avgdy = 0, avgdz = 0;
+  for (size_t ie=0;ie<nevts;++ie) {
+   for (size_t it=0;it<ntrks;++it) {
+     float x_ = x(outtrk,ie,it);
+     float y_ = y(outtrk,ie,it);
+     float z_ = z(outtrk,ie,it);
+     avgx += x_;
+     avgy += y_;
+     avgz += z_;
+     float hx_ = x(hit,ie,it);
+     float hy_ = y(hit,ie,it);
+     float hz_ = z(hit,ie,it);
+     avgdx += (x_-hx_)/x_;
+     avgdy += (y_-hy_)/y_;
+     avgdz += (z_-hz_)/z_;
+   }
+  }
+  avgx = avgx/float(nevts*ntrks);
+  avgy = avgy/float(nevts*ntrks);
+  avgz = avgz/float(nevts*ntrks);
+  avgdx = avgdx/float(nevts*ntrks);
+  avgdy = avgdy/float(nevts*ntrks);
+  avgdz = avgdz/float(nevts*ntrks);
+
+  float stdx = 0, stdy = 0, stdz = 0;
+  float stddx = 0, stddy = 0, stddz = 0;
+  for (size_t ie=0;ie<nevts;++ie) {
+   for (size_t it=0;it<ntrks;++it) {
+     float x_ = x(outtrk,ie,it);
+     float y_ = y(outtrk,ie,it);
+     float z_ = z(outtrk,ie,it);
+     stdx += (x_-avgx)*(x_-avgx);
+     stdy += (y_-avgy)*(y_-avgy);
+     stdz += (z_-avgz)*(z_-avgz);
+     float hx_ = x(hit,ie,it);
+     float hy_ = y(hit,ie,it);
+     float hz_ = z(hit,ie,it);
+     stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
+     stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
+     stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
+   }
+  }
+
+  stdx = sqrtf(stdx/float(nevts*ntrks));
+  stdy = sqrtf(stdy/float(nevts*ntrks));
+  stdz = sqrtf(stdz/float(nevts*ntrks));
+  stddx = sqrtf(stddx/float(nevts*ntrks));
+  stddy = sqrtf(stddy/float(nevts*ntrks));
+  stddz = sqrtf(stddz/float(nevts*ntrks));
+
+  printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
+  printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
+  printf("track z avg=%f std/avg=%f\n", avgz, fabs(stdz/avgz));
+  printf("track dx/x avg=%f std=%f\n", avgdx, stddx);
+  printf("track dy/y avg=%f std=%f\n", avgdy, stddy);
+  printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
+
+
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      delete outtrk[ib + nb*ie].par;
+      delete outtrk[ib + nb*ie].cov;
+      delete outtrk[ib + nb*ie].q;
+      delete outtrk[ib + nb*ie].hitidx;
+
+      delete trk[ib + nb*ie].par;
+      delete trk[ib + nb*ie].cov;
+      delete trk[ib + nb*ie].q;
+      delete trk[ib + nb*ie].hitidx;
+
+      delete hit[ib + nb*ie].par;
+      delete hit[ib + nb*ie].cov;
+    }
+  }
+  free(trk);
+  free(hit);
+  free(outtrk);
 
   return 0;
 }
 
 
-void run_normal_test(int N, int M, int nrepeat) {
-  
-  // Allocate y, x vectors and Matrix A on device.
-  // ViewMatrixType A( "A", N, M );
-  // ViewMatrixType B( "B", M, N );
-  // ViewMatrixType C( "C", N, N );
-  ViewMatrixTypeL A( "A", N, M );
-  ViewMatrixTypeR B( "B", M, N );
-  ViewMatrixTypeL C( "C", N, N );
-  init_matrices(A, B, C, N, M);
 
-  // Timer products.
-  struct timeval begin, end;
 
-  gettimeofday( &begin, NULL );
+// take the one track defined in main and make a bunch of "smeared" copies
+// bsize is block size defined in ptoz_data.h
+// nb is number of blocks
+// TODO adjust so everything is a full matrix
+void prepareTracks(ATRK inputtrk, MPTRK* &result) { // TODO the type on result is wrong
 
-  for ( int repeat = 0; repeat < nrepeat; repeat++ ) {
-
-    gemm(A, B, C, N, M);
-
-  }
-
-  gettimeofday( &end, NULL );
-
-  // Calculate time.
-  double time = 1.0 * ( end.tv_sec - begin.tv_sec ) +
-                1.0e-6 * ( end.tv_usec - begin.tv_usec );
-
-  // Calculate bandwidth.
-  // Each matrix A row (each of length M) is read once.
-  // The x vector (of length M) is read N times.
-  // The y vector (of length N) is read once.
-  double Gbytes = 1.0e-9 * double( sizeof(double) * ( 2 * M * N + N*N ) );
-
-  double err = check_result(C, N, M);
-  if (err > TOL)  {
-    printf("ERROR in computation; result check failed; error = %f\n", err);
-  }
-  // Print results (problem size, time and bandwidth in GB/s).
-  printf( "  N( %d ) M( %d ) nrepeat ( %d ) problem( %g MB ) time( %g s )\n",
-          N, M, nrepeat, Gbytes * 1000, time);
-
-}
-
-void init_matrices(ViewMatrixTypeL A, ViewMatrixTypeR B, ViewMatrixTypeL C, int N, int M) {
-
-  // Initialize A matrix on host.
-  for ( int j = 0; j < N; ++j ) {
-    for ( int i = 0; i < M; ++i ) {
-      A( j, i ) = AVAL;
-    }
-  }
-  // Initialize B matrix on host.
-  for ( int j = 0; j <M; ++j ) {
-    for ( int i = 0; i < N; ++i ) {
-      B( j, i ) = BVAL;
-    }
-  }
-  // Initialize C matrix on host.
-  for ( int j = 0; j < N; ++j ) {
-    for ( int i = 0; i < N; ++i ) {
-      C( j, i ) = 1;
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      new(result[ib + nb*ie].par)    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
+      new(result[ib + nb*ie].cov)    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
+      new(result[ib + nb*ie].q)      ViewVectorINT("q", bsize);          // bsize array of int
+      new(result[ib + nb*ie].hitidx) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
     }
   }
 
-}
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      for (size_t it=0;it<bsize;++it) {
 
-
-void gemm(ViewMatrixTypeL A, ViewMatrixTypeR B, ViewMatrixTypeL C, int N, int M) {
-
-  Kokkos::parallel_for( N, KOKKOS_LAMBDA ( int i ) {
-  // for ( int i = 0; i < N; ++i ) {
-    for ( int j = 0; j < N; ++j ) {
-      C(i,j) = 0.0;
-      for ( int k = 0; k < M; ++k ) {
-        C(i,j) += A(i,k) * B(k,j);
-      }
-    }
-  // }
-  });
-
-}
-
-
-double check_result(ViewMatrixTypeL C, int N, int M) {
-
-  int i, j;
-
-  double e  = 0.0;
-  double ee = 0.0;
-  double v  = AVAL * BVAL * M;
-
-  for (i=0; i<N; i++) {
-    for (j=0; j<N; j++) {
-      e = C(i,j) - v;
-      ee += e * e;
-    }
+  //par
+  for (size_t ip=0;ip<6;++ip) {
+    result[ib + nb*ie].par[ip][it] = (1+smear*randn(0,1))*inputtrk.par[ip];
   }
-
-  return ee;
-}
-
-
-
-void run_batch_test(int N, int M, int nrepeat, int nbatches, int batch_size) {
-  
-  // Allocate y, x vectors and Matrix A on device.
-  ViewMatrixBatch A( "A", nbatches, N, M, batch_size );
-  ViewMatrixBatch B( "B", nbatches, M, N, batch_size );
-  ViewMatrixBatch C( "C", nbatches, N, N, batch_size );
-  init_batches(A, B, C, N, M, nbatches, batch_size);
-
-  // Timer products.
-  struct timeval begin, end;
-
-  gettimeofday( &begin, NULL );
-
-  for ( int repeat = 0; repeat < nrepeat; repeat++ ) {
-
-    batch_gemm(A, B, C, N, M, nbatches, batch_size);
-
-  }
-
-  gettimeofday( &end, NULL );
-
-  // Calculate time.
-  double time = 1.0 * ( end.tv_sec - begin.tv_sec ) +
-                1.0e-6 * ( end.tv_usec - begin.tv_usec );
-
-  // Calculate bandwidth.
-  // Each matrix A row (each of length M) is read once.
-  // The x vector (of length M) is read N times.
-  // The y vector (of length N) is read once.
-  double Gbytes = 1.0e-9 * double( sizeof(double) * ( 2 * M * N + N*N ) );
-
-  double err = check_result_batch(C, N, M, nbatches, batch_size);
-  if (err > TOL)  {
-    printf("ERROR in computation; result check failed; error = %f\n", err);
-  }
-  // Print results (problem size, time and bandwidth in GB/s).
-  printf( "  N( %d ) M( %d ) nrepeat ( %d ) problem( %g MB ) time( %g s )\n",
-          N, M, nrepeat, Gbytes * 1000, time);
-
-}
-
-
-void init_batches(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches, int batch_size) {
-
-  for (int batch = 0; batch < nbatches; batch++) {
-
-    // Initialize A matrix on host.
-    for ( int j = 0; j < N; ++j ) {
-      for ( int i = 0; i < M; ++i ) {
-        for ( int b = 0; b < batch_size; ++b ) {
-          A(batch, j, i, b) = AVAL;
-        }
-      }
-    }
-
-    // Initialize B matrix on host.
-    for ( int j = 0; j <M; ++j ) {
-      for ( int i = 0; i < N; ++i ) {
-        for ( int b = 0; b < batch_size; ++b ) {
-          B(batch, j, i, b) = BVAL;
-        }
-      }
-    }
-
-    // Initialize C matrix on host.
-    for ( int j = 0; j < N; ++j ) {
-      for ( int i = 0; i < N; ++i ) {
-        for ( int b = 0; b < batch_size; ++b ) {
-          C(batch, j, i, b) = 1;
-        }
-      }
-    }
-
-  } // batch loop
-
-}
-
-void batch_gemm(ViewMatrixBatch A, ViewMatrixBatch B, ViewMatrixBatch C, int N, int M, int nbatches, int batch_size) {
-  
-  Kokkos::parallel_for( nbatches, KOKKOS_LAMBDA ( int batch ) {
-  for ( int i = 0; i < N; ++i ) {
-    for ( int j = 0; j < N; ++j ) {
-
-      for ( int b = 0; b < batch_size; ++b ) 
-        C(batch,i,j,b) = 0.0;
-
-      for ( int k = 0; k < M; ++k ) {
-        for ( int b = 0; b < batch_size; ++b ) {
-          C(batch,i,j,b) += A(batch,i,k,b) * B(batch,k,j,b);
-        }
-      }
+  //cov
+  for (size_t i=0;i<6;++i)
+    for (size_t j=0;j<6;++j)
+      result[ib + nb*ie].cov[i][j][it] = (1+smear*randn(0,1))*inputtrk.cov[SymOffsets66(PosInMtrx(i,j,6))];
+  //q
+  result[ib + nb*ie].q[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
       
-    }
-  }
-  });
+      } // block loop
+    } // nb
+  } // nevts
+  return result;
+}
 
+MPHIT* prepareHits(AHIT inputhit, MPHIT* result) {
+
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      new(result[ib + nb*ie].pos)    ViewVectorMP("pos", 3, bsize);      // batch of len 3 vectors
+      new(result[ib + nb*ie].cov)    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
+    }
+  }	
+
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      for (size_t it=0;it<bsize;++it) {
+    
+    //pos
+    for (size_t ip=0;ip<3;++ip) {
+      result[ib + nb*ie].pos[ip][it] = (1+smear*randn(0,1))*inputhit.pos[ip];
+    }
+    //cov
+    for (size_t i=0;i<6;++i)
+      for (size_t j=0;j<6;++j)
+        result[ib + nb*ie].cov[i][j][it] = (1+smear*randn(0,1))*inputtrk.cov[SymOffsets66(PosInMtrx(i,j,6))];
+      
+      } // bsize
+    } // nb
+  } // nevts
+  return result;
 }
 
 
-double check_result_batch(ViewMatrixBatch C, int N, int M, int nbatches, int batch_size) {
+void propagateToZ(const MP6x6SF* inErr, // input covariance
+                  const MP6F* inPar,    // input parameters/state
+                  const MP1I* inChg,    // input q from track
+                  const MP3F* msP,      // input parameters from hit?
+                  MP6x6SF* outErr,      // output covariance
+                  MP6F* outPar) {       // output parameters/state
+  //
+  MP6x6F errorProp, temp; // TODO make views
+#pragma omp simd
+  for (size_t it=0;it<bsize;++it) { 
+    const float zout = msP[Z_IND][it];
+    const float k = inChg[it]*100/3.8;
+    const float deltaZ = zout - inPar[Z_IND][it];
+    const float pt = 1./inPar[IPT_IND][it];
+    const float cosP = cosf(inPar[PHI_IND][it]);
+    const float sinP = sinf(inPar[PHI_IND][it]);
+    const float cosT = cosf(inPar[THETA_IND][it]);
+    const float sinT = sinf(inPar[THETA_IND][it]);
+    const float pxin = cosP*pt;
+    const float pyin = sinP*pt;
+    const float alpha = deltaZ*sinT*inPar[PHI_IND][it]/(cosT*k);
+    const float sina = sinf(alpha); // this can be approximated;
+    const float cosa = cosf(alpha); // this can be approximated;
 
-  double e  = 0.0;
-  double ee = 0.0;
-  double v  = AVAL * BVAL * M;
-
-  for (int batch = 0; batch < nbatches; ++batch) {
-  for (int i=0; i<N; i++) {
-    for (int j=0; j<N; j++) {
-      for ( int b = 0; b < batch_size; ++b ) {
-        e = C(batch,i,j,b) - v;
-        ee += e * e;
-      }
-    }
+    // array of state
+    outPar[X_IND][it]     = inPar[X_IND][it] + k*(pxin*sina - pyin*(1.-cosa));
+    outPar[Y_IND][it]     = inPar[Y_IND][it] + k*(pyin*sina + pxin*(1.-cosa));
+    outPar[Z_IND][it]     = zout;
+    outPar[IPT_IND][it]   = inPar[PHI_IND][it];
+    outPar[PHI_IND][it]   = inPar[PHI_IND][it]+alpha;
+    outPar[THETA_IND][it] = inPar[THETA_IND][it];
+    
+    const float sCosPsina = sinf(cosP*sina);
+    const float cCosPsina = cosf(cosP*sina);
+    
+    for (size_t i=0;i<6;++i) errorProp[i][i][it] = 1.;
+    errorProp[2][0][it] = errorProp[0][2][it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+    errorProp[3][0][it] = errorProp[0][3][it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inPar[PHI_IND][it])-k*(cosP*sina-sinP*(1.-cCosPsina))/(inPar[PHI_IND][it]*inPar[PHI_IND][it]);
+    errorProp[4][0][it] = errorProp[0][4][it] = (k/inPar[PHI_IND][it])*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp[5][0][it] = errorProp[0][5][it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    errorProp[2][1][it] = errorProp[1][2][it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+    errorProp[3][1][it] = errorProp[1][3][it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inPar[PHI_IND][it])-k*(sinP*sina+cosP*(1.-cCosPsina))/(inPar[PHI_IND][it]*inPar[PHI_IND][it]);
+    errorProp[4][1][it] = errorProp[1][4][it] = (k/inPar[PHI_IND][it])*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp[5][1][it] = errorProp[1][5][it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+    errorProp[2][4][it] = errorProp[4][2][it] = -inPar[PHI_IND][it]*sinT/(cosT*k);
+    errorProp[3][4][it] = errorProp[4][3][it] = sinT*deltaZ/(cosT*k);
+    errorProp[5][4][it] = errorProp[4][5][it] = inPar[PHI_IND][it]*deltaZ/(cosT*cosT*k);
   }
-  }
-
-  return ee;
+  //
+  // TODO make these gemms
+  MultHelixPropEndcap(&errorProp, inErr, &temp);
+  MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
 }
 
+
+
+float randn(float mu, float sigma) {
+  float U1, U2, W, mult;
+  static float X1, X2;
+  static int call = 0;
+  if (call == 1) {
+    call = !call;
+    return (mu + sigma * (float) X2);
+  } do {
+    U1 = -1 + ((float) rand () / RAND_MAX) * 2;
+    U2 = -1 + ((float) rand () / RAND_MAX) * 2;
+    W = pow (U1, 2) + pow (U2, 2);
+  }
+  while (W >= 1 || W == 0); 
+  mult = sqrt ((-2 * log (W)) / W);
+  X1 = U1 * mult;
+  X2 = U2 * mult; 
+  call = !call; 
+  return (mu + sigma * (float) X1);
+}
 
 /* Copyright for the lovely input reader below
 // It comes from the kokkos examples
@@ -385,11 +459,6 @@ void read_input(int argc, char* argv[], int &N, int &M, int &S, int &nrepeat, in
   }
 
 }
-
-
-
-
-
 
 
 
