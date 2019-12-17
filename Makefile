@@ -19,7 +19,7 @@ EXE = ${EXE_NAME}.host
 KOKKOS_ARCH = "HSW"
 endif
 
-CXXFLAGS = -O3 -g
+CXXFLAGS = -O3 -g --std=c++11
 LINK = ${CXX}
 LINKFLAGS =
 

@@ -92,6 +92,7 @@ int main( int argc, char* argv[] )
 
   for(itr=0; itr<NITER; itr++) {
   
+  // Kokkos::parallel_for( nevts, KOKKOS_LAMBDA ( int ie ) {
   for (size_t ie=0;ie<nevts;++ie) { // loop over events
     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
 
@@ -109,6 +110,8 @@ int main( int argc, char* argv[] )
 
     } // nb
   } // evnts
+  // }); // kokkos evnts
+
   } // end of itr loop
   gettimeofday(&timecheck, NULL);
   end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -291,7 +294,9 @@ void propagateToZ(const ViewMatrixMP inErr,  // input covariance
   //
   ViewMatrixMP errorProp("par", 6, 6, bsize), temp("par", 6, 6, bsize);
 
-  for (size_t it=0;it<bsize;++it) { 
+  Kokkos::parallel_for( bsize, KOKKOS_LAMBDA ( int it ) {
+  // for (size_t it=0;it<bsize;++it) {
+   
     const float zout = msP(Z_IND,it);
     const float k = inChg(it)*100/3.8;
     const float deltaZ = zout - inPar(Z_IND,it);
@@ -329,12 +334,16 @@ void propagateToZ(const ViewMatrixMP inErr,  // input covariance
     errorProp(2,4,it) = errorProp(4,2,it) = -inPar(PHI_IND,it)*sinT/(cosT*k);
     errorProp(3,4,it) = errorProp(4,3,it) = sinT*deltaZ/(cosT*k);
     errorProp(5,4,it) = errorProp(4,5,it) = inPar(PHI_IND,it)*deltaZ/(cosT*cosT*k);
-  }
+
+  // } // bsize
+  }); // bsize kokkos
+
   //
   // TODO make these gemms
   gemm(errorProp, inErr, temp);
   gemm_T(errorProp, temp, outErr);
 }
+
 
 // TODO make these use kokkos?
 // TODO make them actually fit the gemm standard?

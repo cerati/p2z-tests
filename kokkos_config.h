@@ -55,8 +55,8 @@
 typedef Kokkos::OpenMP   ExecSpace;
 // typedef Kokkos::Cuda     ExecSpace;
 
-typedef Kokkos::HostSpace     MemSpace;
-// typedef Kokkos::OpenMP        MemSpace;
+// typedef Kokkos::HostSpace     MemSpace;
+typedef Kokkos::OpenMP        MemSpace;
 // typedef Kokkos::CudaSpace     MemSpace;
 // typedef Kokkos::CudaUVMSpace  MemSpace;
 
