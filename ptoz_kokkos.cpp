@@ -9,7 +9,6 @@
 #include <Kokkos_Core.hpp>
 // our typedefs curtisy of the examples
 #include "kokkos_config.h"
-#include "kokkos_gemm.h"
 #include "ptoz_data.h"
 
 #define AVAL 5.
@@ -19,6 +18,7 @@
 
 void prepareTracks(ATRK inputtrk, MPTRK* &result);
 void prepareHits(AHIT inputhit, MPHIT* &result);
+void allocateOutTracks(MPTRK* &trk);
 void propagateToZ(const ViewMatrixMP inErr,  // input covariance
                   const ViewVectorMP inPar,  // input parameters/state
                   const ViewVectorINT inChg, // input q from track
@@ -66,10 +66,16 @@ int main( int argc, char* argv[] )
   Kokkos::initialize( argc, argv );
   {
 
-  MPTRK* trk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  MPTRK* trk;
   prepareTracks(inputtrk, trk);
-  MPHIT* hit = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
+  // CBTRK all_tracks;
+  // new(&(all_tracks[ib + nb*ie].cov))  ViewMatrixCB("cov", nevents*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
+  // new(&(all_tracks[ib + nb*ie].par))  ViewVectorCB("par", nevents*nb, 6, bsize);    // batch of len 6 vectors
+  // new(&(all_tracks[ib + nb*ie].q))    ViewIntCB("q", nevents*nb, bsize);            // bsize array of int
+
+  MPHIT* hit;
   prepareHits(inputhit, hit);
+  // CBTRK all_hits;
 
 
   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
@@ -219,12 +225,13 @@ int main( int argc, char* argv[] )
 
 
 
-
 // take the one track defined in main and make a bunch of "smeared" copies
 // bsize is block size defined in ptoz_data.h
 // nb is number of blocks
 // TODO adjust so everything is a full matrix
 void prepareTracks(ATRK inputtrk, MPTRK* &result) { // TODO the type on result is wrong
+
+  result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
 
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -256,7 +263,40 @@ void prepareTracks(ATRK inputtrk, MPTRK* &result) { // TODO the type on result i
   } // nevts
 }
 
+
+void separateTracks(MPTRK* &mp_in, CBTRK &cb_out) {
+
+  for (size_t ie=0;ie<nevts;++ie) {
+  for (size_t ib=0;ib<nb;++ib) {
+    int batch = ib + nb*ie;
+
+    // q int batch
+    for (size_t it=0;it<bsize;++it) 
+      cb_out.q(batch, it) = mp_in[batch].q(it);
+
+    // par length 6 vector batch
+    for (size_t ip=0;ip<6;++ip) {
+      for (size_t it=0;it<bsize;++it) 
+        cb_out.par(batch, ip, it) = mp_in[batch].par(ip,it);
+    }
+
+    // cov 6x6 matrix batch
+    for (size_t i=0;i<6;++i) {
+      for (size_t j=0;j<6;++j) {
+        for (size_t it=0;it<bsize;++it) 
+          cb_out.cov(batch, i, j, it) = mp_in[batch].cov(i,j,it);
+      }
+    }
+      
+  } // nb
+  } // nevts
+
+}
+
+
 void prepareHits(AHIT inputhit, MPHIT* &result) {
+
+  result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
 
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -285,6 +325,54 @@ void prepareHits(AHIT inputhit, MPHIT* &result) {
 }
 
 
+void separateHits(MPHIT* &mp_in, CBHIT &cb_out) {
+
+  for (size_t ie=0;ie<nevts;++ie) {
+  for (size_t ib=0;ib<nb;++ib) {
+    int batch = ib + nb*ie;
+
+    // pos length 3 vector batch
+    for (size_t ip=0;ip<3;++ip) {
+      for (size_t it=0;it<bsize;++it) 
+        cb_out.pos(batch, ip, it) = mp_in[batch].pos(ip,it);
+    }
+
+    // cov 6x6 matrix batch
+    for (size_t i=0;i<6;++i) {
+      for (size_t j=0;j<6;++j) {
+        for (size_t it=0;it<bsize;++it) 
+          cb_out.cov(batch, i, j, it) = mp_in[batch].cov(i,j,it);
+      }
+    }
+      
+  } // nb
+  } // nevts
+
+}
+
+void allocateOutTracks(MPTRK* &outtrk) {
+
+  outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      new(&(outtrk[ib + nb*ie].par))    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
+      new(&(outtrk[ib + nb*ie].cov))    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
+      new(&(outtrk[ib + nb*ie].q))      ViewVectorINT("q", bsize);          // bsize array of int
+      new(&(outtrk[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
+    }
+  }
+
+}
+
+
+// example:
+//      propagateToZ(btracks.cov,  // MP6x6SF
+//                   btracks.par,  // MP6F
+//                   btracks.q,    // MP1I
+//                   bhits.pos,    // MP3F
+//                   obtracks.cov, // MP6x6SF
+//                   obtracks.par  // MP6F
+//                   );
 void propagateToZ(const ViewMatrixMP inErr,  // input covariance
                   const ViewVectorMP inPar,  // input parameters/state
                   const ViewVectorINT inChg, // input q from track
@@ -339,7 +427,7 @@ void propagateToZ(const ViewMatrixMP inErr,  // input covariance
   }); // bsize kokkos
 
   //
-  // TODO make these gemms
+  // 
   gemm(errorProp, inErr, temp);
   gemm_T(errorProp, temp, outErr);
 }
@@ -384,6 +472,30 @@ void gemm_T(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C) {
       
     }
   }
+
+}
+
+void batch_gemm(ViewMatrixCB A, ViewMatrixCB B, ViewMatrixCB C, 
+                int N, int M, 
+                int nbatches, 
+                int batch_size) {
+  
+  Kokkos::parallel_for( nbatches, KOKKOS_LAMBDA ( int batch ) {
+  for ( int i = 0; i < N; ++i ) {
+    for ( int j = 0; j < N; ++j ) {
+
+      for ( int b = 0; b < batch_size; ++b ) 
+        C(batch,i,j,b) = 0.0;
+
+      for ( int k = 0; k < M; ++k ) {
+        for ( int b = 0; b < batch_size; ++b ) {
+          C(batch,i,j,b) += A(batch,i,k,b) * B(batch,k,j,b);
+        }
+      }
+      
+    }
+  }
+  });
 
 }
 
