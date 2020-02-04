@@ -17,7 +17,7 @@
 #define nevts 100      // number of events
 #define nb    600      // number of batches?
 #define bsize 16       // batch size (tracks per batch?)
-#define ntrks nb*bsize // number of tracks (total tracks?)
+#define ntrks nb*bsize // number of tracks per event?
 #define smear 0.1      // for making more tracks for the one
 
 #ifndef NITER

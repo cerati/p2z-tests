@@ -17,16 +17,19 @@
 
 
 void prepareTracks(ATRK inputtrk, MPTRK* &result);
+void separateTracks(MPTRK* &mp_in, CBTRK &cb_out);
 void prepareHits(AHIT inputhit, MPHIT* &result);
+void separateHits(MPHIT* &mp_in, CBHIT &cb_out);
 void allocateOutTracks(MPTRK* &trk);
-void propagateToZ(const ViewMatrixMP inErr,  // input covariance
-                  const ViewVectorMP inPar,  // input parameters/state
-                  const ViewVectorINT inChg, // input q from track
-                  const ViewVectorMP msP,    // input parameters from hit?
-                  ViewMatrixMP outErr,       // output covariance
-                  ViewVectorMP outPar);      // output parameters/state
+void convertOutput(CBTRK &cb_in, MPTRK* &mp_out);
+
+void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks);
+void averageOutputs(MPTRK* &outtrk, MPHIT* &hit);
+
 void gemm(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
 void gemm_T(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
+void batch_gemm(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
+void batch_gemm_T(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
 
 
 void read_input(int argc, char* argv[], 
@@ -67,26 +70,27 @@ int main( int argc, char* argv[] )
   {
 
   MPTRK* trk;
+  CBTRK all_tracks;
+  new(&(all_tracks.cov))  ViewMatrixCB("cov", nevts*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
+  new(&(all_tracks.par))  ViewVectorCB("par", nevts*nb, 6, bsize);    // batch of len 6 vectors
+  new(&(all_tracks.q))    ViewIntCB("q", nevts*nb, bsize);            // bsize array of int
   prepareTracks(inputtrk, trk);
-  // CBTRK all_tracks;
-  // new(&(all_tracks[ib + nb*ie].cov))  ViewMatrixCB("cov", nevents*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
-  // new(&(all_tracks[ib + nb*ie].par))  ViewVectorCB("par", nevents*nb, 6, bsize);    // batch of len 6 vectors
-  // new(&(all_tracks[ib + nb*ie].q))    ViewIntCB("q", nevents*nb, bsize);            // bsize array of int
+  separateTracks(trk, all_tracks);
 
   MPHIT* hit;
+  CBHIT all_hits;
+  new(&(all_hits.cov))  ViewMatrixCB("cov", nevts*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
+  new(&(all_hits.pos))  ViewVectorCB("pos", nevts*nb, 3, bsize);    // batch of len 6 vectors
   prepareHits(inputhit, hit);
-  // CBTRK all_hits;
+  separateHits(hit, all_hits);
 
 
-  MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      new(&(outtrk[ib + nb*ie].par))    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
-      new(&(outtrk[ib + nb*ie].cov))    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
-      new(&(outtrk[ib + nb*ie].q))      ViewVectorINT("q", bsize);          // bsize array of int
-      new(&(outtrk[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
-    }
-  }
+  MPTRK* outtrk;
+  CBTRK all_out;
+  new(&(all_out.cov))  ViewMatrixCB("cov", nevts*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
+  new(&(all_out.par))  ViewVectorCB("par", nevts*nb, 6, bsize);    // batch of len 6 vectors
+  new(&(all_out.q))    ViewIntCB("q", nevts*nb, bsize);            // bsize array of int
+  allocateOutTracks(outtrk);
 
   printf("done preparing!\n");
 
@@ -98,29 +102,15 @@ int main( int argc, char* argv[] )
 
   for(itr=0; itr<NITER; itr++) {
   
-  // Kokkos::parallel_for( nevts, KOKKOS_LAMBDA ( int ie ) {
-  for (size_t ie=0;ie<nevts;++ie) { // loop over events
-    for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-
-      const MPTRK btracks = trk[ib + nb*ie]; // bTk picks out a specific track based on the event and bunch
-      const MPHIT bhits = hit[ib + nb*ie];
-      MPTRK obtracks = outtrk[ib + nb*ie];
-
-      propagateToZ(btracks.cov,  // MP6x6SF
-                   btracks.par,  // MP6F
-                   btracks.q,    // MP1I
-                   bhits.pos,    // MP3F
-                   obtracks.cov, // MP6x6SF
-                   obtracks.par  // MP6F
-                   );
-
-    } // nb
-  } // evnts
-  // }); // kokkos evnts
+      propagateToZ(all_tracks, all_hits, all_out);
 
   } // end of itr loop
+
   gettimeofday(&timecheck, NULL);
   end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
+
+  // TODO allout -> outtrk
 
   // for (size_t ie=0;ie<nevts;++ie) {
   //   for (size_t it=0;it<ntrks;++it) {
@@ -133,69 +123,7 @@ int main( int argc, char* argv[] )
 
   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
 
-  // TODO make this a function call
-
-  float avgx = 0, avgy = 0, avgz = 0;
-  float avgdx = 0, avgdy = 0, avgdz = 0;
-  for (size_t ie=0;ie<nevts;++ie) { // loop over events
-    for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-      for (size_t it=0;it<bsize;++it) {
-        float x_ = outtrk[ib + nb*ie].par(X_IND,it);
-        float y_ = outtrk[ib + nb*ie].par(Y_IND,it);
-        float z_ = outtrk[ib + nb*ie].par(Z_IND,it);
-        avgx += x_;
-        avgy += y_;
-        avgz += z_;
-        float hx_ = hit[ib + nb*ie].pos(X_IND,it);
-        float hy_ = hit[ib + nb*ie].pos(Y_IND,it);
-        float hz_ = hit[ib + nb*ie].pos(Z_IND,it);
-        avgdx += (x_-hx_)/x_;
-        avgdy += (y_-hy_)/y_;
-        avgdz += (z_-hz_)/z_;
-      }
-    }
-  }
-  avgx = avgx/float(nevts*ntrks);
-  avgy = avgy/float(nevts*ntrks);
-  avgz = avgz/float(nevts*ntrks);
-  avgdx = avgdx/float(nevts*ntrks);
-  avgdy = avgdy/float(nevts*ntrks);
-  avgdz = avgdz/float(nevts*ntrks);
-
-  float stdx = 0, stdy = 0, stdz = 0;
-  float stddx = 0, stddy = 0, stddz = 0;
-  for (size_t ie=0;ie<nevts;++ie) { // loop over events
-    for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-      for (size_t it=0;it<bsize;++it) {
-        float x_ = outtrk[ib + nb*ie].par(X_IND,it);
-        float y_ = outtrk[ib + nb*ie].par(Y_IND,it);
-        float z_ = outtrk[ib + nb*ie].par(Z_IND,it);
-        stdx += (x_-avgx)*(x_-avgx);
-        stdy += (y_-avgy)*(y_-avgy);
-        stdz += (z_-avgz)*(z_-avgz);
-        float hx_ = hit[ib + nb*ie].pos(X_IND,it);
-        float hy_ = hit[ib + nb*ie].pos(Y_IND,it);
-        float hz_ = hit[ib + nb*ie].pos(Z_IND,it);
-        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
-        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
-        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
-      }
-    }
-  }
-
-  stdx = sqrtf(stdx/float(nevts*ntrks));
-  stdy = sqrtf(stdy/float(nevts*ntrks));
-  stdz = sqrtf(stdz/float(nevts*ntrks));
-  stddx = sqrtf(stddx/float(nevts*ntrks));
-  stddy = sqrtf(stddy/float(nevts*ntrks));
-  stddz = sqrtf(stddz/float(nevts*ntrks));
-
-  printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
-  printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
-  printf("track z avg=%f std/avg=%f\n", avgz, fabs(stdz/avgz));
-  printf("track dx/x avg=%f std=%f\n", avgdx, stddx);
-  printf("track dy/y avg=%f std=%f\n", avgdy, stddy);
-  printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
+  averageOutputs(outtrk, hit);
 
   // for (size_t ie=0;ie<nevts;++ie) {
   //   for (size_t ib=0;ib<nb;++ib) {
@@ -216,6 +144,17 @@ int main( int argc, char* argv[] )
   free(trk);
   free(hit);
   free(outtrk);
+
+  delete(&(all_tracks.par));
+  delete(&(all_tracks.cov));
+  delete(&(all_tracks.q));
+
+  delete(&(all_hits.pos));
+  delete(&(all_hits.cov));
+
+  delete(&(all_out.par));
+  delete(&(all_out.cov));
+  delete(&(all_out.q));
 
   }
   Kokkos::finalize(); 
@@ -285,6 +224,35 @@ void separateTracks(MPTRK* &mp_in, CBTRK &cb_out) {
       for (size_t j=0;j<6;++j) {
         for (size_t it=0;it<bsize;++it) 
           cb_out.cov(batch, i, j, it) = mp_in[batch].cov(i,j,it);
+      }
+    }
+      
+  } // nb
+  } // nevts
+
+}
+
+void convertOutput(CBTRK &cb_in, MPTRK* &mp_out) {
+
+  for (size_t ie=0;ie<nevts;++ie) {
+  for (size_t ib=0;ib<nb;++ib) {
+    int batch = ib + nb*ie;
+
+    // q int batch
+    for (size_t it=0;it<bsize;++it) 
+      mp_out[batch].q(it) = cb_in.q(batch, it);
+
+    // par length 6 vector batch
+    for (size_t ip=0;ip<6;++ip) {
+      for (size_t it=0;it<bsize;++it) 
+         mp_out[batch].par(ip,it) = cb_in.par(batch, ip, it);
+    }
+
+    // cov 6x6 matrix batch
+    for (size_t i=0;i<6;++i) {
+      for (size_t j=0;j<6;++j) {
+        for (size_t it=0;it<bsize;++it) 
+          mp_out[batch].cov(i,j,it) = cb_in.cov(batch, i, j, it);
       }
     }
       
@@ -364,7 +332,7 @@ void allocateOutTracks(MPTRK* &outtrk) {
 
 }
 
-
+// MP version
 // example:
 //      propagateToZ(btracks.cov,  // MP6x6SF
 //                   btracks.par,  // MP6F
@@ -373,63 +341,159 @@ void allocateOutTracks(MPTRK* &outtrk) {
 //                   obtracks.cov, // MP6x6SF
 //                   obtracks.par  // MP6F
 //                   );
-void propagateToZ(const ViewMatrixMP inErr,  // input covariance
-                  const ViewVectorMP inPar,  // input parameters/state
-                  const ViewVectorINT inChg, // input q from track
-                  const ViewVectorMP msP,    // input parameters from hit?
-                  ViewMatrixMP outErr,       // output covariance
-                  ViewVectorMP outPar) {     // output parameters/state
+// void propagateToZ(const ViewMatrixMP inErr,  // input covariance
+//                   const ViewVectorMP inPar,  // input parameters/state
+//                   const ViewVectorINT inChg, // input q from track
+//                   const ViewVectorMP msP,    // input parameters from hit?
+//                   ViewMatrixMP outErr,       // output covariance
+//                   ViewVectorMP outPar) {     // output parameters/state
   //
-  ViewMatrixMP errorProp("par", 6, 6, bsize), temp("par", 6, 6, bsize);
 
-  Kokkos::parallel_for( bsize, KOKKOS_LAMBDA ( int it ) {
-  // for (size_t it=0;it<bsize;++it) {
+
+void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
+
+  // Kokkos::parallel_for( nevts, KOKKOS_LAMBDA ( int ie ) {
+
+  // ViewMatrixMP errorProp("par", 6, 6, bsize), temp("par", 6, 6, bsize);
+  ViewMatrixCB errorProp("ep", nevts*nb, 6, 6, bsize),
+               temp("temp", nevts*nb, 6, 6, bsize);
+
+  for (size_t ie=0;ie<nevts;++ie) { // combined these two loop over batches
+  for (size_t ib=0;ib<nb;++ib) {    // // TODO make a kookos parallel
+
+  size_t batch = ib + nb*ie;
+
+  for (size_t it=0;it<bsize;++it) { 
    
-    const float zout = msP(Z_IND,it);
-    const float k = inChg(it)*100/3.8;
-    const float deltaZ = zout - inPar(Z_IND,it);
-    const float pt = 1./inPar(IPT_IND,it);
-    const float cosP = cosf( inPar(PHI_IND,it) );
-    const float sinP = sinf( inPar(PHI_IND,it) );
-    const float cosT = cosf( inPar(THETA_IND,it) );
-    const float sinT = sinf( inPar(THETA_IND,it) );
+    const float zout = inHits.pos(batch, Z_IND, it); 
+    const float k = inTrks.q(batch, it)*100/3.8; 
+    const float deltaZ = zout - inTrks.par(batch, Z_IND, it); 
+    const float pt = 1./inTrks.par(batch, IPT_IND,it); 
+    const float cosP = cosf( inTrks.par(batch, PHI_IND, it) ); 
+    const float sinP = sinf( inTrks.par(batch, PHI_IND, it) ); 
+    const float cosT = cosf( inTrks.par(batch, THETA_IND, it) ); 
+    const float sinT = sinf( inTrks.par(batch, THETA_IND, it) ); 
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float alpha = deltaZ*sinT*inPar(PHI_IND,it)/(cosT*k);
+    const float alpha = deltaZ*sinT*inTrks.par(batch, PHI_IND, it)/(cosT*k); 
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
 
     // array of state
-    outPar(X_IND,it)     = inPar(X_IND,it) + k*(pxin*sina - pyin*(1.-cosa));
-    outPar(Y_IND,it)     = inPar(Y_IND,it) + k*(pyin*sina + pxin*(1.-cosa));
-    outPar(Z_IND,it)     = zout;
-    outPar(IPT_IND,it)   = inPar(PHI_IND,it);
-    outPar(PHI_IND,it)   = inPar(PHI_IND,it)+alpha;
-    outPar(THETA_IND,it) = inPar(THETA_IND,it);
+    outTrks.par(batch,X_IND,it)     = inTrks.par(batch, X_IND, it) + k*(pxin*sina - pyin*(1.-cosa));
+    outTrks.par(batch,Y_IND,it)     = inTrks.par(batch, Y_IND, it) + k*(pyin*sina + pxin*(1.-cosa));
+    outTrks.par(batch,Z_IND,it)     = zout;
+    outTrks.par(batch,IPT_IND,it)   = inTrks.par(batch, PHI_IND, it);
+    outTrks.par(batch,PHI_IND,it)   = inTrks.par(batch, PHI_IND, it)+alpha;
+    outTrks.par(batch,THETA_IND,it) = inTrks.par(batch, THETA_IND, it);
     
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp(i,i,it) = 1.;
-    errorProp(2,0,it) = errorProp(0,2,it) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp(3,0,it) = errorProp(0,3,it) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inPar(PHI_IND,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(inPar(PHI_IND,it)*inPar(PHI_IND,it));
-    errorProp(4,0,it) = errorProp(0,4,it) = (k/inPar(PHI_IND,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp(5,0,it) = errorProp(0,5,it) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    errorProp(2,1,it) = errorProp(1,2,it) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp(3,1,it) = errorProp(1,3,it) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inPar(PHI_IND,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(inPar(PHI_IND,it)*inPar(PHI_IND,it));
-    errorProp(4,1,it) = errorProp(1,4,it) = (k/inPar(PHI_IND,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp(5,1,it) = errorProp(1,5,it) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp(2,4,it) = errorProp(4,2,it) = -inPar(PHI_IND,it)*sinT/(cosT*k);
-    errorProp(3,4,it) = errorProp(4,3,it) = sinT*deltaZ/(cosT*k);
-    errorProp(5,4,it) = errorProp(4,5,it) = inPar(PHI_IND,it)*deltaZ/(cosT*cosT*k);
+    for (size_t i=0;i<6;++i) errorProp(batch,i,i,it) = 1.;
+    errorProp(batch,2,0,it) = errorProp(batch,0,2,it) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+    errorProp(batch,3,0,it) = errorProp(batch,0,3,it) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inTrks.par(batch,PHI_IND,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(inTrks.par(batch,PHI_IND,it)*inTrks.par(batch,PHI_IND,it));
+    errorProp(batch,4,0,it) = errorProp(batch,0,4,it) = (k/inTrks.par(batch,PHI_IND,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp(batch,5,0,it) = errorProp(batch,0,5,it) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    errorProp(batch,2,1,it) = errorProp(batch,1,2,it) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+    errorProp(batch,3,1,it) = errorProp(batch,1,3,it) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inTrks.par(batch,PHI_IND,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(inTrks.par(batch,PHI_IND,it)*inTrks.par(batch,PHI_IND,it));
+    errorProp(batch,4,1,it) = errorProp(batch,1,4,it) = (k/inTrks.par(batch,PHI_IND,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp(batch,5,1,it) = errorProp(batch,1,5,it) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+    errorProp(batch,2,4,it) = errorProp(batch,4,2,it) = -inTrks.par(batch,PHI_IND,it)*sinT/(cosT*k);
+    errorProp(batch,3,4,it) = errorProp(batch,4,3,it) = sinT*deltaZ/(cosT*k);
+    errorProp(batch,5,4,it) = errorProp(batch,4,5,it) = inTrks.par(batch,PHI_IND,it)*deltaZ/(cosT*cosT*k);
 
-  // } // bsize
-  }); // bsize kokkos
+  } // bsize
 
-  //
-  // 
-  gemm(errorProp, inErr, temp);
-  gemm_T(errorProp, temp, outErr);
+  // batch_gemm(errorProp, inTrks.cov, temp); 
+  // batch_gemm_T(errorProp, temp, outErr);
+
+  // TODO the second mm
+  for ( int i = 0; i < 6; ++i ) {
+    for ( int j = 0; j < 6; ++j ) {
+
+      for ( int it = 0; it < bsize; ++it ) 
+        temp(batch,i,j,it) = 0.0;
+
+      for ( int k = 0; k < 6; ++k ) {
+        for ( int it = 0; it < bsize; ++it ) {
+          temp(batch,i,j,it) += errorProp(batch,i,k,it) * inTrks.cov(batch,k,j,it);
+        }
+      }
+      
+    }
+  } //gemm
+
+
+  } // nb
+}  // nevts
+
+}
+
+
+void averageOutputs(MPTRK* &outtrk, MPHIT* &hit) {
+
+  float avgx = 0, avgy = 0, avgz = 0;
+  float avgdx = 0, avgdy = 0, avgdz = 0;
+  for (size_t ie=0;ie<nevts;++ie) { // loop over events
+    for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+      for (size_t it=0;it<bsize;++it) {
+        float x_ = outtrk[ib + nb*ie].par(X_IND,it);
+        float y_ = outtrk[ib + nb*ie].par(Y_IND,it);
+        float z_ = outtrk[ib + nb*ie].par(Z_IND,it);
+        avgx += x_;
+        avgy += y_;
+        avgz += z_;
+        float hx_ = hit[ib + nb*ie].pos(X_IND,it);
+        float hy_ = hit[ib + nb*ie].pos(Y_IND,it);
+        float hz_ = hit[ib + nb*ie].pos(Z_IND,it);
+        avgdx += (x_-hx_)/x_;
+        avgdy += (y_-hy_)/y_;
+        avgdz += (z_-hz_)/z_;
+      }
+    }
+  }
+  avgx = avgx/float(nevts*ntrks);
+  avgy = avgy/float(nevts*ntrks);
+  avgz = avgz/float(nevts*ntrks);
+  avgdx = avgdx/float(nevts*ntrks);
+  avgdy = avgdy/float(nevts*ntrks);
+  avgdz = avgdz/float(nevts*ntrks);
+
+  float stdx = 0, stdy = 0, stdz = 0;
+  float stddx = 0, stddy = 0, stddz = 0;
+  for (size_t ie=0;ie<nevts;++ie) { // loop over events
+    for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+      for (size_t it=0;it<bsize;++it) {
+        float x_ = outtrk[ib + nb*ie].par(X_IND,it);
+        float y_ = outtrk[ib + nb*ie].par(Y_IND,it);
+        float z_ = outtrk[ib + nb*ie].par(Z_IND,it);
+        stdx += (x_-avgx)*(x_-avgx);
+        stdy += (y_-avgy)*(y_-avgy);
+        stdz += (z_-avgz)*(z_-avgz);
+        float hx_ = hit[ib + nb*ie].pos(X_IND,it);
+        float hy_ = hit[ib + nb*ie].pos(Y_IND,it);
+        float hz_ = hit[ib + nb*ie].pos(Z_IND,it);
+        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
+        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
+        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
+      }
+    }
+  }
+
+  stdx = sqrtf(stdx/float(nevts*ntrks));
+  stdy = sqrtf(stdy/float(nevts*ntrks));
+  stdz = sqrtf(stdz/float(nevts*ntrks));
+  stddx = sqrtf(stddx/float(nevts*ntrks));
+  stddy = sqrtf(stddy/float(nevts*ntrks));
+  stddz = sqrtf(stddz/float(nevts*ntrks));
+
+  printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
+  printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
+  printf("track z avg=%f std/avg=%f\n", avgz, fabs(stdz/avgz));
+  printf("track dx/x avg=%f std=%f\n", avgdx, stddx);
+  printf("track dy/y avg=%f std=%f\n", avgdy, stddy);
+  printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
 }
 
 
