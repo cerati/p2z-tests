@@ -111,7 +111,7 @@ int main( int argc, char* argv[] )
 
 
   // TODO allout -> outtrk
-
+  convertOutput(all_out, outtrk);
   // for (size_t ie=0;ie<nevts;++ie) {
   //   for (size_t it=0;it<ntrks;++it) {
   //     printf("ie=%lu it=%lu\n",ie,it);
@@ -145,16 +145,16 @@ int main( int argc, char* argv[] )
   free(hit);
   free(outtrk);
 
-  delete(&(all_tracks.par));
-  delete(&(all_tracks.cov));
-  delete(&(all_tracks.q));
+  // delete(&(all_tracks.par));
+  // delete(&(all_tracks.cov));
+  // delete(&(all_tracks.q));
 
-  delete(&(all_hits.pos));
-  delete(&(all_hits.cov));
+  // delete(&(all_hits.pos));
+  // delete(&(all_hits.cov));
 
-  delete(&(all_out.par));
-  delete(&(all_out.cov));
-  delete(&(all_out.q));
+  // delete(&(all_out.par));
+  // delete(&(all_out.cov));
+  // delete(&(all_out.q));
 
   }
   Kokkos::finalize(); 
@@ -358,10 +358,10 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
   ViewMatrixCB errorProp("ep", nevts*nb, 6, 6, bsize),
                temp("temp", nevts*nb, 6, 6, bsize);
 
-  for (size_t ie=0;ie<nevts;++ie) { // combined these two loop over batches
-  for (size_t ib=0;ib<nb;++ib) {    // // TODO make a kookos parallel
-
-  size_t batch = ib + nb*ie;
+  Kokkos::parallel_for( nb*nevts, KOKKOS_LAMBDA ( int batch ) {
+  // for (size_t ie=0;ie<nevts;++ie) { // combined these two loop over batches
+  // for (size_t ib=0;ib<nb;++ib) {    // // TODO make a kookos parallel
+  // size_t batch = ib + nb*ie;
 
   for (size_t it=0;it<bsize;++it) { 
    
@@ -408,7 +408,6 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
   // batch_gemm(errorProp, inTrks.cov, temp); 
   // batch_gemm_T(errorProp, temp, outErr);
 
-  // TODO the second mm
   for ( int i = 0; i < 6; ++i ) {
     for ( int j = 0; j < 6; ++j ) {
 
@@ -424,9 +423,26 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
     }
   } //gemm
 
+  //gemm with B transposed
+  for ( int i = 0; i < 6; ++i ) {
+    for ( int j = 0; j < 6; ++j ) {
 
-  } // nb
-}  // nevts
+      for ( int it = 0; it < bsize; ++it ) 
+        outTrks.cov(batch,i,j,it) = 0.0;
+
+      for ( int k = 0; k < 6; ++k ) {
+        for ( int it = 0; it < bsize; ++it ) {
+          outTrks.cov(batch,i,j,it) += errorProp(batch,i,k,it) * temp(batch,j,k,it);
+        }
+      }
+      
+    }
+  } //gemmT
+
+
+// } // nb
+// }  // nevts
+});
 
 }
 
