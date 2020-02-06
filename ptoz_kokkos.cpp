@@ -28,9 +28,8 @@ void averageOutputs(MPTRK* &outtrk, MPHIT* &hit);
 
 void gemm(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
 void gemm_T(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
-void batch_gemm(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
-void batch_gemm_T(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
 
+double get_time();
 
 void read_input(int argc, char* argv[], 
                 int &N, int &M, int &S, int &nrepeat, 
@@ -69,36 +68,37 @@ int main( int argc, char* argv[] )
   Kokkos::initialize( argc, argv );
   {
 
+  double start_t, prep_t, convert_in_t, p2z_t, convert_out_t, end_t;
+
+  start_t = get_time();
+
   MPTRK* trk;
+  prepareTracks(inputtrk, trk);
+  MPHIT* hit;
+  prepareHits(inputhit, hit);
+  MPTRK* outtrk;
+  allocateOutTracks(outtrk);
+
+  prep_t = get_time();
+
   CBTRK all_tracks;
   new(&(all_tracks.cov))  ViewMatrixCB("cov", nevts*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
   new(&(all_tracks.par))  ViewVectorCB("par", nevts*nb, 6, bsize);    // batch of len 6 vectors
   new(&(all_tracks.q))    ViewIntCB("q", nevts*nb, bsize);            // bsize array of int
-  prepareTracks(inputtrk, trk);
-  separateTracks(trk, all_tracks);
-
-  MPHIT* hit;
   CBHIT all_hits;
   new(&(all_hits.cov))  ViewMatrixCB("cov", nevts*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
   new(&(all_hits.pos))  ViewVectorCB("pos", nevts*nb, 3, bsize);    // batch of len 6 vectors
-  prepareHits(inputhit, hit);
-  separateHits(hit, all_hits);
-
-
-  MPTRK* outtrk;
   CBTRK all_out;
   new(&(all_out.cov))  ViewMatrixCB("cov", nevts*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
   new(&(all_out.par))  ViewVectorCB("par", nevts*nb, 6, bsize);    // batch of len 6 vectors
   new(&(all_out.q))    ViewIntCB("q", nevts*nb, bsize);            // bsize array of int
-  allocateOutTracks(outtrk);
+  separateTracks(trk, all_tracks);
+  separateHits(hit, all_hits);
 
   printf("done preparing!\n");
-
-  long start, end;
-  struct timeval timecheck;
-
-  gettimeofday(&timecheck, NULL);
-  start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+  
+  convert_in_t = get_time();
+  
 
   for(itr=0; itr<NITER; itr++) {
   
@@ -106,8 +106,7 @@ int main( int argc, char* argv[] )
 
   } // end of itr loop
 
-  gettimeofday(&timecheck, NULL);
-  end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+  p2z_t = get_time();
 
 
   // TODO allout -> outtrk
@@ -121,9 +120,18 @@ int main( int argc, char* argv[] )
   //   }
   // }
 
-  printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
+  convert_out_t = get_time();
 
   averageOutputs(outtrk, hit);
+
+  end_t = get_time();
+
+  printf("done ntracks =%i \n", nevts*ntrks);
+  printf("Total time   =%f \n", end_t - start_t);
+  printf("MP prep time =%f \n", prep_t - start_t);
+  printf("CB convert   =%f \n", (convert_in_t - prep_t) + (convert_out_t - p2z_t));
+  printf("p2z time     =%f \n", p2z_t - convert_in_t);
+
 
   // for (size_t ie=0;ie<nevts;++ie) {
   //   for (size_t ib=0;ib<nb;++ib) {
@@ -555,29 +563,6 @@ void gemm_T(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C) {
 
 }
 
-void batch_gemm(ViewMatrixCB A, ViewMatrixCB B, ViewMatrixCB C, 
-                int N, int M, 
-                int nbatches, 
-                int batch_size) {
-  
-  Kokkos::parallel_for( nbatches, KOKKOS_LAMBDA ( int batch ) {
-  for ( int i = 0; i < N; ++i ) {
-    for ( int j = 0; j < N; ++j ) {
-
-      for ( int b = 0; b < batch_size; ++b ) 
-        C(batch,i,j,b) = 0.0;
-
-      for ( int k = 0; k < M; ++k ) {
-        for ( int b = 0; b < batch_size; ++b ) {
-          C(batch,i,j,b) += A(batch,i,k,b) * B(batch,k,j,b);
-        }
-      }
-      
-    }
-  }
-  });
-
-}
 
 
 float randn(float mu, float sigma) {
@@ -598,6 +583,13 @@ float randn(float mu, float sigma) {
   X2 = U2 * mult; 
   call = !call; 
   return (mu + sigma * (float) X1);
+}
+
+double get_time() {
+  struct timeval timecheck;
+  gettimeofday( &timecheck, NULL );
+  double time = ( 1.0 * timecheck.tv_sec ) + ( 1.0e-6 * timecheck.tv_usec );
+  return time;
 }
 
 /* Copyright for the lovely input reader below
