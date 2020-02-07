@@ -63,6 +63,7 @@ int main( int argc, char* argv[] )
 
   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
   printf("NITER=%d\n", NITER);
+  printf("bsize=%d\n", bsize);
 
 
   Kokkos::initialize( argc, argv );
@@ -360,13 +361,11 @@ void allocateOutTracks(MPTRK* &outtrk) {
 
 void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
 
-  // Kokkos::parallel_for( nevts, KOKKOS_LAMBDA ( int ie ) {
-
-  // ViewMatrixMP errorProp("par", 6, 6, bsize), temp("par", 6, 6, bsize);
   ViewMatrixCB errorProp("ep", nevts*nb, 6, 6, bsize),
                temp("temp", nevts*nb, 6, 6, bsize);
 
   Kokkos::parallel_for( nb*nevts, KOKKOS_LAMBDA ( int batch ) {
+  // #pragma omp parallel for
   // for (size_t ie=0;ie<nevts;++ie) { // combined these two loop over batches
   // for (size_t ib=0;ib<nb;++ib) {    // // TODO make a kookos parallel
   // size_t batch = ib + nb*ie;
@@ -383,7 +382,7 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
     const float sinT = sinf( inTrks.par(batch, THETA_IND, it) ); 
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float alpha = deltaZ*sinT*inTrks.par(batch, PHI_IND, it)/(cosT*k); 
+    const float alpha = deltaZ*sinT*inTrks.par(batch, IPT_IND, it)/(cosT*k); 
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
 
@@ -391,7 +390,7 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
     outTrks.par(batch,X_IND,it)     = inTrks.par(batch, X_IND, it) + k*(pxin*sina - pyin*(1.-cosa));
     outTrks.par(batch,Y_IND,it)     = inTrks.par(batch, Y_IND, it) + k*(pyin*sina + pxin*(1.-cosa));
     outTrks.par(batch,Z_IND,it)     = zout;
-    outTrks.par(batch,IPT_IND,it)   = inTrks.par(batch, PHI_IND, it);
+    outTrks.par(batch,IPT_IND,it)   = inTrks.par(batch, IPT_IND, it);
     outTrks.par(batch,PHI_IND,it)   = inTrks.par(batch, PHI_IND, it)+alpha;
     outTrks.par(batch,THETA_IND,it) = inTrks.par(batch, THETA_IND, it);
     
@@ -399,17 +398,18 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
     const float cCosPsina = cosf(cosP*sina);
     
     for (size_t i=0;i<6;++i) errorProp(batch,i,i,it) = 1.;
+    //there are two cause we're doing symmetry
     errorProp(batch,2,0,it) = errorProp(batch,0,2,it) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp(batch,3,0,it) = errorProp(batch,0,3,it) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inTrks.par(batch,PHI_IND,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(inTrks.par(batch,PHI_IND,it)*inTrks.par(batch,PHI_IND,it));
-    errorProp(batch,4,0,it) = errorProp(batch,0,4,it) = (k/inTrks.par(batch,PHI_IND,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp(batch,3,0,it) = errorProp(batch,0,3,it) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inTrks.par(batch,IPT_IND,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(inTrks.par(batch,IPT_IND,it)*inTrks.par(batch,IPT_IND,it));
+    errorProp(batch,4,0,it) = errorProp(batch,0,4,it) = (k/inTrks.par(batch,IPT_IND,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
     errorProp(batch,5,0,it) = errorProp(batch,0,5,it) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
     errorProp(batch,2,1,it) = errorProp(batch,1,2,it) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp(batch,3,1,it) = errorProp(batch,1,3,it) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inTrks.par(batch,PHI_IND,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(inTrks.par(batch,PHI_IND,it)*inTrks.par(batch,PHI_IND,it));
-    errorProp(batch,4,1,it) = errorProp(batch,1,4,it) = (k/inTrks.par(batch,PHI_IND,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp(batch,3,1,it) = errorProp(batch,1,3,it) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inTrks.par(batch,IPT_IND,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(inTrks.par(batch,IPT_IND,it)*inTrks.par(batch,IPT_IND,it));
+    errorProp(batch,4,1,it) = errorProp(batch,1,4,it) = (k/inTrks.par(batch,IPT_IND,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
     errorProp(batch,5,1,it) = errorProp(batch,1,5,it) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp(batch,2,4,it) = errorProp(batch,4,2,it) = -inTrks.par(batch,PHI_IND,it)*sinT/(cosT*k);
+    errorProp(batch,2,4,it) = errorProp(batch,4,2,it) = -inTrks.par(batch,IPT_IND,it)*sinT/(cosT*k);
     errorProp(batch,3,4,it) = errorProp(batch,4,3,it) = sinT*deltaZ/(cosT*k);
-    errorProp(batch,5,4,it) = errorProp(batch,4,5,it) = inTrks.par(batch,PHI_IND,it)*deltaZ/(cosT*cosT*k);
+    errorProp(batch,5,4,it) = errorProp(batch,4,5,it) = inTrks.par(batch,IPT_IND,it)*deltaZ/(cosT*cosT*k);
 
   } // bsize
 

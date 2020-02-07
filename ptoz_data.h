@@ -14,9 +14,16 @@
 #include "kokkos_config.h"
 #include "kokkos_gemm.h"
 
+
+
 #define nevts 100      // number of events
 #define nb    600      // number of batches?
 #define bsize 16       // batch size (tracks per batch?)
+
+// #define nevts 100      // number of events
+// #define nb    150      // number of batches?
+// #define bsize 64       // batch size (tracks per batch?)
+
 #define ntrks nb*bsize // number of tracks per event?
 #define smear 0.1      // for making more tracks for the one
 
@@ -31,9 +38,9 @@
 typedef Kokkos::View<float*, Layout, MemSpace>   ViewVector;
 typedef Kokkos::View<float**, Layout, MemSpace>  ViewMatrix;
 
-typedef Kokkos::View<int*, Kokkos::LayoutLeft,  MemSpace> ViewVectorINT;
-typedef Kokkos::View<float**, Kokkos::LayoutLeft,  MemSpace> ViewVectorMP;
-typedef Kokkos::View<float***, Kokkos::LayoutLeft,  MemSpace> ViewMatrixMP;
+typedef Kokkos::View<int*, Layout,  MemSpace> ViewVectorINT;
+typedef Kokkos::View<float**, Layout,  MemSpace> ViewVectorMP;
+typedef Kokkos::View<float***, Layout,  MemSpace> ViewMatrixMP;
 
 
 struct MP1I {
@@ -66,9 +73,9 @@ struct MPHIT {
 
 
 
-typedef Kokkos::View<int**,     Kokkos::LayoutLeft,  MemSpace> ViewIntCB;    // collated batch of ints
-typedef Kokkos::View<float***,  Kokkos::LayoutLeft,  MemSpace> ViewVectorCB; // collated batch of vecs
-typedef Kokkos::View<float****, Kokkos::LayoutLeft,  MemSpace> ViewMatrixCB; // collated batch of mats
+typedef Kokkos::View<int**,     Layout,  MemSpace> ViewIntCB;    // collated batch of ints
+typedef Kokkos::View<float***,  Layout,  MemSpace> ViewVectorCB; // collated batch of vecs
+typedef Kokkos::View<float****, Layout,  MemSpace> ViewMatrixCB; // collated batch of mats
 
 struct CBTRK {
   ViewVectorCB  par;    // batch of len 6 vectors
