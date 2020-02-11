@@ -2,7 +2,7 @@
 icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 */
 #include "propagate-toz-test.h"
-#include "propagateGPU.cuh"
+//#include "propagateGPU.cuh"
 //#include <stdio.h>
 //#include <stdlib.h>
 //#include <math.h>
@@ -109,98 +109,98 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-//MPTRK* bTk(ALLTRKS* tracks, size_t ev, size_t ib) {
-//  return &((*tracks).btrks[ib + nb*ev]);
-//}
+MPTRK* bTk(ALLTRKS* tracks, size_t ev, size_t ib) {
+  return &((*tracks).btrks[ib + nb*ev]);
+}
+
+const MPTRK* bTk(const ALLTRKS* tracks, size_t ev, size_t ib) {
+  return &((*tracks).btrks[ib + nb*ev]);
+}
+
+float q(const MP1I* bq, size_t it){
+  return (*bq).data[it];
+}
 //
-//const MPTRK* bTk(const ALLTRKS* tracks, size_t ev, size_t ib) {
-//  return &((*tracks).btrks[ib + nb*ev]);
-//}
+float par(const MP6F* bpars, size_t it, size_t ipar){
+  return (*bpars).data[it + ipar*bsize];
+}
+float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
+float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
+float z    (const MP6F* bpars, size_t it){ return par(bpars, it, 2); }
+float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
+float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
+float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
 //
-//float q(const MP1I* bq, size_t it){
-//  return (*bq).data[it];
-//}
-////
-//float par(const MP6F* bpars, size_t it, size_t ipar){
-//  return (*bpars).data[it + ipar*bsize];
-//}
-//float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
-//float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
-//float z    (const MP6F* bpars, size_t it){ return par(bpars, it, 2); }
-//float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
-//float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
-//float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
-////
-//float par(const MPTRK* btracks, size_t it, size_t ipar){
-//  return par(&(*btracks).par,it,ipar);
-//}
-//float x    (const MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
-//float y    (const MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
-//float z    (const MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
-//float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
-//float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
-//float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
-////
-//float par(const ALLTRKS* tracks, size_t ev, size_t tk, size_t ipar){
-//  size_t ib = tk/bsize;
-//  const MPTRK* btracks = bTk(tracks, ev, ib);
-//  size_t it = tk % bsize;
-//  return par(btracks, it, ipar);
-//}
-//float x    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
-//float y    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
-//float z    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
-//float ipt  (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
-//float phi  (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
-//float theta(const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
-////
-//void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
-//  (*bpars).data[it + ipar*bsize] = val;
-//}
-//void setx    (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 0, val); }
-//void sety    (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 1, val); }
-//void setz    (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 2, val); }
-//void setipt  (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 3, val); }
-//void setphi  (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 4, val); }
-//void settheta(MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 5, val); }
-////
-//void setpar(MPTRK* btracks, size_t it, size_t ipar, float val){
-//  return setpar(&(*btracks).par,it,ipar,val);
-//}
-//void setx    (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 0, val); }
-//void sety    (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 1, val); }
-//void setz    (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 2, val); }
-//void setipt  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 3, val); }
-//void setphi  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 4, val); }
-//void settheta(MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 5, val); }
+float par(const MPTRK* btracks, size_t it, size_t ipar){
+  return par(&(*btracks).par,it,ipar);
+}
+float x    (const MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
+float y    (const MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
+float z    (const MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
+float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
+float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
+float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
 //
-//const MPHIT* bHit(const ALLHITS* hits, size_t ev, size_t ib) {
-//  return &((*hits).bhits[ib + nb*ev]);
-//}
-////
-//float pos(const MP3F* hpos, size_t it, size_t ipar){
-//  return (*hpos).data[it + ipar*bsize];
-//}
-//float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
-//float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
-//float z(const MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
-////
-//float pos(const MPHIT* hits, size_t it, size_t ipar){
-//  return pos(&(*hits).pos,it,ipar);
-//}
-//float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
-//float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
-//float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
-////
-//float pos(const ALLHITS* hits, size_t ev, size_t tk, size_t ipar){
-//  size_t ib = tk/bsize;
-//  const MPHIT* bhits = bHit(hits, ev, ib);
-//  size_t it = tk % bsize;
-//  return pos(bhits,it,ipar);
-//}
-//float x(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
-//float y(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
-//float z(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
+float par(const ALLTRKS* tracks, size_t ev, size_t tk, size_t ipar){
+  size_t ib = tk/bsize;
+  const MPTRK* btracks = bTk(tracks, ev, ib);
+  size_t it = tk % bsize;
+  return par(btracks, it, ipar);
+}
+float x    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
+float y    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
+float z    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
+float ipt  (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
+float phi  (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
+float theta(const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
+//
+void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
+  (*bpars).data[it + ipar*bsize] = val;
+}
+void setx    (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 0, val); }
+void sety    (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 1, val); }
+void setz    (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 2, val); }
+void setipt  (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 3, val); }
+void setphi  (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 4, val); }
+void settheta(MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 5, val); }
+//
+void setpar(MPTRK* btracks, size_t it, size_t ipar, float val){
+  return setpar(&(*btracks).par,it,ipar,val);
+}
+void setx    (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 0, val); }
+void sety    (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 1, val); }
+void setz    (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 2, val); }
+void setipt  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 3, val); }
+void setphi  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 4, val); }
+void settheta(MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 5, val); }
+
+const MPHIT* bHit(const ALLHITS* hits, size_t ev, size_t ib) {
+  return &((*hits).bhits[ib + nb*ev]);
+}
+//
+float pos(const MP3F* hpos, size_t it, size_t ipar){
+  return (*hpos).data[it + ipar*bsize];
+}
+float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
+float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
+float z(const MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
+//
+float pos(const MPHIT* hits, size_t it, size_t ipar){
+  return pos(&(*hits).pos,it,ipar);
+}
+float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
+float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
+float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
+//
+float pos(const ALLHITS* hits, size_t ev, size_t tk, size_t ipar){
+  size_t ib = tk/bsize;
+  const MPHIT* bhits = bHit(hits, ev, ib);
+  size_t it = tk % bsize;
+  return pos(bhits,it,ipar);
+}
+float x(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
+float y(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
+float z(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
 ALLTRKS* prepareTracks(ATRK inputtrk) {
   ALLTRKS* result = (ALLTRKS*) malloc(sizeof(ALLTRKS)); //fixme, align?

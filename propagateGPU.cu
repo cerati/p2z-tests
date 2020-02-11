@@ -8,9 +8,9 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
-#include "propagateGPU.cuh"
-#include "propagateGPUStructs.cuh"
-#include "propagate-toz-test.h"
+#include "propagateGPU.h"
+//#include "propagateGPUStructs.cuh"
+//#include "propagate-toz-test.h"
 
 #define nevts 1000
 #define nb    600
@@ -18,19 +18,123 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define ntrks nb*bsize
 #define smear 0.1
 
-__host__ __device__ size_t GPUPosInMtrx(size_t i, size_t j, size_t D) {
+
+//#if USE_GPU
+//#define HostDEV __host__ __device__
+//#else
+//#define HOSTDEV
+//#endif
+
+
+HOSTDEV size_t GPUPosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
 }
 
-__host__ __device__ size_t GPUSymOffsets33(size_t i) {
+HOSTDEV size_t GPUSymOffsets33(size_t i) {
   const size_t offs[9] = {0, 1, 3, 1, 2, 4, 3, 4, 5};
   return offs[i];
 }
 
-__host__ __device__ size_t GPUSymOffsets66(size_t i) {
+HOSTDEV size_t GPUSymOffsets66(size_t i) {
   const size_t offs[36] = {0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
   return offs[i];
 }
+
+HOSTDEV size_t PosInMtrx(size_t i, size_t j, size_t D) {
+  return i*D+j;
+}
+
+HOSTDEV size_t SymOffsets33(size_t i) {
+  const size_t offs[9] = {0, 1, 3, 1, 2, 4, 3, 4, 5};
+  return offs[i];
+}
+
+HOSTDEV size_t SymOffsets66(size_t i) {
+  const size_t offs[36] = {0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
+  return offs[i];
+}
+
+
+
+
+ALLTRKS* prepareTracks(ATRK inputtrk) {
+#if USE_GPU
+  ALLTRKS* result;
+  cudaMallocManaged((void**)&result,sizeof(ALLTRKS)); //fixme, align?
+#else
+  ALLTRKS* result = (ALLTRKS*) malloc(sizeof(ALLTRKS)); //fixme, align?
+#endif
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      for (size_t it=0;it<bsize;++it) {
+        //par
+        for (size_t ip=0;ip<6;++ip) {
+          (*result).btrks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+        }
+        //cov
+        for (size_t ip=0;ip<36;++ip) {
+          (*result).btrks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+        }
+        //q
+        (*result).btrks[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+      }
+    }
+  }
+  return result;
+}
+
+ALLHITS* prepareHits(AHIT inputhit) {
+#if USE_GPU
+  ALLHITS* result;
+  cudaMallocManaged((void**)&result,sizeof(ALLHITS));  //fixme, align?
+#else
+  //ALLHITS* result = (ALLHITS*) malloc(sizeof(ALLHITS));  //fixme, align?
+#endif
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      for (size_t it=0;it<bsize;++it) {
+        //pos
+        for (size_t ip=0;ip<3;++ip) {
+          (*result).bhits[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+        }
+        //cov
+        for (size_t ip=0;ip<6;++ip) {
+          (*result).bhits[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+        }
+      }
+    }
+  }
+  return result;
+}
+
+
+
+float randn(float mu, float sigma) {
+  float U1, U2, W, mult;
+  static float X1, X2;
+  static int call = 0;
+  if (call == 1) {
+    call = !call;
+    return (mu + sigma * (float) X2);
+  } do {
+    U1 = -1 + ((float) rand () / RAND_MAX) * 2;
+    U2 = -1 + ((float) rand () / RAND_MAX) * 2;
+    W = pow (U1, 2) + pow (U2, 2);
+  }
+  while (W >= 1 || W == 0);
+  mult = sqrt ((-2 * log (W)) / W);
+  X1 = U1 * mult;
+  X2 = U2 * mult;
+  call = !call;
+  return (mu + sigma * (float) X1);
+}
+
+
+
+
+
 
 //struct ATRK {
 //  float par[6];
@@ -113,107 +217,111 @@ float GPUrandn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-__host__ __device__ MPTRK* bTk(ALLTRKS* tracks, size_t ev, size_t ib) {
+HOSTDEV MPTRK* bTk(ALLTRKS* tracks, size_t ev, size_t ib) {
   return &((*tracks).btrks[ib + nb*ev]);
 }
 
-__host__ __device__ gMPTRK* GbTk(const ALLTRKS* tracks, size_t ev, size_t ib) {
+HOSTDEV const MPTRK* bTk(const ALLTRKS* tracks, size_t ev, size_t ib) {
   return &((*tracks).btrks[ib + nb*ev]);
 }
-__host__ __device__ const gMPTRK* bTk(const gALLTRKS* tracks, size_t ev, size_t ib) {
-  return &((*tracks).btrks[ib + nb*ev]);
+HOSTDEV MPTRK GbTk(ALLTRKS* tracks, size_t ev, size_t ib) {
+  return ((*tracks).btrks[ib + nb*ev]);
 }
 
-__host__ __device__ float q(const gMP1I* bq, size_t it){
+//HOSTDEV const MPTRK GbTk(const ALLTRKS* tracks, size_t ev, size_t ib) {
+//  return ((*tracks).btrks[ib + nb*ev]);
+//}
+
+HOSTDEV float q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 //
-__host__ __device__ float par(const gMP6F* bpars, size_t it, size_t ipar){
+HOSTDEV float par(const MP6F* bpars, size_t it, size_t ipar){
   return (*bpars).data[it + ipar*bsize];
 }
-__host__ __device__ float x    (const gMP6F* bpars, size_t it){ return par(bpars, it, 0); }
-__host__ __device__ float y    (const gMP6F* bpars, size_t it){ return par(bpars, it, 1); }
-__host__ __device__ float z    (const gMP6F* bpars, size_t it){ return par(bpars, it, 2); }
-__host__ __device__ float ipt  (const gMP6F* bpars, size_t it){ return par(bpars, it, 3); }
-__host__ __device__ float phi  (const gMP6F* bpars, size_t it){ return par(bpars, it, 4); }
-__host__ __device__ float theta(const gMP6F* bpars, size_t it){ return par(bpars, it, 5); }
+HOSTDEV float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
+HOSTDEV float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
+HOSTDEV float z    (const MP6F* bpars, size_t it){ return par(bpars, it, 2); }
+HOSTDEV float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
+HOSTDEV float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
+HOSTDEV float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
 
-__host__ __device__ float par(const gMPTRK* btracks, size_t it, size_t ipar){
+HOSTDEV float par(const MPTRK* btracks, size_t it, size_t ipar){
   return par(&(*btracks).par,it,ipar);
 }
-__host__ __device__ float x    (const gMPTRK* btracks, size_t it){ return par(btracks, it, 0); }
-__host__ __device__ float y    (const gMPTRK* btracks, size_t it){ return par(btracks, it, 1); }
-__host__ __device__ float z    (const gMPTRK* btracks, size_t it){ return par(btracks, it, 2); }
-__host__ __device__ float ipt  (const gMPTRK* btracks, size_t it){ return par(btracks, it, 3); }
-__host__ __device__ float phi  (const gMPTRK* btracks, size_t it){ return par(btracks, it, 4); }
-__host__ __device__ float theta(const gMPTRK* btracks, size_t it){ return par(btracks, it, 5); }
+HOSTDEV float x    (const MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
+HOSTDEV float y    (const MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
+HOSTDEV float z    (const MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
+HOSTDEV float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
+HOSTDEV float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
+HOSTDEV float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
 //
-__host__ __device__ float par(const gALLTRKS* tracks, size_t ev, size_t tk, size_t ipar){
+HOSTDEV float par(const ALLTRKS* tracks, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const gMPTRK* btracks = bTk(tracks, ev, ib);
+  const MPTRK* btracks = bTk(tracks, ev, ib);
   size_t it = tk % bsize;
   return par(btracks, it, ipar);
 }
-__host__ __device__ float x    (const gALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
-__host__ __device__ float y    (const gALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
-__host__ __device__ float z    (const gALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
-__host__ __device__ float ipt  (const gALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
-__host__ __device__ float phi  (const gALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
-__host__ __device__ float theta(const gALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
+HOSTDEV float x    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
+HOSTDEV float y    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
+HOSTDEV float z    (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
+HOSTDEV float ipt  (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
+HOSTDEV float phi  (const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
+HOSTDEV float theta(const ALLTRKS* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
 //
-__host__ __device__ void setpar(gMP6F* bpars, size_t it, size_t ipar, float val){
+HOSTDEV void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
   (*bpars).data[it + ipar*bsize] = val;
 }
-__host__ __device__ void setx    (gMP6F* bpars, size_t it, float val){ return setpar(bpars, it, 0, val); }
-__host__ __device__ void sety    (gMP6F* bpars, size_t it, float val){ return setpar(bpars, it, 1, val); }
-__host__ __device__ void setz    (gMP6F* bpars, size_t it, float val){ return setpar(bpars, it, 2, val); }
-__host__ __device__ void setipt  (gMP6F* bpars, size_t it, float val){ return setpar(bpars, it, 3, val); }
-__host__ __device__ void setphi  (gMP6F* bpars, size_t it, float val){ return setpar(bpars, it, 4, val); }
-__host__ __device__ void settheta(gMP6F* bpars, size_t it, float val){ return setpar(bpars, it, 5, val); }
+HOSTDEV void setx    (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 0, val); }
+HOSTDEV void sety    (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 1, val); }
+HOSTDEV void setz    (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 2, val); }
+HOSTDEV void setipt  (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 3, val); }
+HOSTDEV void setphi  (MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 4, val); }
+HOSTDEV void settheta(MP6F* bpars, size_t it, float val){ return setpar(bpars, it, 5, val); }
 //
-__host__ __device__ void setpar(gMPTRK* btracks, size_t it, size_t ipar, float val){
+HOSTDEV void setpar(MPTRK* btracks, size_t it, size_t ipar, float val){
   return setpar(&(*btracks).par,it,ipar,val);
 }
-__host__ __device__ void setx    (gMPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 0, val); }
-__host__ __device__ void sety    (gMPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 1, val); }
-__host__ __device__ void setz    (gMPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 2, val); }
-__host__ __device__ void setipt  (gMPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 3, val); }
-__host__ __device__ void setphi  (gMPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 4, val); }
-__host__ __device__ void settheta(gMPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 5, val); }
+HOSTDEV void setx    (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 0, val); }
+HOSTDEV void sety    (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 1, val); }
+HOSTDEV void setz    (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 2, val); }
+HOSTDEV void setipt  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 3, val); }
+HOSTDEV void setphi  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 4, val); }
+HOSTDEV void settheta(MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 5, val); }
 
-__host__ __device__ gMPHIT* GbHit(const ALLHITS* hits, size_t ev, size_t ib) {
-  return (*gMPHIT)&((*hits).bhits[ib + nb*ev]);
-}
-//__host__ __device__ MPHIT* bHit(ALLHITS* hits, size_t ev, size_t ib) {
+//HOSTDEV MPHIT* GbHit(const ALLHITS* hits, size_t ev, size_t ib) {
 //  return &((*hits).bhits[ib + nb*ev]);
 //}
-__host__ __device__ const MPHIT* bHit(const ALLHITS* hits, size_t ev, size_t ib) {
+HOSTDEV MPHIT* bHit(ALLHITS* hits, size_t ev, size_t ib) {
+  return &((*hits).bhits[ib + nb*ev]);
+}
+HOSTDEV const MPHIT* bHit(const ALLHITS* hits, size_t ev, size_t ib) {
   return &((*hits).bhits[ib + nb*ev]);
 }
 //
-__host__ __device__ float pos(const gMP3F* hpos, size_t it, size_t ipar){
+HOSTDEV float pos(const MP3F* hpos, size_t it, size_t ipar){
   return (*hpos).data[it + ipar*bsize];
 }
-__host__ __device__ float x(const gMP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
-__host__ __device__ float y(const gMP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
-__host__ __device__ float z(const gMP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
+HOSTDEV float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
+HOSTDEV float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
+HOSTDEV float z(const MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
 //
-__host__ __device__ float pos(const gMPHIT* hits, size_t it, size_t ipar){
+HOSTDEV float pos(const MPHIT* hits, size_t it, size_t ipar){
   return pos(&(*hits).pos,it,ipar);
 }
-__host__ __device__ float x(const gMPHIT* hits, size_t it)    { return pos(hits, it, 0); }
-__host__ __device__ float y(const gMPHIT* hits, size_t it)    { return pos(hits, it, 1); }
-__host__ __device__ float z(const gMPHIT* hits, size_t it)    { return pos(hits, it, 2); }
+HOSTDEV float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
+HOSTDEV float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
+HOSTDEV float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
 //
-__host__ __device__ float pos(const ALLHITS* hits, size_t ev, size_t tk, size_t ipar){
+HOSTDEV float pos(const ALLHITS* hits, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const gMPHIT* bhits = GbHit(hits, ev, ib);
+  const MPHIT* bhits = bHit(hits, ev, ib);
   size_t it = tk % bsize;
   return pos(bhits,it,ipar);
 }
-__host__ __device__ float x(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
-__host__ __device__ float y(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
-__host__ __device__ float z(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
+HOSTDEV float x(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
+HOSTDEV float y(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
+HOSTDEV float z(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
 //ALLTRKS* prepareTracks(ATRK inputtrk) {
 //  ALLTRKS* result = (ALLTRKS*) malloc(sizeof(ALLTRKS)); //fixme, align?
@@ -400,19 +508,17 @@ while(n<N)
   }
 }
 
-//__device__ MP6x6F errorProp, temp;
-//__host__ void GPUpropagateToZ(/*const MP6x6SF* inErr,*/ const MP6F* inPar,
-__global__ void GPUpropagateToZ(const gMP6F* inPar,const gMP1I* inChg,const gMP3F* msP, gMP6F* outPar, gMP6x6F errorProp) {
+//DEVICE MP6x6F errorProp, temp;
+//HOST void GPUpropagateToZ(/*const MP6x6SF* inErr,*/ const MP6F* inPar,
+__device__ void GPUpropagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6x6SF* outErr, MP6F* outPar) {
+//__global__ void GPUpropagateToZ(const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6F* outPar, MP6x6F errorProp) {
 //void GPUpropagateToZ(const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6F* outPar, MP6x6F errorProp) {
   //
-	//printf("XXX\n");
-	//printf("Test1: %f\n",x(inPar,0));	
-  //MP6x6F errorProp;//, temp;
+  MP6x6F errorProp, temp;
+  //int it =threadIdx.x;
   int it =0;
 //#pragma omp simd
 while(it<bsize){
-	printf("YYY\n");
- // printf("this is a test4: %d\n",it);
     const float zout = z(msP,it);
     const float k = q(inChg,it)*100/3.8;
     const float deltaZ = zout - z(inPar,it);
@@ -448,7 +554,7 @@ while(it<bsize){
     errorProp.data[bsize*GPUPosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
     errorProp.data[bsize*GPUPosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
     errorProp.data[bsize*GPUPosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
-    it += 1;// blockDim.x*gridDim.x;
+    it += 1;//blockDim.x;// blockDim.x*gridDim.x;
   }
   //
   //MultHelixPropEndcap(&errorProp, inErr, &temp);
@@ -466,12 +572,12 @@ void allocateManagedx(ALLTRKS* trk_d,ALLHITS* hit_d, ALLTRKS* outtrk_d){
         cudaMallocManaged((void**)&hit_d,sizeof(ALLHITS));
 	cudaMallocManaged((void**)&outtrk_d,sizeof(ALLTRKS));
 }
-void allocateManaged(gMPTRK* btracks,gMPHIT* bhits, gMPTRK* obtracks){
+void allocateManaged(MPTRK* btracks,MPHIT* bhits, MPTRK* obtracks){
         cudaMallocManaged((void**)&btracks,sizeof(MPTRK));
         cudaMallocManaged((void**)&bhits,sizeof(MPHIT));
 	cudaMallocManaged((void**)&obtracks,sizeof(MPTRK));
 }
-void allocateGPU(gMPTRK* btracks_d, gMPHIT* bhits_d, gMPTRK* obtracks_d, gMP6x6F errorProp_d, gMP6x6F temp_d){
+void allocateGPU(const MPTRK* btracks_d, const MPHIT* bhits_d, MPTRK* obtracks_d, MP6x6F errorProp_d, MP6x6F temp_d){
 	cudaMallocManaged((void**)&btracks_d,sizeof(MPTRK));
 	cudaMallocManaged((void**)&bhits_d,sizeof(MPHIT));
 	cudaMallocManaged((void**)&obtracks_d, sizeof(MPTRK));
@@ -527,16 +633,46 @@ __global__ void deviceCheck(const MPTRK* btracks_d){
 	printf("deviceCheck: %f\n", x(btracks_d,0));	
 }
 
-void setValues(const ALLTRKS* trk, const ALLHITS* hit,const ALLTRKS* outtrk, size_t ie,  size_t ib, gMPTRK* btracks, gMPHIT* bhits,gMPTRK* obtracks){
-	btracks = GbTk(trk, ie, ib);
-        bhits = GbHit(hit, ie, ib);
-        obtracks = GbTk(outtrk, ie, ib);
+__global__ void GPUsequence(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk){
+//void GPUsequence(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6x6SF* outErr, MP6F* outPar) {
+	for (size_t ie = blockIdx.x; ie<nevts; ie+=gridDim.x){
+		for(size_t ib = threadIdx.x; ib <nb; ib+=blockDim.x){
+			const MPTRK* btracks = bTk(trk,ie,ib);
+			const MPHIT* bhits = bHit(hit,ie,ib);
+			MPTRK* obtracks = bTk(outtrk,ie,ib);
+			
+			GPUpropagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par);
+		}
+	}
+
+	//GPUpropagateToZ<<<1,16>>>(inErr, inPar, inChg, msP, outErr, outPar);
+	//GPUpropagateToZ<<<1,1>>>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par)
 }
+
+void GPUsequence1(ALLTRKS* trk,ALLHITS* hit, ALLTRKS* outtrk){
+	GPUsequence<<<500,600>>>(trk,hit,outtrk);
+//	GPUsequence<<<500,600,0,streams[1]>>>(trk,hit,outtrk);
+	cudaDeviceSynchronize();
+}
+
+void prefetch(ALLTRKS* trk,ALLHITS* hit, ALLTRKS* outtrk){
+	cudaMallocManaged((void**)&outtrk,sizeof(ALLTRKS));
+	int device = -1;
+	cudaGetDevice(&device);
+	cudaMemPrefetchAsync(trk,sizeof(ALLTRKS),device,NULL);
+	cudaMemPrefetchAsync(hit,sizeof(ALLHITS),device,NULL);
+	cudaMemPrefetchAsync(outtrk,sizeof(ALLTRKS),device,NULL);
+}
+//void setValues(const ALLTRKS* trk, const ALLHITS* hit, ALLTRKS* outtrk, size_t ie,  size_t ib, const MPTRK* btracks, const MPHIT* bhits, MPTRK* obtracks){
+//	btracks = bTk(trk, ie, ib);
+//        bhits = bHit(hit, ie, ib);
+//        obtracks = bTk(outtrk, ie, ib);
+//}
 
 //void GPUSequence(const MPTRK* btracks,const MPHIT* bhits,MPTRK* obtracks){
 //void GPUSequence(const ALLTRKS* trk, const ALLHITS* hit,const ALLTRKS* outtrk, size_t ie, size_t ib, MPTRK* btracks, MPHIT* bhits,MPTRK* obtracks){
-void GPUSequence(const ALLTRKS* trk, const ALLHITS* hit,const ALLTRKS* outtrk, size_t ie, size_t ib){
-	cudaSetDevice(0);
+//void GPUSequence(const ALLTRKS* trk, const ALLHITS* hit, ALLTRKS* outtrk, size_t ie, size_t ib){
+	//cudaSetDevice(0);
 	//setValues<<<1,1>>>(trk,hit,outtrk,ie,ib,btracks,bhits,obtracks);
 	//MP6x6F errorProp, temp;//	printf("Test1: %f\n",x(obtracks,1));	
 	
@@ -548,22 +684,40 @@ void GPUSequence(const ALLTRKS* trk, const ALLHITS* hit,const ALLTRKS* outtrk, s
 	//printf("Test track: %f\n",x(btracks,1));	
 	//printf("Test hit: %f\n",x(bhits,1));	
 	//ALLTRKS* outtrk_d;// = (ALLTRKS*) malloc(sizeof(ALLTRKS));
-	gMPTRK* btracks_d;// = (MPTRK*)malloc(sizeof(MPTRK));
-	gMPHIT* bhits_d;// = (MPHIT*)malloc(sizeof(MPHIT));
-	gMPTRK* obtracks_d;// = (MPTRK*)malloc(sizeof(MPTRK));
-	gMP6x6F errorProp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
-	gMP6x6F temp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
-	allocateGPU(btracks_d,bhits_d,obtracks_d,errorProp_d,temp_d);
-	btracks_d = GbTk(trk,ie,ib);
-	bhits_d = GbHit(hit,ie,ib);
-	obtracks_d = GbTk(outtrk,ie,ib);
+	//const MPTRK* btracks_d = new MPTRK;// = (MPTRK*)malloc(sizeof(MPTRK));
+	//const MPHIT* bhits_d = new MPHIT;// = (MPHIT*)malloc(sizeof(MPHIT));
+	//MPTRK* obtracks_d = new MPTRK;// = (MPTRK*)malloc(sizeof(MPTRK));
+	//MP6x6F errorProp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
+	//MP6x6F temp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
+	//const MPTRK* btracks_d;// = (MPTRK*)malloc(sizeof(MPTRK));
+	//const MPHIT* bhits_d;// = (MPHIT*)malloc(sizeof(MPHIT));
+	//MPTRK* obtracks_d;// = (MPTRK*)malloc(sizeof(MPTRK));
+	//MP6x6F errorProp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
+	//MP6x6F temp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
+	//allocateGPU(btracks_d,bhits_d,obtracks_d,errorProp_d,temp_d);
+	//cudaMallocManaged((void**)&btracks_d,sizeof(MPTRK));
+	//cudaMallocManaged((void**)&bhits_d,sizeof(MPHIT));
+	//cudaMallocManaged((void**)&obtracks_d, sizeof(MPTRK));
+	//cudaMallocManaged((void**)&errorProp_d, sizeof(MP6x6F));
+	//cudaMallocManaged((void**)&temp_d, sizeof(MP6x6F));
+	//const MPTRK* btracks_d = bTk(trk,ie,ib);
+	//const MPHIT* bhits_d = bHit(hit,ie,ib);
+	//MPTRK* obtracks_d = bTk(outtrk,ie,ib);
+
+	//const MP6F* inpar_d;
+	//cudaMallocManaged((void**)&inpar_d,sizeof(MP6F));
+	//inpar_d = &(*btracks_d).par;
+
+	//printf("Test1: %f\n",x(&(*bhits_d).pos,0));	
 	//cpyToGPU(btracks,btracks_d,bhits,bhits_d);
 	//allocateManaged(btracks,bhits,obtracks);
-	//printf("Test track: %f\n",x(btracks,1));	
-	//deviceCheck<<<1,1>>>(btracks);
+//	printf("Test track1: %f\n",x(btracks_d,1));	
+//	printf("Test track2: %f\n",x(obtracks_d,1));	
+	//deviceCheck<<<1,1>>>(btracks_d);
 	///GPUpropagateToZ(&(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).par,errorProp); // vectorized function
-	GPUpropagateToZ<<<1,1>>>(&(*btracks_d).par, &(*btracks_d).q, &(*bhits_d).pos, &(*obtracks_d).par,errorProp_d); // vectorized function
-	cudaDeviceSynchronize();
+	//GPUpropagateToZ<<<1,1>>>(&(*btracks_d).par, &(*btracks_d).q, &(*bhits_d).pos, &(*obtracks_d).par,errorProp_d); // vectorized function
+	//GPUpropagateToZ<<<1,1>>>(&(*btracks_d).par, &(*btracks_d).q, &(*bhits_d).pos, &(*obtracks_d).par,errorProp_d); // vectorized function
+//	cudaDeviceSynchronize();
 //	printf("Test2: %f\n",x(obtracks,1));	
 //        GPUMultHelixPropEndcap<<<256,256>>>(&errorProp_d,&(*btracks_d).cov,&temp_d);
 //        cudaDeviceSynchronize();
@@ -575,10 +729,10 @@ void GPUSequence(const ALLTRKS* trk, const ALLHITS* hit,const ALLTRKS* outtrk, s
 
 
 //cudaFree(outtrk_d);
-//cudaFree(bhits_d);
-//cudaFree(btracks_d);
-//cudaFree(obtracks_d);
+//cudaFree(&bhits_d);
+//cudaFree(&btracks_d);
+//cudaFree(&obtracks_d);
 //cudaFree(&errorProp_d);
 //cudaFree(&temp_d);
-}
+//}
 

@@ -10,6 +10,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include "propagateGPU.h"
 
 #ifdef USE_ACC
 #include <accelmath.h>
@@ -27,6 +28,7 @@ size_t SymOffsets33(size_t i);
 
 size_t SymOffsets66(size_t i); 
 
+/*
 struct ATRK {
   float par[6];
   float cov[21];
@@ -86,7 +88,7 @@ struct MPHIT {
 struct ALLHITS {
   MPHIT bhits[nevts*ntrks];
 };
-
+*/
 float randn(float mu, float sigma);
 
 MPTRK* bTk(ALLTRKS* tracks, size_t ev, size_t ib);

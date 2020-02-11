@@ -15,7 +15,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define bsize 16
 #define ntrks nb*bsize
 #define smear 0.1
-#include "propagate-toz-test.h"
+//#include "propagate-toz-test.h"
 
 size_t GPUPosInMtrx(size_t i, size_t j, size_t D);
 size_t GPUSymOffsets33(size_t i);
