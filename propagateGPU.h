@@ -17,7 +17,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define ntrks nb*bsize
 #define smear 0.1
 //#include "propagate-toz-test.h"
-//#include <cuda_profiler_api.h>
+#include "cuda_profiler_api.h"
 
 
 #if USE_GPU
@@ -34,7 +34,6 @@ size_t SymOffsets33(size_t i);
 size_t SymOffsets66(size_t i);
 
 float randn(float mu,float sigma);
-
 
 struct ATRK {
   float par[6];
@@ -184,14 +183,6 @@ float y(const ALLHITS* hits, size_t ev, size_t tk);
 float z(const ALLHITS* hits, size_t ev, size_t tk);
 
 
-//void GPUprepareTracks(ATRK inputtrk, ALLTRKS* result,const float* trkrandos1,const float* trkrandos2, const float* randoq);
-//void GPUprepareHits(AHIT inputhit, ALLHITS *result,float* hitrandos1,float* hitrandos2);
-//
-////#define N bsize
-//void GPUpropagateToZ(const MP6F* inPar,const MP1I* inChg, const MP3F* msP, MP6F* outPar, MP6x6F errorProp);
-//void GPUMultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C);
-//void GPUMultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C);
-////DEVICE MP6x6F errorProp, temp;
 
 void allocateManaged( MPTRK* btracks, MPHIT* bhits, MPTRK* obtracks);
 void allocateManagedx( ALLTRKS* trk_d, ALLHITS* hit_d, ALLTRKS* outtrk_d);
@@ -199,14 +190,9 @@ void allocateGPU(const MPTRK* btracks_d, const MPHIT* bhits_d, MPTRK* obtracks_d
 void cpyToGPU(const MPTRK* btracks, MPTRK* btracks_d,const MPHIT* bhits, MPHIT* bhits_d);
 void cpyFromGPU(MPTRK* obtracks, MPTRK* obtracks_d);
 
-//__global__ void GPUpropagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg, const MP3F* msP, MP6x6SF* outErr, MP6F* outPar);
-//
-//void GPUtrackloop(const ALLTRKS* trk, const ALLHITS* hit, ALLTRKS* outtrk, int ie);
-//void GPUeventloop(const ALLTRKS* trk, const ALLHITS* hit, ALLTRKS* outtrk);
-//void GPUSequence(const ALLTRKS* trk,const ALLHITS* hit, ALLTRKS* outtrk,  size_t ie,  size_t ib);
-void GPUsequence1(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk);
+//void GPUsequence1(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk);
+void GPUsequence1(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk,cudaStream_t* streams);
+__global__ void GPUsequence(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk,int streams);
+//__global__ void GPUsequence(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk);
 void prefetch(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk);
-//void GPUsequence(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6x6SF* outErr, MP6F* outPar);
-//void GPUSequence(const ALLTRKS* trk,const ALLHITS* hit, const ALLTRKS* outtrk,  size_t ie,  size_t ib, MPTRK* btracks, MPHIT* bhits, MPTRK* obtracks);
-//void GPUSequence(const MPTRK* btracks, const MPHIT* bhits, MPTRK* obtracks);
 #endif

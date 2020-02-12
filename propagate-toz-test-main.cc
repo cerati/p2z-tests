@@ -36,29 +36,6 @@ int main (int argc, char* argv[]) {
      {-20.7824649810791, -12.24150276184082, 57.8067626953125},
      {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
    };
-//    auto trk_par = std::initializer_list<float>({-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975});
-//    
-//    auto trk_cov = std::initializer_list<float>({6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
-//                   6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
-//                    0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348});
-//    inputtrk.q = 1;
-//    auto trk_hitidx = std::initializer_list<float>({1, 0, 17, 16, 36, 35, 33, 34, 59, 58, 70, 85, 101, 102, 116, 117, 132, 133, 152, 169, 187, 202});
-//
-//    std::copy(trk_par.begin(), trk_par.end(),inputtrk.par);
-//    std::copy(trk_cov.begin(), trk_cov.end(),inputtrk.cov);
-//    std::copy(trk_hitidx.begin(), trk_hitidx.end(),inputtrk.hitidx);
-//   ///*AHIT*/ inputhit = {
-//   auto hit_pos = std::initializer_list<float>({-20.7824649810791, -12.24150276184082, 57.8067626953125});
-//   auto hit_cov = std::initializer_list<float>({2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945});
-//   
-//    std::copy(hit_pos.begin(), hit_pos.end(),inputhit.pos);
-//    std::copy(hit_cov.begin(), hit_cov.end(),inputhit.cov);
-
-//   printf("track in pos: %f, %f, %f \n", inputtrk->par[0], inputtrk->par[1], inputtrk->par[2]);
-//   printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk->cov[SymOffsets66(PosInMtrx(0,0,6))],
-//                                               inputtrk->cov[SymOffsets66(PosInMtrx(1,1,6))],
-//                                               inputtrk->cov[SymOffsets66(PosInMtrx(2,2,6))]);
-//   printf("hit in pos: %f %f %f \n", inputhit->pos[0], inputhit->pos[1], inputhit->pos[2]);
    printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
    printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
                                                inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
@@ -66,31 +43,37 @@ int main (int argc, char* argv[]) {
    printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
-   //ALLTRKS* trk;// = new ALLTRKS;
-   //ALLHITS* hit;// = new ALLHITS;
-   //ALLTRKS* outtrk;// = new ALLTRKS;
-   //cudaMallocManaged((void**)&trk,sizeof(ALLTRKS));
-   //cudaMallocManaged((void**)&hit,sizeof(ALLHITS));
-   //cudaMallocManaged((void**)&outtrk,sizeof(ALLTRKS));
    ALLTRKS* trk = prepareTracks(inputtrk);
    ALLHITS* hit = prepareHits(inputhit);
 
    printf("done preparing!\n");
    
-   //ALLTRKS* outtrk = (ALLTRKS*) malloc(sizeof(ALLTRKS));
-  #if USE_GPU
+#if USE_GPU
    ALLTRKS* outtrk;
-   //prefetch(trk,hit,outtrk);
    cudaMallocManaged((void**)&outtrk,sizeof(ALLTRKS));
+   printf("%d %d",sizeof(ALLTRKS),sizeof(ALLHITS));
    int device = -1;
    cudaGetDevice(&device);
-   //const int num_streams = 2;
-   //cudaStream_t streams[num_streams];
+   const int num_streams = 5;
+   cudaStream_t streams[num_streams];
    //for(int i =0; i<num_streams;i++){
    //cudaStreamCreate(&streams[i]);
-   cudaMemPrefetchAsync(trk,sizeof(ALLTRKS), device,NULL);
-   cudaMemPrefetchAsync(hit,sizeof(ALLHITS), device,NULL);
-   cudaMemPrefetchAsync(outtrk,sizeof(ALLTRKS), device,NULL);
+   cudaStreamCreateWithFlags(&streams[0],cudaStreamNonBlocking);
+   cudaStreamCreateWithFlags(&streams[1],cudaStreamNonBlocking);
+   cudaStreamCreateWithFlags(&streams[2],cudaStreamNonBlocking);
+   cudaStreamCreateWithFlags(&streams[3],cudaStreamNonBlocking);
+   cudaStreamCreateWithFlags(&streams[4],cudaStreamNonBlocking);
+   cudaMemPrefetchAsync(trk,sizeof(ALLTRKS), device,streams[0]);
+   cudaMemPrefetchAsync(hit,sizeof(ALLHITS), device,streams[0]);
+   cudaMemPrefetchAsync(trk,sizeof(ALLTRKS), device,streams[1]);
+   cudaMemPrefetchAsync(hit,sizeof(ALLHITS), device,streams[1]);
+   cudaMemPrefetchAsync(trk,sizeof(ALLTRKS), device,streams[2]);
+   cudaMemPrefetchAsync(hit,sizeof(ALLHITS), device,streams[2]);
+   cudaMemPrefetchAsync(trk,sizeof(ALLTRKS), device,streams[3]);
+   cudaMemPrefetchAsync(hit,sizeof(ALLHITS), device,streams[3]);
+   cudaMemPrefetchAsync(trk,sizeof(ALLTRKS), device,streams[4]);
+   cudaMemPrefetchAsync(hit,sizeof(ALLHITS), device,streams[4]);
+   //cudaMemPrefetchAsync(outtrk,sizeof(ALLTRKS), device,streams[i]);
    //}
 #else
    ALLTRKS* outtrk = (ALLTRKS*) malloc(sizeof(ALLTRKS));
@@ -115,6 +98,7 @@ int main (int argc, char* argv[]) {
 #if USEACC
 #pragma acc parallel loop
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
+#pragma acc parallel loop
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
        const MPTRK* btracks = bTk(trk, ie, ib);
@@ -125,34 +109,17 @@ int main (int argc, char* argv[]) {
   }
 #else
 #if USE_GPU
-	GPUsequence1(trk,hit,outtrk);
-       //const MPTRK* btracks = bTk(trk, ie, ib);
-       //const MPHIT* bhits = bHit(hit, ie, ib);
-       //MPTRK* obtracks = bTk(outtrk, ie, ib);
-       //GPUsequence(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-       ////GPUpropagateToZ<<<1,1>>>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+	GPUsequence1(trk,hit,outtrk,streams);
+	//GPUsequence<<<500,500>>>(trk,hit,outtrk,0);
 #else   
 #pragma omp parallel for
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
 #pragma omp parallel for
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-       //
-//#if USE_GPU
-//       //GPUSequence(trk,hit,outtrk,ie,ib);
-//       //MP6x6F errorProp_d;
-//       //cudaMallocManaged((void**)&errorProp_d,sizeof(MP6x6F));
-//
-//       const MPTRK* btracks = bTk(trk, ie, ib);
-//       const MPHIT* bhits = bHit(hit, ie, ib);
-//       MPTRK* obtracks = bTk(outtrk, ie, ib);
-//       GPUsequence(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-//       //GPUpropagateToZ<<<1,1>>>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-//#else   
        const MPTRK* btracks = bTk(trk, ie, ib);
        const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-//#endif
     }
   }
 #endif

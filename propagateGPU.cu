@@ -132,71 +132,6 @@ float randn(float mu, float sigma) {
 }
 
 
-
-
-
-
-//struct ATRK {
-//  float par[6];
-//  float cov[21];
-//  int q;
-//  int hitidx[22];
-//};
-//
-//struct AHIT {
-//  float pos[3];
-//  float cov[6];
-//};
-//
-//struct MP1I {
-//  int data[1*bsize];
-//};
-//
-//struct MP22I {
-//  int data[22*bsize];
-//};
-//
-//struct MP3F {
-//  float data[3*bsize];
-//};
-//
-//struct MP6F {
-//  float data[6*bsize];
-//};
-//
-//struct MP3x3SF {
-//  float data[6*bsize];
-//};
-//
-//struct MP6x6SF {
-//  float data[21*bsize];
-//};
-//
-//struct MP6x6F {
-//  float data[36*bsize];
-//};
-//
-//struct MPTRK {
-//  MP6F    par;
-//  MP6x6SF cov;
-//  MP1I    q;
-//  MP22I   hitidx;
-//};
-//
-//struct ALLTRKS {
-//  int ismade = 0;
-//  MPTRK  btrks[nevts*ntrks];
-//};
-//
-//struct MPHIT {
-//  MP3F    pos;
-//  MP3x3SF cov;
-//};
-//
-//struct ALLHITS {
-//  MPHIT bhits[nevts*ntrks];
-//};
-
 float GPUrandn(float mu, float sigma) {
   float U1, U2, W, mult;
   static float X1, X2;
@@ -228,9 +163,6 @@ HOSTDEV MPTRK GbTk(ALLTRKS* tracks, size_t ev, size_t ib) {
   return ((*tracks).btrks[ib + nb*ev]);
 }
 
-//HOSTDEV const MPTRK GbTk(const ALLTRKS* tracks, size_t ev, size_t ib) {
-//  return ((*tracks).btrks[ib + nb*ev]);
-//}
 
 HOSTDEV float q(const MP1I* bq, size_t it){
   return (*bq).data[it];
@@ -289,9 +221,6 @@ HOSTDEV void setipt  (MPTRK* btracks, size_t it, float val){ return setpar(btrac
 HOSTDEV void setphi  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 4, val); }
 HOSTDEV void settheta(MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 5, val); }
 
-//HOSTDEV MPHIT* GbHit(const ALLHITS* hits, size_t ev, size_t ib) {
-//  return &((*hits).bhits[ib + nb*ev]);
-//}
 HOSTDEV MPHIT* bHit(ALLHITS* hits, size_t ev, size_t ib) {
   return &((*hits).bhits[ib + nb*ev]);
 }
@@ -323,30 +252,6 @@ HOSTDEV float x(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits,
 HOSTDEV float y(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
 HOSTDEV float z(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
-//ALLTRKS* prepareTracks(ATRK inputtrk) {
-//  ALLTRKS* result = (ALLTRKS*) malloc(sizeof(ALLTRKS)); //fixme, align?
-//  printf("bool: %d",(*result).ismade);
-//  // store in element order for bunches of bsize matrices (a la matriplex)
-//  for (size_t ie=0;ie<nevts;++ie) {
-//    for (size_t ib=0;ib<nb;++ib) {
-//      for (size_t it=0;it<bsize;++it) {
-//	//par
-//	for (size_t ip=0;ip<6;++ip) {
-//	  //printf("randt: %f\n",  (*result).btrks[ib + nb*ie].par.data[it + ip*bsize]);
-//	  (*result).btrks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
-//	 // printf("randt: %f\n",  (*result).btrks[ib + nb*ie].par.data[it + ip*bsize]);
-//	}
-//	//cov
-//	for (size_t ip=0;ip<36;++ip) {
-//	  (*result).btrks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
-//	}
-//	//q
-//	(*result).btrks[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
-//      }
-//    }
-//  } 
-//  return result;
-//}
 
 __global__ 
 void GPUprepareTracks(ATRK inputtrk, ALLTRKS* result,const float* trkrandos1,const float* trkrandos2, const float* randoq) {
@@ -401,37 +306,17 @@ void GPUprepareHits(AHIT inputhit, ALLHITS *result,float* hitrandos1,float* hitr
   }
   //outtrk = result;
 }
-//ALLHITS* prepareHits(AHIT inputhit) {
-//  ALLHITS* result = (ALLHITS*) malloc(sizeof(ALLHITS));  //fixme, align?
-//  // store in element order for bunches of bsize matrices (a la matriplex)
-//  for (size_t ie=0;ie<nevts;++ie) {
-//    for (size_t ib=0;ib<nb;++ib) {
-//      for (size_t it=0;it<bsize;++it) {
-//  	//pos
-//  	for (size_t ip=0;ip<3;++ip) {
-//  	  (*result).bhits[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
-//  	}
-//  	//cov
-//  	for (size_t ip=0;ip<6;++ip) {
-//  	  (*result).bhits[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
-//  	}
-//      }
-//    }
-//  }
-//  return result;
-//}
 
 #define N bsize
-__global__ 
-void GPUMultHelixPropEndcap(MP6x6F* A,MP6x6SF* B, MP6x6F* C) {
-//__global__ void MultHelixPropEndcap(const float* a, const MP6x6SF* B, float* c) {
+__device__ 
+void GPUMultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
 //#pragma omp simd
-  int n = threadIdx.x + blockIdx.x*blockDim.x;
-  //for (int n = 0; n < N; ++n)
-while(n<N)
+  //int n = threadIdx.x + blockIdx.x*blockDim.x;
+  for (int n = 0; n < N; ++n)
+//while(n<N)
   {
   //printf("testing: %d\n",n);
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -470,18 +355,18 @@ while(n<N)
     c[33*N+n] = b[18*N+n];
     c[34*N+n] = b[19*N+n];
     c[35*N+n] = b[20*N+n];
-   n += blockDim.x*gridDim.x;
+ //  n += blockDim.x*gridDim.x;
   }
 }
 
-__global__ void GPUMultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
+__device__ void GPUMultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
 //#pragma omp simd
-  int n = threadIdx.x + blockIdx.x*blockDim.x;
-  //for (int n = 0; n < N; ++n)
-while(n<N)
+  //int n = threadIdx.x + blockIdx.x*blockDim.x;
+  for (int n = 0; n < N; ++n)
+//while(n<N)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
@@ -504,15 +389,11 @@ while(n<N)
     c[18*N+n] = b[33*N+n];
     c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
     c[20*N+n] = b[35*N+n];
-   n += blockDim.x*gridDim.x;
+ //  n += blockDim.x*gridDim.x;
   }
 }
 
-//DEVICE MP6x6F errorProp, temp;
-//HOST void GPUpropagateToZ(/*const MP6x6SF* inErr,*/ const MP6F* inPar,
 __device__ void GPUpropagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6x6SF* outErr, MP6F* outPar) {
-//__global__ void GPUpropagateToZ(const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6F* outPar, MP6x6F errorProp) {
-//void GPUpropagateToZ(const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6F* outPar, MP6x6F errorProp) {
   //
   MP6x6F errorProp, temp;
   //int it =threadIdx.x;
@@ -556,102 +437,39 @@ while(it<bsize){
     errorProp.data[bsize*GPUPosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
     it += 1;//blockDim.x;// blockDim.x*gridDim.x;
   }
-  //
-  //MultHelixPropEndcap(&errorProp, inErr, &temp);
-  //MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
   
-  //GPUMultHelixPropEndcap<<<256,256>>>(&errorProp, inErr, &temp);
-  //cudaDeviceSynchronize();
-  //GPUMultHelixPropTranspEndcap<<<256,256>>>(&errorProp, &temp, outErr);
-  //cudaDeviceSynchronize();
-  //errorProp1 = errorProp; 
+  GPUMultHelixPropEndcap(&errorProp, inErr, &temp);
+  GPUMultHelixPropTranspEndcap(&errorProp, &temp, outErr);
 }
 
-void allocateManagedx(ALLTRKS* trk_d,ALLHITS* hit_d, ALLTRKS* outtrk_d){
-        cudaMallocManaged((void**)&trk_d,sizeof(ALLTRKS));
-        cudaMallocManaged((void**)&hit_d,sizeof(ALLHITS));
-	cudaMallocManaged((void**)&outtrk_d,sizeof(ALLTRKS));
-}
-void allocateManaged(MPTRK* btracks,MPHIT* bhits, MPTRK* obtracks){
-        cudaMallocManaged((void**)&btracks,sizeof(MPTRK));
-        cudaMallocManaged((void**)&bhits,sizeof(MPHIT));
-	cudaMallocManaged((void**)&obtracks,sizeof(MPTRK));
-}
-void allocateGPU(const MPTRK* btracks_d, const MPHIT* bhits_d, MPTRK* obtracks_d, MP6x6F errorProp_d, MP6x6F temp_d){
-	cudaMallocManaged((void**)&btracks_d,sizeof(MPTRK));
-	cudaMallocManaged((void**)&bhits_d,sizeof(MPHIT));
-	cudaMallocManaged((void**)&obtracks_d, sizeof(MPTRK));
-	cudaMallocManaged((void**)&errorProp_d, sizeof(MP6x6F));
-	cudaMallocManaged((void**)&temp_d, sizeof(MP6x6F));
-}
-void cpyToGPU(const MPTRK* btracks, MPTRK* btracks_d,const MPHIT* bhits, MPHIT* bhits_d){//, MPTRK* obtracks, MPTRK* obtracks_d){
-	//printf("TestX: %f\n",x(btracks,1));	
-	//printf("TestY: %f\n",x(btracks_d,1));	
-	cudaMemcpy((void*)btracks_d, btracks,sizeof(MPTRK), cudaMemcpyHostToDevice);
-	cudaMemcpy((void*)bhits_d, bhits,sizeof(MPHIT), cudaMemcpyHostToDevice);
 
-	cudaMemcpy((void*)&(*btracks_d).par, &(*btracks).par,sizeof(MP6F), cudaMemcpyHostToDevice);
-	cudaMemcpy((void*)&(*btracks_d).q, &(*btracks).q,sizeof(MP1I), cudaMemcpyHostToDevice);
 
-	//printf("TestXX: %f\n",x(btracks,1));	
-	//printf("TestYY: %f\n",x(btracks_d,1));	
-//	cudaMemcpy((void*)obtracks_d, obtracks,sizeof(MPTRK), cudaMemcpyHostToDevice);
-}
-void cpyFromGPU(MPTRK* obtracks, MPTRK* obtracks_d){
-	cudaMemcpy((void*)obtracks, obtracks_d,sizeof(MPTRK), cudaMemcpyDeviceToHost);
-}
-
-__global__ void GPUtrackloop(const ALLTRKS* trk, const ALLHITS* hit, ALLTRKS* outtrk, int ie){
-//#pragma omp parallel for
-	size_t ib = threadIdx.x + blockIdx.x*blockDim.x;
-while(ib<nb){	
-     //for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-       //
-       const MPTRK* btracks = bTk(trk, ie, ib);
-       const MPHIT* bhits = bHit(hit, ie, ib);
-       MPTRK* obtracks = bTk(outtrk, ie, ib); 
-       //GPUpropagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-       //propagateToZ<<<1,1>>>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-	//cudaDeviceSynchronize();
-	ib += blockDim.x*gridDim.x;
-    }
-  }
-__global__ void GPUeventloop(const ALLTRKS* trk, const ALLHITS* hit, ALLTRKS* outtrk){
-//#pragma omp parallel for
-	int ie = threadIdx.x + blockIdx.x*blockDim.x;
-   //for (size_t ie=0;ie<nevts;++ie) { // loop over events
-	while(ie<nevts){	
-	//GPUtrackloop<<<64,32>>>(trk,hit,outtrk,ie); 
-	//cudaDeviceSynchronize();
-	//__syncthreads();
-	ie += blockDim.x*gridDim.x;
-	}
-}
-
-__global__ void deviceCheck(const MPTRK* btracks_d){
-	printf("deviceCheck\n");	
-	printf("deviceCheck: %f\n", x(btracks_d,0));	
-}
-
-__global__ void GPUsequence(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk){
-//void GPUsequence(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6x6SF* outErr, MP6F* outPar) {
-	for (size_t ie = blockIdx.x; ie<nevts; ie+=gridDim.x){
+__global__ void GPUsequence(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk, const int stream){
+	const int streams = 5;
+	for (size_t ie = blockIdx.x; ie<nevts/streams; ie+=gridDim.x){
 		for(size_t ib = threadIdx.x; ib <nb; ib+=blockDim.x){
-			const MPTRK* btracks = bTk(trk,ie,ib);
-			const MPHIT* bhits = bHit(hit,ie,ib);
-			MPTRK* obtracks = bTk(outtrk,ie,ib);
+		//for(size_t ie = threadIdx.x; ie <nevts; ie+=blockDim.x){
+	//for (size_t ib = blockIdx.x; ib<nb; ib+=gridDim.x){
+//			printf("%s %s",ie,ib);
+			const MPTRK* btracks = bTk(trk,ie+stream*nevts/streams,ib);
+			const MPHIT* bhits = bHit(hit,ie+stream*nevts/streams,ib);
+			MPTRK* obtracks = bTk(outtrk,ie+stream*nevts/streams,ib);
 			
 			GPUpropagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par);
 		}
 	}
-
-	//GPUpropagateToZ<<<1,16>>>(inErr, inPar, inChg, msP, outErr, outPar);
-	//GPUpropagateToZ<<<1,1>>>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par)
 }
 
-void GPUsequence1(ALLTRKS* trk,ALLHITS* hit, ALLTRKS* outtrk){
-	GPUsequence<<<500,600>>>(trk,hit,outtrk);
-//	GPUsequence<<<500,600,0,streams[1]>>>(trk,hit,outtrk);
+void GPUsequence1(ALLTRKS* trk,ALLHITS* hit, ALLTRKS* outtrk,cudaStream_t* streams){
+//void GPUsequence1(ALLTRKS* trk,ALLHITS* hit, ALLTRKS* outtrk){
+	//GPUsequence<<<500,600>>>(trk,hit,outtrk);
+	GPUsequence<<<200,600,0,streams[0]>>>(trk,hit,outtrk,0);
+	GPUsequence<<<200,600,0,streams[1]>>>(trk,hit,outtrk,1);
+	GPUsequence<<<200,600,0,streams[2]>>>(trk,hit,outtrk,2);
+	GPUsequence<<<200,600,0,streams[3]>>>(trk,hit,outtrk,3);
+	GPUsequence<<<200,600,0,streams[4]>>>(trk,hit,outtrk,4);
+	//cudaStreamSynchronize(streams[0]);
+	//cudaStreamSynchronize(streams[0]);
 	cudaDeviceSynchronize();
 }
 
@@ -663,76 +481,3 @@ void prefetch(ALLTRKS* trk,ALLHITS* hit, ALLTRKS* outtrk){
 	cudaMemPrefetchAsync(hit,sizeof(ALLHITS),device,NULL);
 	cudaMemPrefetchAsync(outtrk,sizeof(ALLTRKS),device,NULL);
 }
-//void setValues(const ALLTRKS* trk, const ALLHITS* hit, ALLTRKS* outtrk, size_t ie,  size_t ib, const MPTRK* btracks, const MPHIT* bhits, MPTRK* obtracks){
-//	btracks = bTk(trk, ie, ib);
-//        bhits = bHit(hit, ie, ib);
-//        obtracks = bTk(outtrk, ie, ib);
-//}
-
-//void GPUSequence(const MPTRK* btracks,const MPHIT* bhits,MPTRK* obtracks){
-//void GPUSequence(const ALLTRKS* trk, const ALLHITS* hit,const ALLTRKS* outtrk, size_t ie, size_t ib, MPTRK* btracks, MPHIT* bhits,MPTRK* obtracks){
-//void GPUSequence(const ALLTRKS* trk, const ALLHITS* hit, ALLTRKS* outtrk, size_t ie, size_t ib){
-	//cudaSetDevice(0);
-	//setValues<<<1,1>>>(trk,hit,outtrk,ie,ib,btracks,bhits,obtracks);
-	//MP6x6F errorProp, temp;//	printf("Test1: %f\n",x(obtracks,1));	
-	
-        //cudaMallocManaged((void**)&errorProp,sizeof(MP6x6F));
-        //cudaMallocManaged((void**)&temp,sizeof(MP6x6F));
-	
-
-	//printf("running GPUSequence");	
-	//printf("Test track: %f\n",x(btracks,1));	
-	//printf("Test hit: %f\n",x(bhits,1));	
-	//ALLTRKS* outtrk_d;// = (ALLTRKS*) malloc(sizeof(ALLTRKS));
-	//const MPTRK* btracks_d = new MPTRK;// = (MPTRK*)malloc(sizeof(MPTRK));
-	//const MPHIT* bhits_d = new MPHIT;// = (MPHIT*)malloc(sizeof(MPHIT));
-	//MPTRK* obtracks_d = new MPTRK;// = (MPTRK*)malloc(sizeof(MPTRK));
-	//MP6x6F errorProp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
-	//MP6x6F temp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
-	//const MPTRK* btracks_d;// = (MPTRK*)malloc(sizeof(MPTRK));
-	//const MPHIT* bhits_d;// = (MPHIT*)malloc(sizeof(MPHIT));
-	//MPTRK* obtracks_d;// = (MPTRK*)malloc(sizeof(MPTRK));
-	//MP6x6F errorProp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
-	//MP6x6F temp_d;// = (MP6x6F*)malloc(sizeof(MP6x6F));
-	//allocateGPU(btracks_d,bhits_d,obtracks_d,errorProp_d,temp_d);
-	//cudaMallocManaged((void**)&btracks_d,sizeof(MPTRK));
-	//cudaMallocManaged((void**)&bhits_d,sizeof(MPHIT));
-	//cudaMallocManaged((void**)&obtracks_d, sizeof(MPTRK));
-	//cudaMallocManaged((void**)&errorProp_d, sizeof(MP6x6F));
-	//cudaMallocManaged((void**)&temp_d, sizeof(MP6x6F));
-	//const MPTRK* btracks_d = bTk(trk,ie,ib);
-	//const MPHIT* bhits_d = bHit(hit,ie,ib);
-	//MPTRK* obtracks_d = bTk(outtrk,ie,ib);
-
-	//const MP6F* inpar_d;
-	//cudaMallocManaged((void**)&inpar_d,sizeof(MP6F));
-	//inpar_d = &(*btracks_d).par;
-
-	//printf("Test1: %f\n",x(&(*bhits_d).pos,0));	
-	//cpyToGPU(btracks,btracks_d,bhits,bhits_d);
-	//allocateManaged(btracks,bhits,obtracks);
-//	printf("Test track1: %f\n",x(btracks_d,1));	
-//	printf("Test track2: %f\n",x(obtracks_d,1));	
-	//deviceCheck<<<1,1>>>(btracks_d);
-	///GPUpropagateToZ(&(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).par,errorProp); // vectorized function
-	//GPUpropagateToZ<<<1,1>>>(&(*btracks_d).par, &(*btracks_d).q, &(*bhits_d).pos, &(*obtracks_d).par,errorProp_d); // vectorized function
-	//GPUpropagateToZ<<<1,1>>>(&(*btracks_d).par, &(*btracks_d).q, &(*bhits_d).pos, &(*obtracks_d).par,errorProp_d); // vectorized function
-//	cudaDeviceSynchronize();
-//	printf("Test2: %f\n",x(obtracks,1));	
-//        GPUMultHelixPropEndcap<<<256,256>>>(&errorProp_d,&(*btracks_d).cov,&temp_d);
-//        cudaDeviceSynchronize();
-//	printf("Test3: %f\n",x(obtracks,1));	
-//        GPUMultHelixPropTranspEndcap<<<256,256>>>(&errorProp_d,&temp_d,&(*obtracks_d).cov);
-//	cudaDeviceSynchronize();
-//	cpyFromGPU(obtracks,obtracks_d);
-//	printf("Test4: %f\n",x(obtracks,1));	
-
-
-//cudaFree(outtrk_d);
-//cudaFree(&bhits_d);
-//cudaFree(&btracks_d);
-//cudaFree(&obtracks_d);
-//cudaFree(&errorProp_d);
-//cudaFree(&temp_d);
-//}
-
