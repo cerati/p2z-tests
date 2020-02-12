@@ -51,7 +51,7 @@ int main (int argc, char* argv[]) {
 #if USE_GPU
    ALLTRKS* outtrk;
    cudaMallocManaged((void**)&outtrk,sizeof(ALLTRKS));
-   printf("%d %d",sizeof(ALLTRKS),sizeof(ALLHITS));
+   //printf("%d %d",sizeof(ALLTRKS),sizeof(ALLHITS));
    int device = -1;
    cudaGetDevice(&device);
    const int num_streams = 5;
@@ -73,6 +73,7 @@ int main (int argc, char* argv[]) {
    cudaMemPrefetchAsync(hit,sizeof(ALLHITS), device,streams[3]);
    cudaMemPrefetchAsync(trk,sizeof(ALLTRKS), device,streams[4]);
    cudaMemPrefetchAsync(hit,sizeof(ALLHITS), device,streams[4]);
+   cudaDeviceSynchronize();
    //cudaMemPrefetchAsync(outtrk,sizeof(ALLTRKS), device,streams[i]);
    //}
 #else
@@ -126,7 +127,13 @@ int main (int argc, char* argv[]) {
 #endif
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-
+#if USE_GPU
+cudaStreamDestroy(streams[0]);
+cudaStreamDestroy(streams[1]);
+cudaStreamDestroy(streams[2]);
+cudaStreamDestroy(streams[3]);
+cudaStreamDestroy(streams[4]);
+#endif
    // for (size_t ie=0;ie<nevts;++ie) {
    //   for (size_t it=0;it<ntrks;++it) {
    //     printf("ie=%lu it=%lu\n",ie,it);
