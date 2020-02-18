@@ -364,7 +364,7 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
   ViewMatrixCB errorProp("ep", nevts*nb, 6, 6, bsize),
                temp("temp", nevts*nb, 6, 6, bsize);
 
-  Kokkos::parallel_for( nb*nevts, KOKKOS_LAMBDA ( int batch ) {
+  Kokkos::parallel_for( "p2z_batch_loop", range_policy(0,nb*nevts), KOKKOS_LAMBDA ( int batch ) {
   // #pragma omp parallel for
   // for (size_t ie=0;ie<nevts;++ie) { // combined these two loop over batches
   // for (size_t ib=0;ib<nb;++ib) {    // // TODO make a kookos parallel

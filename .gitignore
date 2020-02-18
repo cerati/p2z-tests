@@ -6,6 +6,7 @@
 *.tmp
 KokkosCore_*
 *.host
+*.cuda
 *.optrpt
 
 
