@@ -10,7 +10,7 @@ KokkosCore_*
 *.optrpt
 
 
-
+run_tau.sh
 cali*
 *.json
 

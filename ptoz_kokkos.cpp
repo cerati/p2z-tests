@@ -23,7 +23,8 @@ void separateHits(MPHIT* &mp_in, CBHIT &cb_out);
 void allocateOutTracks(MPTRK* &trk);
 void convertOutput(CBTRK &cb_in, MPTRK* &mp_out);
 
-void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks);
+void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks, 
+                  ViewMatrixCB &errorProp, ViewMatrixCB &temp);
 void averageOutputs(MPTRK* &outtrk, MPHIT* &hit);
 
 void gemm(ViewMatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
@@ -96,6 +97,9 @@ int main( int argc, char* argv[] )
   separateTracks(trk, all_tracks);
   separateHits(hit, all_hits);
 
+  ViewMatrixCB errorProp("ep", nevts*nb, 6, 6, bsize),
+               temp("temp", nevts*nb, 6, 6, bsize);
+
   printf("done preparing!\n");
   
   convert_in_t = get_time();
@@ -103,7 +107,7 @@ int main( int argc, char* argv[] )
 
   for(itr=0; itr<NITER; itr++) {
   
-      propagateToZ(all_tracks, all_hits, all_out);
+      propagateToZ(all_tracks, all_hits, all_out, errorProp, temp);
 
   } // end of itr loop
 
@@ -359,17 +363,19 @@ void allocateOutTracks(MPTRK* &outtrk) {
   //
 
 
-void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
+void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks, 
+                  ViewMatrixCB &errorProp, ViewMatrixCB &temp) {
 
-  ViewMatrixCB errorProp("ep", nevts*nb, 6, 6, bsize),
-               temp("temp", nevts*nb, 6, 6, bsize);
+  // ViewMatrixCB errorProp("ep", nevts*nb, 6, 6, bsize),
+  //              temp("temp", nevts*nb, 6, 6, bsize);
 
   Kokkos::parallel_for( "p2z_batch_loop", range_policy(0,nb*nevts), KOKKOS_LAMBDA ( int batch ) {
   // #pragma omp parallel for
   // for (size_t ie=0;ie<nevts;++ie) { // combined these two loop over batches
   // for (size_t ib=0;ib<nb;++ib) {    // // TODO make a kookos parallel
   // size_t batch = ib + nb*ie;
-
+  #pragma ivdep
+  #pragma simd
   for (size_t it=0;it<bsize;++it) { 
    
     const float zout = inHits.pos(batch, Z_IND, it); 
@@ -419,10 +425,14 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
   for ( int i = 0; i < 6; ++i ) {
     for ( int j = 0; j < 6; ++j ) {
 
+      #pragma ivdep
+      #pragma simd
       for ( int it = 0; it < bsize; ++it ) 
         temp(batch,i,j,it) = 0.0;
 
       for ( int k = 0; k < 6; ++k ) {
+        #pragma ivdep
+        #pragma simd
         for ( int it = 0; it < bsize; ++it ) {
           temp(batch,i,j,it) += errorProp(batch,i,k,it) * inTrks.cov(batch,k,j,it);
         }
@@ -435,10 +445,14 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks) {
   for ( int i = 0; i < 6; ++i ) {
     for ( int j = 0; j < 6; ++j ) {
 
+      #pragma ivdep
+      #pragma simd
       for ( int it = 0; it < bsize; ++it ) 
         outTrks.cov(batch,i,j,it) = 0.0;
 
       for ( int k = 0; k < 6; ++k ) {
+        #pragma ivdep
+        #pragma simd
         for ( int it = 0; it < bsize; ++it ) {
           outTrks.cov(batch,i,j,it) += errorProp(batch,i,k,it) * temp(batch,j,k,it);
         }

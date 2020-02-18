@@ -1,3 +1,4 @@
+# KOKKOS_PATH = ${HOME}/kokkos-simd
 KOKKOS_PATH = ${HOME}/kokkos
 KOKKOS_DEVICES = "OpenMP,Cuda"
 EXE_NAME = "test"
@@ -15,14 +16,17 @@ EXE = ${EXE_NAME}.cuda
 KOKKOS_ARCH = "BDW,Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
 else
-CXX = g++-9
+# CXX = g++-9
+CXX = icpc
 EXE = ${EXE_NAME}.host
-KOKKOS_ARCH = "HSW"
+KOKKOS_ARCH = "SKY"
 endif
 
 CXXFLAGS = -O3 -g --std=c++11
 LINK = ${CXX}
 LINKFLAGS =
+
+CXXFLAGS += -march=skylake-avx512 -qopt-zmm-usage=high
 
 DEPFLAGS = -M
 
