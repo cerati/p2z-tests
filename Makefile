@@ -7,8 +7,8 @@ NVCC = nvcc
 CUDAFLAGS += -arch=sm_70 -O3 -DUSE_GPU#-rdc=true #-L${CUDALIBDIR} -lcudart 
 CUDALDFLAGS += -L${CUDALIBDIR} -lcudart
 
-#TYPE = icc
-TYPE = cuda
+TYPE = icc
+#TYPE = cuda
 #TYPE = pgi
 
 
@@ -39,9 +39,11 @@ propagate-toz-test-main.o : propagate-toz-test-main.cc propagateGPU.h
 else
 propagate : propagate-toz-test-main.o propagate-toz-test.o
 	$(COMP) $(FLAGS) $(CUDALDFLAGS) -o propagate propagate-toz-test.o propagate-toz-test-main.o
-propagate-toz-test.o : propagate-toz-test.C propagate-toz-test.h
+propagate-toz-test.o : propagate-toz-test.C propagateGPU.h
+#propagate-toz-test.o : propagate-toz-test.C propagate-toz-test.h
 	$(COMP) $(FLAGS) -o propagate-toz-test.o -c propagate-toz-test.C
-propagate-toz-test-main.o : propagate-toz-test-main.cc propagate-toz-test.h
+propagate-toz-test-main.o : propagate-toz-test-main.cc propagateGPU.h
+#propagate-toz-test-main.o : propagate-toz-test-main.cc propagate-toz-test.h
 	$(COMP) $(FLAGS) -o propagate-toz-test-main.o -c propagate-toz-test-main.cc
 endif
 clean:

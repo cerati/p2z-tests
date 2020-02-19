@@ -8,13 +8,14 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
-#if USE_GPU
 #include "propagateGPU.h"
+#if USE_GPU
+//#include "propagateGPU.h"
 #include <cuda_profiler_api.h>
 #include "cuda_runtime.h"
 //#include "propagateGPU.cu"
-#else
-#include "propagate-toz-test.h"
+//#else
+//#include "propagate-toz-test.h"
 #endif
 
 int main (int argc, char* argv[]) {

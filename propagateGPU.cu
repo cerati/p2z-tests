@@ -12,11 +12,11 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 //#include "propagateGPUStructs.cuh"
 //#include "propagate-toz-test.h"
 
-#define nevts 1000
-#define nb    600
-#define bsize 16
-#define ntrks nb*bsize
-#define smear 0.1
+//#define nevts 100
+//#define nb    600
+//#define bsize 16
+//#define ntrks nb*bsize
+//#define smear 0.1
 
 
 //#if USE_GPU
@@ -253,67 +253,74 @@ HOSTDEV float y(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits,
 HOSTDEV float z(const ALLHITS* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
 
-__global__ 
-void GPUprepareTracks(ATRK inputtrk, ALLTRKS* result,const float* trkrandos1,const float* trkrandos2, const float* randoq) {
-  
-  // store in element order for bunches of bsize matrices (a la matriplex) 
-  printf("par: %f,%f,%f,%f,%f,%f\n",inputtrk.par[0],inputtrk.par[1],inputtrk.par[2],inputtrk.par[3],inputtrk.par[4],inputtrk.par[5]);
- 
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      for (size_t it=0;it<bsize;++it) {
-	for (size_t ip=0;ip<6;++ip) {
-	 // (*result).btrks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*2)*inputtrk.par[ip];
-	  (*result).btrks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*trkrandos1[ie+ib*nevts+it*nb+ip*bsize])*inputtrk.par[ip];
-	  //(*result).btrks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
-	}
-	//cov
-	for (size_t ip=0;ip<36;++ip) {
-	  //(*result).btrks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*2)*inputtrk.cov[ip];
-	  (*result).btrks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*trkrandos2[ie+ib*nevts+it*nb+ip*bsize])*inputtrk.cov[ip];
-	  //(*result).btrks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
-	}
-	//q
-	(*result).btrks[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + randoq[0]);//fixme check
-      }
-    }
-  } 
-  // printf("results:");// %f\n",(*result).btrks[0].par.data[0]);
-  //outtrk = result;
-}
-
-__global__ 
-void GPUprepareHits(AHIT inputhit, ALLHITS *result,float* hitrandos1,float* hitrandos2) {
-  //ALLHITS* result = (ALLHITS*) malloc(sizeof(ALLHITS));  //fixme, align?
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      for (size_t it=0;it<bsize;++it) {
-  	//pos
-  	for (size_t ip=0;ip<3;++ip) {
-  	  //(*result).bhits[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*2)*inputhit.pos[ip];
-  	  (*result).bhits[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*hitrandos1[ie+ib*nevts+it*nb+ip*bsize])*inputhit.pos[ip];
-  	  //(*result).bhits[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
-  	}
-  	//cov
-  	for (size_t ip=0;ip<6;++ip) {
-  	  //(*result).bhits[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*2)*inputhit.cov[ip];
-  	  (*result).bhits[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*hitrandos2[ie+ib*nevts+it*nb+ip*bsize])*inputhit.cov[ip];
-  	  //(*result).bhits[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
-  	}
-      }
-    }
-  }
-  //outtrk = result;
-}
+//__global__ 
+//void GPUprepareTracks(ATRK inputtrk, ALLTRKS* result,const float* trkrandos1,const float* trkrandos2, const float* randoq) {
+//  
+//  // store in element order for bunches of bsize matrices (a la matriplex) 
+//  printf("par: %f,%f,%f,%f,%f,%f\n",inputtrk.par[0],inputtrk.par[1],inputtrk.par[2],inputtrk.par[3],inputtrk.par[4],inputtrk.par[5]);
+// 
+//  for (size_t ie=0;ie<nevts;++ie) {
+//    for (size_t ib=0;ib<nb;++ib) {
+//      for (size_t it=0;it<bsize;++it) {
+//	for (size_t ip=0;ip<6;++ip) {
+//	 // (*result).btrks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*2)*inputtrk.par[ip];
+//	  (*result).btrks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*trkrandos1[ie+ib*nevts+it*nb+ip*bsize])*inputtrk.par[ip];
+//	  //(*result).btrks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+//	}
+//	//cov
+//	for (size_t ip=0;ip<36;++ip) {
+//	  //(*result).btrks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*2)*inputtrk.cov[ip];
+//	  (*result).btrks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*trkrandos2[ie+ib*nevts+it*nb+ip*bsize])*inputtrk.cov[ip];
+//	  //(*result).btrks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+//	}
+//	//q
+//	(*result).btrks[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + randoq[0]);//fixme check
+//      }
+//    }
+//  } 
+//  // printf("results:");// %f\n",(*result).btrks[0].par.data[0]);
+//  //outtrk = result;
+//}
+//
+//__global__ 
+//void GPUprepareHits(AHIT inputhit, ALLHITS *result,float* hitrandos1,float* hitrandos2) {
+//  //ALLHITS* result = (ALLHITS*) malloc(sizeof(ALLHITS));  //fixme, align?
+//  // store in element order for bunches of bsize matrices (a la matriplex)
+//  for (size_t ie=0;ie<nevts;++ie) {
+//    for (size_t ib=0;ib<nb;++ib) {
+//      for (size_t it=0;it<bsize;++it) {
+//  	//pos
+//  	for (size_t ip=0;ip<3;++ip) {
+//  	  //(*result).bhits[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*2)*inputhit.pos[ip];
+//  	  (*result).bhits[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*hitrandos1[ie+ib*nevts+it*nb+ip*bsize])*inputhit.pos[ip];
+//  	  //(*result).bhits[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+//  	}
+//  	//cov
+//  	for (size_t ip=0;ip<6;++ip) {
+//  	  //(*result).bhits[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*2)*inputhit.cov[ip];
+//  	  (*result).bhits[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*hitrandos2[ie+ib*nevts+it*nb+ip*bsize])*inputhit.cov[ip];
+//  	  //(*result).bhits[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+//  	}
+//      }
+//    }
+//  }
+//  //outtrk = result;
+//}
 
 #define N bsize
-__device__ 
-void GPUMultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
+//__device__ 
+//void GPUMultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
+HOSTDEV void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-//#pragma omp simd
+#if USE_ACC
+#else
+#if USE_GPU
+#else
+#pragma omp simd
+#endif
+#endif
   //int n = threadIdx.x + blockIdx.x*blockDim.x;
   for (int n = 0; n < N; ++n)
 //while(n<N)
@@ -355,16 +362,23 @@ void GPUMultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
     c[33*N+n] = b[18*N+n];
     c[34*N+n] = b[19*N+n];
     c[35*N+n] = b[20*N+n];
- //  n += blockDim.x*gridDim.x;
   }
 }
 
-__device__ void GPUMultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
+//__device__ void GPUMultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
+HOSTDEV void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
 //#pragma omp simd
   //int n = threadIdx.x + blockIdx.x*blockDim.x;
+#if USE_ACC
+#else
+#if USE_GPU
+#else
+#pragma omp simd
+#endif
+#endif
   for (int n = 0; n < N; ++n)
 //while(n<N)
   {
@@ -393,13 +407,22 @@ __device__ void GPUMultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
   }
 }
 
-__device__ void GPUpropagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6x6SF* outErr, MP6F* outPar) {
+//__device__ void GPUpropagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6x6SF* outErr, MP6F* outPar) {
+HOSTDEV void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg,const MP3F* msP, MP6x6SF* outErr, MP6F* outPar) {
   //
   MP6x6F errorProp, temp;
   //int it =threadIdx.x;
-  int it =0;
+  //int it =0;
 //#pragma omp simd
-while(it<bsize){
+//while(it<bsize){
+#if USE_ACC
+#else 
+#if USE_GPU
+#else
+#pragma omp simd
+#endif
+#endif
+for(size_t it=0;it<bsize;++it){
     const float zout = z(msP,it);
     const float k = q(inChg,it)*100/3.8;
     const float deltaZ = zout - z(inPar,it);
@@ -435,11 +458,13 @@ while(it<bsize){
     errorProp.data[bsize*GPUPosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
     errorProp.data[bsize*GPUPosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
     errorProp.data[bsize*GPUPosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
-    it += 1;//blockDim.x;// blockDim.x*gridDim.x;
+ //   it += 1;//blockDim.x;// blockDim.x*gridDim.x;
   }
   
-  GPUMultHelixPropEndcap(&errorProp, inErr, &temp);
-  GPUMultHelixPropTranspEndcap(&errorProp, &temp, outErr);
+  MultHelixPropEndcap(&errorProp, inErr, &temp);
+  MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
+  //GPUMultHelixPropEndcap(&errorProp, inErr, &temp);
+  //GPUMultHelixPropTranspEndcap(&errorProp, &temp, outErr);
 }
 
 
@@ -455,7 +480,7 @@ __global__ void GPUsequence(ALLTRKS* trk, ALLHITS* hit, ALLTRKS* outtrk, const i
 			const MPHIT* bhits = bHit(hit,ie+stream*nevts/streams,ib);
 			MPTRK* obtracks = bTk(outtrk,ie+stream*nevts/streams,ib);
 			
-			GPUpropagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par);
+			propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par);
 		}
 	}
 }

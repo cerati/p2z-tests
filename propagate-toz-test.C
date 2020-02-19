@@ -1,8 +1,8 @@
 /*
 icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 */
-#include "propagate-toz-test.h"
-//#include "propagateGPU.cuh"
+//#include "propagate-toz-test.h"
+#include "propagateGPU.h"
 //#include <stdio.h>
 //#include <stdlib.h>
 //#include <math.h>
