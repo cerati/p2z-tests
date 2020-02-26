@@ -258,7 +258,7 @@ void convertOutput(CBTRK &cb_in, MPTRK* &mp_out) {
     // par length 6 vector batch
     for (size_t ip=0;ip<6;++ip) {
       for (size_t it=0;it<bsize;++it) 
-         mp_out[batch].par(ip,it) = cb_in.par(batch, ip, it);
+        mp_out[batch].par(ip,it) = cb_in.par(batch, ip, it);
     }
 
     // cov 6x6 matrix batch
@@ -271,6 +271,36 @@ void convertOutput(CBTRK &cb_in, MPTRK* &mp_out) {
       
   } // nb
   } // nevts
+
+  // q int batch
+  for (size_t it=0;it<bsize;++it) 
+    mp_out[0].q(it) = cb_in.q(0, it);
+
+  // par length 6 vector batch
+  for (size_t ip=0;ip<6;++ip) {
+    for (size_t it=0;it<bsize;++it) 
+      mp_out[0].par(ip,it) = cb_in.par(0, ip, it);
+  }
+
+  // cov 6x6 matrix batch
+  for (size_t i=0;i<6;++i) {
+    for (size_t j=0;j<6;++j) {
+      for (size_t it=0;it<bsize;++it) 
+        mp_out[0].cov(i,j,it) = cb_in.cov(0, i, j, it);
+    }
+  }
+
+
+  // for (size_t it=0;it<bsize;++it) {
+  //   float x_cb = cb_in.par(0, X_IND, it);
+  //   float y_cb = cb_in.par(0, Y_IND, it);
+  //   float z_cb = cb_in.par(0, Z_IND, it);
+  //   printf ("it, x_, y_, z_: %d %f %f %f\n",it,x_cb,y_cb,z_cb);
+  //   float x_mp = mp_out[0].par(X_IND,it);
+  //   float y_mp = mp_out[0].par(Y_IND,it);
+  //   float z_mp = mp_out[0].par(Z_IND,it);
+  //   printf ("it, x_, y_, z_: %d %f %f %f\n",it,x_mp,y_mp,z_mp);
+  // }
 
 }
 

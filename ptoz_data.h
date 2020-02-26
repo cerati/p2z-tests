@@ -72,10 +72,11 @@ struct MPHIT {
 #define THETA_IND 5
 
 
-
-typedef Kokkos::View<int**,     Kokkos::LayoutLeft,  Kokkos::CudaUVMSpace> ViewIntCB;    // collated batch of ints
-typedef Kokkos::View<float***,  Kokkos::LayoutLeft,  Kokkos::CudaUVMSpace> ViewVectorCB; // collated batch of vecs
-typedef Kokkos::View<float****, Kokkos::LayoutLeft,  Kokkos::CudaUVMSpace> ViewMatrixCB; // collated batch of mats
+typedef Kokkos::CudaUVMSpace MemSpace_CB;
+// typedef Kokkos::OpenMP MemSpace_CB;
+typedef Kokkos::View<int**,     Kokkos::LayoutLeft,  MemSpace_CB> ViewIntCB;    // collated batch of ints
+typedef Kokkos::View<float***,  Kokkos::LayoutLeft,  MemSpace_CB> ViewVectorCB; // collated batch of vecs
+typedef Kokkos::View<float****, Kokkos::LayoutLeft,  MemSpace_CB> ViewMatrixCB; // collated batch of mats
 
 struct CBTRK {
   ViewVectorCB  par;    // batch of len 6 vectors
