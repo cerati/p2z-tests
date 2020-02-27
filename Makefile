@@ -1,7 +1,7 @@
 ########################
 # Set the program name #
 ########################
-BENCHMARK = propagate
+#BENCHMARK = propagate
 
 ###############################################
 #    Set macros used for the input program    #
@@ -21,7 +21,7 @@ ifeq ($(SRCTYPE),cpp)
 ifeq ($(MODE),acc)
 CSRCS = propagate-toz-test_OpenACC_v5.cpp
 else
-CSRCS = propagate-toz-test_v2.cpp
+CSRCS = propagate-toz-test_v3.cpp
 endif
 else
 ifeq ($(MODE),acc)
@@ -140,7 +140,9 @@ endif
 ################################################
 # TARGET is where the output binary is stored. #
 ################################################
-TARGET = ./bin
+TARGET = ./bin/allTypes
+BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
+
 
 $(TARGET)/$(BENCHMARK): $(CSRCS)
 	if [ ! -d "./bin" ]; then mkdir bin; fi

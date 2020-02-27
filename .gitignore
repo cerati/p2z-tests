@@ -1,3 +1,6 @@
 *.o
 *.txt
 *.data
+bin/*
+backup/*
+propagate-toz-test.cpp
