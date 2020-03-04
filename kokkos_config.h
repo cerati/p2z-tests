@@ -56,9 +56,9 @@
 typedef Kokkos::Cuda     ExecSpace;
 
 // typedef Kokkos::HostSpace     MemSpace;
-typedef Kokkos::OpenMP        MemSpace;
+// typedef Kokkos::OpenMP        MemSpace;
 // typedef Kokkos::CudaSpace     MemSpace;
-// typedef Kokkos::CudaUVMSpace  MemSpace;
+typedef Kokkos::CudaUVMSpace  MemSpace;
 
 typedef Kokkos::LayoutLeft   Layout;
 // typedef Kokkos::LayoutRight  Layout; // faster for CPUs
