@@ -449,6 +449,7 @@ int main (int argc, char* argv[]) {
       
   MPTRK* trk = prepareTracks(inputtrk);
   MPHIT* hit = prepareHits(inputhit);
+ 
 
   printf("done preparing!\n");
   long start, end;
@@ -475,7 +476,7 @@ int main (int argc, char* argv[]) {
  
 
 
-  dim3 grid(5,1,1);
+  dim3 grid(10,1,1);
   dim3 block(32,32,1); 
   gettimeofday(&timecheck, NULL);
   start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
