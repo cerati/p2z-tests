@@ -141,7 +141,7 @@ endif
 # TARGET is where the output binary is stored. #
 ################################################
 TARGET = ./bin/allTypes
-BENCHMARK = "propagate_$(COMPILER)_$(MODE)_threadfix"
+BENCHMARK = "propagate_$(COMPILER)_$(MODE)_clockfix"
 
 
 $(TARGET)/$(BENCHMARK): $(CSRCS)
