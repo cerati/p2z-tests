@@ -10,9 +10,9 @@
 # SRCTYPE options: cpp, c ,cu                 #
 # MODE options: acc, omp, seq, cuda           #
 ###############################################
-COMPILER ?= nvcc
-SRCTYPE ?= cu
-MODE ?= cuda
+COMPILER ?= pgi
+SRCTYPE ?= cpp
+MODE ?= acc
 
 ######################################
 # Set the input source files (CSRCS) #
@@ -141,7 +141,7 @@ endif
 # TARGET is where the output binary is stored. #
 ################################################
 TARGET = ./bin/allTypes
-BENCHMARK = "propagate_$(COMPILER)_$(MODE)_clockfix"
+BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
 
 
 $(TARGET)/$(BENCHMARK): $(CSRCS)

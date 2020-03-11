@@ -120,9 +120,9 @@ float randn(float mu, float sigma) {
 }
 
 MPTRK* prepareTracks(ATRK inputtrk) {
-  //MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
   MPTRK* result;
   cudaMallocManaged((void**)&result,nevts*nb*sizeof(MPTRK)); //fixme, align?
+  cudaMemAdvise(result,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
@@ -139,9 +139,6 @@ MPTRK* prepareTracks(ATRK inputtrk) {
       }
     }
   }
-  //MPTRK* result_dev;
-  //cudaMalloc((void**)&result_dev,nevts*nb*sizeof(MPTRK));
-  //cudaMemcpy(result,result_dev,nevts*nb*sizeof(MPTRK),cudaMemcpyDeviceToHost);
   return result;
 }
 
@@ -149,6 +146,7 @@ MPHIT* prepareHits(AHIT inputhit) {
   //MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
   MPHIT* result;
   cudaMallocManaged((void**)&result,nevts*nb*sizeof(MPHIT));  //fixme, align?
+  cudaMemAdvise(result,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
@@ -406,7 +404,8 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
       MPTRK* obtracks = bTk(outtrk,ie+stream*nevts/num_streams,ib);
       __shared__ struct MP6x6F errorProp, temp;
 	
-      propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
+      propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
+                   &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
     }
   }
 }
@@ -444,8 +443,9 @@ int main (int argc, char* argv[]) {
  
 
   printf("done preparing!\n");
-  cudaEvent_t start, end;
+  cudaEvent_t start, end, copy;
   cudaEventCreate(&start);
+  cudaEventCreate(&copy);
   cudaEventCreate(&end);
   //long start, end;
   //long start2, end2;
@@ -453,65 +453,58 @@ int main (int argc, char* argv[]) {
 
   MPTRK* outtrk;
   cudaMallocManaged((void**)&outtrk,nevts*nb*sizeof(MPTRK));
-  //cudaMalloc((void**)&outtrk,nevts*nb*sizeof(MPTRK));
-  //int device = -1;
-  int device = 0;
-  int device2 = 1;
-  //cudaGetDevice(&device);
-  cudaStream_t streams[num_streams];
-  for (int s = 0; s<num_streams;s++){
-  cudaStreamCreateWithFlags(&streams[s],cudaStreamNonBlocking);
-  }
-
-
-  dim3 grid(10,1,1);
-  dim3 block(32,32,1); 
-   cudaProfilerStart();
-  //gettimeofday(&timecheck, NULL);
-  //start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-  for (int s = 0; s<num_streams;s++){
-  cudaMemPrefetchAsync(trk,nevts*nb*sizeof(MPTRK), device,streams[s]);
-  cudaMemPrefetchAsync(hit,nevts*nb*sizeof(MPHIT), device,streams[s]);
-  }
-  //cudaDeviceSynchronize();
-  //gettimeofday(&timecheck, NULL);
-  //end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-
-
   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
+  
 
+  dim3 grid(10,1,1);
+  dim3 block(32,32,1); 
+  int device = -1;
+  //int device = 0;
+  //int device2 = 1;
+  cudaGetDevice(&device);
+  cudaStream_t streams[num_streams];
+  for (int s = 0; s<num_streams;s++){
+    cudaStreamCreateWithFlags(&streams[s],cudaStreamNonBlocking);
+  }
 
   cudaEventRecord(start);	
-  //gettimeofday(&timecheck, NULL);
-  //start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+  for (int s = 0; s<num_streams;s++){
+    cudaMemPrefetchAsync(trk,nevts*nb*sizeof(MPTRK), device,streams[s]);
+    cudaMemPrefetchAsync(hit,nevts*nb*sizeof(MPHIT), device,streams[s]);
+  }
+  cudaMemAdvise(trk,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
+  cudaMemAdvise(hit,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
+  cudaMemAdvise(trk,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetReadMostly,device);
+  cudaMemAdvise(hit,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetReadMostly,device);
+
+
+  cudaEventRecord(copy);	
+  cudaEventSynchronize(copy);
   for(itr=0; itr<NITER; itr++){
     for (int s = 0; s<num_streams;s++){
-  	GPUsequence<<<grid,block,0,streams[s]>>>(trk,hit,outtrk,s);
+  	  GPUsequence<<<grid,block,0,streams[s]>>>(trk,hit,outtrk,s);
     }  
-	//cudaDeviceSynchronize(); // Normal sync
+	  //cudaDeviceSynchronize(); // Normal sync
 
   } //end itr loop
   cudaDeviceSynchronize(); // shaves a few seconds
   
-  //gettimeofday(&timecheck, NULL);
-  //end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
   cudaEventRecord(end);
   cudaEventSynchronize(end);
-  float elapsedtime = 0;
-  cudaEventElapsedTime(&elapsedtime,start,end);
-  cudaProfilerStop();
-    //cudaDeviceSynchronize(); // cheating. greatly increases performance with same results
-    for (int s = 0; s<num_streams;s++){
-      cudaMemPrefetchAsync(outtrk,nevts*nb*sizeof(MPTRK), cudaCpuDeviceId,streams[s]);
-      cudaStreamDestroy(streams[s]);
-    }
+  float elapsedtime,copytime,regiontime = 0;
+  cudaEventElapsedTime(&regiontime,start,end);
+  cudaEventElapsedTime(&elapsedtime,copy,end);
+  cudaEventElapsedTime(&copytime,start,copy);
+  for (int s = 0; s<num_streams;s++){
+    cudaMemPrefetchAsync(outtrk,nevts*nb*sizeof(MPTRK), cudaCpuDeviceId,streams[s]);
+    cudaStreamDestroy(streams[s]);
+  }
   
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks));
-   //printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-   //printf("data region time=%f (s)\n", ((end-start)+(end2-start2))*0.001);
-   //printf("memory transfer time=%f (s)\n", (end2-start2)*0.001);
+   printf("data region time=%f (s)\n", regiontime*0.001);
+   printf("memory transfer time=%f (s)\n", copytime*0.001);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;
