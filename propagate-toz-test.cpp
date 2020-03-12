@@ -1,22 +1,6 @@
 /*
 icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 */
-<<<<<<< HEAD:propagate-toz-test.C
-//#include "propagate-toz-test.h"
-#include "propagateGPU.h"
-//#include <stdio.h>
-//#include <stdlib.h>
-//#include <math.h>
-//#include <unistd.h>
-//#include <sys/time.h>
-//
-//#define nevts 1000
-//#define nb    600
-//#define bsize 16
-//#define ntrks nb*bsize
-//#define smear 0.1
-//
-=======
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +18,6 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NITER 100
 #endif
 
->>>>>>> 9adff9f1d876a27e1e421319e7e186fc07f49fee:propagate-toz-test.cpp
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
 }
@@ -48,68 +31,6 @@ size_t SymOffsets66(size_t i) {
   const size_t offs[36] = {0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
   return offs[i];
 }
-<<<<<<< HEAD:propagate-toz-test.C
-//
-//struct ATRK {
-//  float par[6];
-//  float cov[21];
-//  int q;
-//  int hitidx[22];
-//};
-//
-//struct AHIT {
-//  float pos[3];
-//  float cov[6];
-//};
-//
-//struct MP1I {
-//  int data[1*bsize];
-//};
-//
-//struct MP22I {
-//  int data[22*bsize];
-//};
-//
-//struct MP3F {
-//  float data[3*bsize];
-//};
-//
-//struct MP6F {
-//  float data[6*bsize];
-//};
-//
-//struct MP3x3SF {
-//  float data[6*bsize];
-//};
-//
-//struct MP6x6SF {
-//  float data[21*bsize];
-//};
-//
-//struct MP6x6F {
-//  float data[36*bsize];
-//};
-//
-//struct MPTRK {
-//  MP6F    par;
-//  MP6x6SF cov;
-//  MP1I    q;
-//  MP22I   hitidx;
-//};
-//
-//struct ALLTRKS {
-//  MPTRK  btrks[nevts*ntrks];
-//};
-//
-//struct MPHIT {
-//  MP3F    pos;
-//  MP3x3SF cov;
-//};
-//
-//struct ALLHITS {
-//  MPHIT bhits[nevts*ntrks];
-//};
-=======
 
 struct ATRK {
   float par[6];
@@ -162,7 +83,6 @@ struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
 };
->>>>>>> 9adff9f1d876a27e1e421319e7e186fc07f49fee:propagate-toz-test.cpp
 
 float randn(float mu, float sigma) {
   float U1, U2, W, mult;
@@ -324,10 +244,7 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#if USE_ACC
-#else
 #pragma omp simd
-#endif
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -373,10 +290,7 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#if USE_ACC
-#else
 #pragma omp simd
-#endif
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -408,10 +322,7 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 	                MP6x6SF* outErr, MP6F* outPar) {
   //
   MP6x6F errorProp, temp;
-#if USE_ACC
-#else
 #pragma omp simd
-#endif
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z(msP,it);
     const float k = q(inChg,it)*100/3.8;
@@ -454,148 +365,6 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
   MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
 }
 
-<<<<<<< HEAD:propagate-toz-test.C
-//int main (int argc, char* argv[]) {
-//
-//   ATRK inputtrk = {
-//     {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
-//     {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
-//      6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
-//      0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348},
-//     1,
-//     {1, 0, 17, 16, 36, 35, 33, 34, 59, 58, 70, 85, 101, 102, 116, 117, 132, 133, 152, 169, 187, 202}
-//   };
-//
-//   AHIT inputhit = {
-//     {-20.7824649810791, -12.24150276184082, 57.8067626953125},
-//     {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
-//   };
-//
-//   printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
-//   printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
-//	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
-//	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
-//   printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
-//   
-//   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
-//   
-//   ALLTRKS* trk = prepareTracks(inputtrk);
-//   ALLHITS* hit = prepareHits(inputhit);
-//
-//   printf("done preparing!\n");
-//   
-//   ALLTRKS* outtrk = (ALLTRKS*) malloc(sizeof(ALLTRKS));
-//
-//   // for (size_t ie=0;ie<nevts;++ie) {
-//   //   for (size_t it=0;it<ntrks;++it) {
-//   //     printf("ie=%lu it=%lu\n",ie,it);
-//   //     printf("hx=%f\n",x(&hit,ie,it));
-//   //     printf("hy=%f\n",y(&hit,ie,it));
-//   //     printf("hz=%f\n",z(&hit,ie,it));
-//   //     printf("tx=%f\n",x(&trk,ie,it));
-//   //     printf("ty=%f\n",y(&trk,ie,it));
-//   //     printf("tz=%f\n",z(&trk,ie,it));
-//   //   }
-//   // }
-//  
-//   long start, end;
-//   struct timeval timecheck;
-//
-//   gettimeofday(&timecheck, NULL);
-//   start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-//
-//#pragma omp parallel for
-//   for (size_t ie=0;ie<nevts;++ie) { // loop over events
-//#pragma omp parallel for
-//     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-//       //
-//       const MPTRK* btracks = bTk(trk, ie, ib);
-//       const MPHIT* bhits = bHit(hit, ie, ib);
-//       MPTRK* obtracks = bTk(outtrk, ie, ib);
-//       //
-//       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-//    }
-//  }
-//
-//   gettimeofday(&timecheck, NULL);
-//   end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-//
-//   // for (size_t ie=0;ie<nevts;++ie) {
-//   //   for (size_t it=0;it<ntrks;++it) {
-//   //     printf("ie=%lu it=%lu\n",ie,it);
-//   //     printf("tx=%f\n",x(&outtrk,ie,it));
-//   //     printf("ty=%f\n",y(&outtrk,ie,it));
-//   //     printf("tz=%f\n",z(&outtrk,ie,it));
-//   //   }
-//   // }
-//   
-//   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-//
-//   float avgx = 0, avgy = 0, avgz = 0;
-//   float avgdx = 0, avgdy = 0, avgdz = 0;
-//   for (size_t ie=0;ie<nevts;++ie) {
-//     for (size_t it=0;it<ntrks;++it) {
-//       float x_ = x(outtrk,ie,it);
-//       float y_ = y(outtrk,ie,it);
-//       float z_ = z(outtrk,ie,it);
-//       avgx += x_;
-//       avgy += y_;
-//       avgz += z_;
-//       float hx_ = x(hit,ie,it);
-//       float hy_ = y(hit,ie,it);
-//       float hz_ = z(hit,ie,it);
-//       avgdx += (x_-hx_)/x_;
-//       avgdy += (y_-hy_)/y_;
-//       avgdz += (z_-hz_)/z_;
-//     }
-//   }
-//   avgx = avgx/float(nevts*ntrks);
-//   avgy = avgy/float(nevts*ntrks);
-//   avgz = avgz/float(nevts*ntrks);
-//   avgdx = avgdx/float(nevts*ntrks);
-//   avgdy = avgdy/float(nevts*ntrks);
-//   avgdz = avgdz/float(nevts*ntrks);
-//
-//   float stdx = 0, stdy = 0, stdz = 0;
-//   float stddx = 0, stddy = 0, stddz = 0;
-//   for (size_t ie=0;ie<nevts;++ie) {
-//     for (size_t it=0;it<ntrks;++it) {
-//       float x_ = x(outtrk,ie,it);
-//       float y_ = y(outtrk,ie,it);
-//       float z_ = z(outtrk,ie,it);
-//       stdx += (x_-avgx)*(x_-avgx);
-//       stdy += (y_-avgy)*(y_-avgy);
-//       stdz += (z_-avgz)*(z_-avgz);
-//       float hx_ = x(hit,ie,it);
-//       float hy_ = y(hit,ie,it);
-//       float hz_ = z(hit,ie,it);
-//       stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
-//       stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
-//       stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
-//     }
-//   }
-//
-//   stdx = sqrtf(stdx/float(nevts*ntrks));
-//   stdy = sqrtf(stdy/float(nevts*ntrks));
-//   stdz = sqrtf(stdz/float(nevts*ntrks));
-//   stddx = sqrtf(stddx/float(nevts*ntrks));
-//   stddy = sqrtf(stddy/float(nevts*ntrks));
-//   stddz = sqrtf(stddz/float(nevts*ntrks));
-//
-//   printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
-//   printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
-//   printf("track z avg=%f std/avg=%f\n", avgz, fabs(stdz/avgz));
-//   printf("track dx/x avg=%f std=%f\n", avgdx, stddx);
-//   printf("track dy/y avg=%f std=%f\n", avgdy, stddy);
-//   printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
-//
-//   free(trk);
-//   free(hit);
-//   free(outtrk);
-//
-//   return 0;
-//}
-=======
 int main (int argc, char* argv[]) {
 
    int itr;
@@ -737,4 +506,3 @@ int main (int argc, char* argv[]) {
 
    return 0;
 }
->>>>>>> 9adff9f1d876a27e1e421319e7e186fc07f49fee:propagate-toz-test.cpp
