@@ -60,8 +60,8 @@ typedef Kokkos::Cuda     ExecSpace;
 // typedef Kokkos::CudaSpace     MemSpace;
 typedef Kokkos::CudaUVMSpace  MemSpace;
 
-typedef Kokkos::LayoutLeft   Layout;
-// typedef Kokkos::LayoutRight  Layout; // faster for CPUs
+// typedef Kokkos::LayoutLeft   Layout;
+typedef Kokkos::LayoutRight  Layout; // faster for CPUs
 
 typedef Kokkos::RangePolicy<ExecSpace>  range_policy;
 

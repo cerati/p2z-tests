@@ -35,12 +35,12 @@
 // TODO also to kokkos views eventually
 
 // Allocate y, x vectors and Matrix A on device.
-typedef Kokkos::View<float*, Kokkos::LayoutRight, Kokkos::HostSpace>   ViewVector; 
-typedef Kokkos::View<float**, Kokkos::LayoutRight, Kokkos::HostSpace>  ViewMatrix;
+typedef Kokkos::View<float*, Layout, Kokkos::HostSpace>   ViewVector; 
+typedef Kokkos::View<float**, Layout, Kokkos::HostSpace>  ViewMatrix;
 
-typedef Kokkos::View<int*, Kokkos::LayoutRight,  Kokkos::HostSpace> ViewVectorINT;
-typedef Kokkos::View<float**, Kokkos::LayoutRight,  Kokkos::HostSpace> ViewVectorMP;
-typedef Kokkos::View<float***, Kokkos::LayoutRight,  Kokkos::HostSpace> ViewMatrixMP;
+typedef Kokkos::View<int*, Layout,  Kokkos::HostSpace> ViewVectorINT;
+typedef Kokkos::View<float**, Layout,  Kokkos::HostSpace> ViewVectorMP;
+typedef Kokkos::View<float***, Layout,  Kokkos::HostSpace> ViewMatrixMP;
 
 
 struct MP1I {
@@ -74,9 +74,9 @@ struct MPHIT {
 
 typedef Kokkos::CudaUVMSpace MemSpace_CB;
 // typedef Kokkos::OpenMP MemSpace_CB;
-typedef Kokkos::View<int**,     Kokkos::LayoutRight,  MemSpace_CB> ViewIntCB;    // collated batch of ints
-typedef Kokkos::View<float***,  Kokkos::LayoutRight,  MemSpace_CB> ViewVectorCB; // collated batch of vecs
-typedef Kokkos::View<float****, Kokkos::LayoutRight,  MemSpace_CB> ViewMatrixCB; // collated batch of mats
+typedef Kokkos::View<int**,     Layout,  MemSpace_CB> ViewIntCB;    // collated batch of ints
+typedef Kokkos::View<float***,  Layout,  MemSpace_CB> ViewVectorCB; // collated batch of vecs
+typedef Kokkos::View<float****, Layout,  MemSpace_CB> ViewMatrixCB; // collated batch of mats
 
 struct CBTRK {
   ViewVectorCB  par;    // batch of len 6 vectors
