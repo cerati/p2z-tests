@@ -70,7 +70,7 @@ ifeq ($(COMPILER),gcc)
 ifeq ($(SRCTYPE),cpp)
 CXX=g++
 ifeq ($(MODE),omp)
-CFLAGS1 = -O3 -I. -fopenmp
+CFLAGS1 = -O3 -I. -fopenmp 
 CLIBS1 = -lm -lgomp
 else
 CFLAGS1 = -O3 -I. 
@@ -107,7 +107,7 @@ ifeq ($(COMPILER),intel)
 # Intel Setting #
 #################
 CXX=icc
-CFLAGS1= -Wall -I. -O3 -fopenmp -fopenmp-simd 
+CFLAGS1= -Wall -I. -O3 -fopenmp -fopenmp-simd
 #CFLAGS1= -Wall -I. -O3 -xMIC-AVX512 -qopenmp -qopenmp-offload=host -fimf-precision=low:sqrt,exp,log,/
 endif
 
