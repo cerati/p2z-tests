@@ -1,0 +1,12 @@
+track in pos: -12.806847, -7.723825, 38.130142 
+track in cov: 6.29e-07, 7.53e-07, 9.63e-08 
+hit in pos: -20.782465 -12.241503 57.806763 
+produce nevts=1000 ntrks=9600 smearing by=0.100000 
+done preparing!
+done ntracks=9600000 tot time=2.376000 (s) time/trk=2.475000e-07 (s)
+track x avg=-18.915174 std/avg=0.148105
+track y avg=-11.287603 std/avg=0.204687
+track z avg=57.814972 std/avg=0.099920
+track dx/x avg=-0.123536 std=0.205991
+track dy/y avg=-0.131730 std=0.317061
+track dz/z avg=0.000000 std=0.000000
