@@ -10,9 +10,12 @@
 # SRCTYPE options: cpp, c ,cu                 #
 # MODE options: acc, omp, seq, cuda           #
 ###############################################
-COMPILER ?= pgi
-SRCTYPE ?= cpp
-MODE ?= acc
+COMPILER ?= nvcc
+SRCTYPE ?= cu
+MODE ?= cuda
+#COMPILER ?= gcc
+#SRCTYPE ?= cpp
+#MODE ?= omp
 
 ######################################
 # Set the input source files (CSRCS) #
@@ -27,7 +30,7 @@ else
 ifeq ($(MODE),acc)
 CSRCS = propagate-toz-test_OpenACC_v5.c
 else ifeq ($(MODE),cuda)
-CSRCS = propagate-toz-test_CUDA.cu
+CSRCS = propagate-toz-test_CUDA_v2.cu
 else
 CSRCS = propagate-toz-test_v2.c
 endif
@@ -70,7 +73,7 @@ ifeq ($(COMPILER),gcc)
 ifeq ($(SRCTYPE),cpp)
 CXX=g++
 ifeq ($(MODE),omp)
-CFLAGS1 = -O3 -I. -fopenmp 
+CFLAGS1 = -O3 -I. -fopenmp -ftree-vectorize -march=native
 CLIBS1 = -lm -lgomp
 else
 CFLAGS1 = -O3 -I. 
@@ -107,7 +110,7 @@ ifeq ($(COMPILER),intel)
 # Intel Setting #
 #################
 CXX=icc
-CFLAGS1= -Wall -I. -O3 -fopenmp -fopenmp-simd
+CFLAGS1= -Wall -I. -O3 -fopenmp -fopenmp-simd -xCORE-AVX512 -qopt-zmm-usage=high -xhost 
 #CFLAGS1= -Wall -I. -O3 -xMIC-AVX512 -qopenmp -qopenmp-offload=host -fimf-precision=low:sqrt,exp,log,/
 endif
 
@@ -141,7 +144,7 @@ endif
 # TARGET is where the output binary is stored. #
 ################################################
 TARGET = ./bin/allTypes
-BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
+BENCHMARK = "propagate_$(COMPILER)_$(MODE)_v2"
 
 
 $(TARGET)/$(BENCHMARK): $(CSRCS)

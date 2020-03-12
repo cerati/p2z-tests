@@ -387,9 +387,15 @@ int main (int argc, char* argv[]) {
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
+   long start, end, start_setup, end_setup;
+   struct timeval timecheck;
    
+   gettimeofday(&timecheck, NULL);
+   start_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    MPTRK* trk = prepareTracks(inputtrk);
    MPHIT* hit = prepareHits(inputhit);
+   gettimeofday(&timecheck, NULL);
+   end_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
@@ -407,8 +413,6 @@ int main (int argc, char* argv[]) {
    //   }
    // }
   
-   long start, end;
-   struct timeval timecheck;
 
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -439,6 +443,7 @@ int main (int argc, char* argv[]) {
    // }
    
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
+   printf("formatted %i %f %e %f 0 %f 0 (s)\n",nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks), (end-start)*0.001, (end_setup-start_setup)*0.001);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;
