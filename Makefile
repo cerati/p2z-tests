@@ -19,17 +19,17 @@ MODE ?= cuda
 ######################################
 ifeq ($(SRCTYPE),cpp)
 ifeq ($(MODE),acc)
-CSRCS = propagate-toz-test_OpenACC_v5.cpp
+CSRCS = propagate-toz-test_OpenACC.cpp
 else
-CSRCS = propagate-toz-test_v3.cpp
+CSRCS = propagate-toz-test.cpp
 endif
 else
 ifeq ($(MODE),acc)
-CSRCS = propagate-toz-test_OpenACC_v5.c
+CSRCS = propagate-toz-test_OpenACC.c
 else ifeq ($(MODE),cuda)
 CSRCS = propagate-toz-test_CUDA.cu
 else
-CSRCS = propagate-toz-test_v2.c
+CSRCS = propagate-toz-test.c
 endif
 endif
 
