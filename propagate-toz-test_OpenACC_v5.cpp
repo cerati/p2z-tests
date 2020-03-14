@@ -394,8 +394,16 @@ int main (int argc, char* argv[]) {
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
    
+   long start, end, setup_start, setup_end;
+   long start2, end2;
+   struct timeval timecheck;
+
+   gettimeofday(&timecheck, NULL);
+   setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    MPTRK* trk = prepareTracks(inputtrk);
    MPHIT* hit = prepareHits(inputhit);
+   gettimeofday(&timecheck, NULL);
+   setup_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
@@ -413,9 +421,6 @@ int main (int argc, char* argv[]) {
    //   }
    // }
   
-   long start, end;
-   long start2, end2;
-   struct timeval timecheck;
 
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
@@ -462,6 +467,8 @@ int main (int argc, char* argv[]) {
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
    printf("data region time=%f (s)\n", (end2-start2)*0.001);
    printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
+   printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
+   printf("formatted %i %f %e %f %f %f 0 (s)\n",nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks), (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;

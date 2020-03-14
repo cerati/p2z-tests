@@ -1,18 +1,18 @@
 ########################
 # Set the program name #
 ########################
-BENCHMARK = propagate
+#BENCHMARK = propagate
 
-#########################################
-# Set macros used for the input program #
-#########################################
-# COMPILER options: pgi, gcc, openarc   #
-# SRCTYPE options: cpp, c               #
-# MODE options: acc, omp, seq           #
-#########################################
-COMPILER ?= pgi
-SRCTYPE ?= cpp
-MODE ?= acc
+###############################################
+#    Set macros used for the input program    #
+###############################################
+# COMPILER options: pgi, gcc, openarc, nvcc   #
+# SRCTYPE options: cpp, c ,cu                 #
+# MODE options: acc, omp, seq, cuda           #
+###############################################
+COMPILER ?= nvcc
+SRCTYPE ?= cu
+MODE ?= cuda
 
 ######################################
 # Set the input source files (CSRCS) #
@@ -26,6 +26,8 @@ endif
 else
 ifeq ($(MODE),acc)
 CSRCS = propagate-toz-test_OpenACC.c
+else ifeq ($(MODE),cuda)
+CSRCS = propagate-toz-test_CUDA.cu
 else
 CSRCS = propagate-toz-test.c
 endif
@@ -126,10 +128,21 @@ CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=x86_64 -lm
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -lm
 endif
 
+ifeq ($(COMPILER),nvcc)
+################
+# NVCC Setting #
+################
+CXX=nvcc
+CFLAGS1= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread 
+CLIBS1= -L${CUDALIBDIR} -lcudart 
+endif
+
 ################################################
 # TARGET is where the output binary is stored. #
 ################################################
 TARGET = ./bin
+BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
+
 
 $(TARGET)/$(BENCHMARK): $(CSRCS)
 	if [ ! -d "./bin" ]; then mkdir bin; fi
