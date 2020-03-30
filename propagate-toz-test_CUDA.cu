@@ -389,8 +389,9 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
     errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
-  //__syncthreads(); 
+  __syncthreads(); 
   MultHelixPropEndcap(errorProp, inErr, temp);
+  __syncthreads(); 
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }
 
@@ -497,7 +498,7 @@ int main (int argc, char* argv[]) {
 	  //cudaDeviceSynchronize(); // Normal sync
 
   } //end itr loop
-  //cudaDeviceSynchronize(); // shaves a few seconds
+  cudaDeviceSynchronize(); // shaves a few seconds
   
   cudaEventRecord(copyback);
   cudaEventSynchronize(copyback);
