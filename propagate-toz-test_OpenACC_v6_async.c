@@ -25,6 +25,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NITER 100
 #endif
 
+#define num_streams 10
+
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
 }
@@ -444,20 +446,23 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-#pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk)
-   for (size_t ie=0;ie<nevts;++ie) { // loop over events
+   for(int s=0; s<num_streams; s++) {
+#pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk) async(s)
+   for (size_t ie=0;ie<nevts/num_streams;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
-       const struct MPTRK* btracks = bTkC(trk, ie, ib);
-       const struct MPHIT* bhits = bHit(hit, ie, ib);
-       struct MPTRK* obtracks = bTk(outtrk, ie, ib);
+       const struct MPTRK* btracks = bTkC(trk, ie+s*nevts/num_streams, ib);
+       const struct MPHIT* bhits = bHit(hit, ie+s*nevts/num_streams, ib);
+       struct MPTRK* obtracks = bTk(outtrk, ie+s*nevts/num_streams, ib);
 	   struct MP6x6F errorPro, temp;
        //
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
        &errorPro, &temp); // vectorized function
     }
    }
+   }
    } //end of itr loop
+#pragma acc wait
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 }

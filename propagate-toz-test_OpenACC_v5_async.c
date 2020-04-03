@@ -25,6 +25,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NITER 100
 #endif
 
+#define num_streams 10
+
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
 }
@@ -408,15 +410,12 @@ int main (int argc, char* argv[]) {
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    struct MPTRK* trk = prepareTracks(inputtrk);
    struct MPHIT* hit = prepareHits(inputhit);
-   struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
-
-#pragma acc enter data create(trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
-
    gettimeofday(&timecheck, NULL);
    setup_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
+   struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
 
    // for (size_t ie=0;ie<nevts;++ie) {
    //   for (size_t it=0;it<ntrks;++it) {
@@ -438,31 +437,31 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-#pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb])
-
+#pragma acc data copyin(trk[0:nevts*nb], hit[0:nevts*nb]) copyout(outtrk[0:nevts*nb])
 {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-#pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk)
-   for (size_t ie=0;ie<nevts;++ie) { // loop over events
+   for(int s=0; s<num_streams; s++) {
+#pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk) async(s)
+   for (size_t ie=0;ie<nevts/num_streams;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
-       const struct MPTRK* btracks = bTkC(trk, ie, ib);
-       const struct MPHIT* bhits = bHit(hit, ie, ib);
-       struct MPTRK* obtracks = bTk(outtrk, ie, ib);
+       const struct MPTRK* btracks = bTkC(trk, ie+s*nevts/num_streams, ib);
+       const struct MPHIT* bhits = bHit(hit, ie+s*nevts/num_streams, ib);
+       struct MPTRK* obtracks = bTk(outtrk, ie+s*nevts/num_streams, ib);
 	   struct MP6x6F errorPro, temp;
        //
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
        &errorPro, &temp); // vectorized function
     }
    }
+   }
    } //end of itr loop
+#pragma acc wait 
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 }
-
-#pragma acc update host(outtrk[0:nevts*nb])
 
    gettimeofday(&timecheck, NULL);
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -543,7 +542,6 @@ int main (int argc, char* argv[]) {
    free(trk);
    free(hit);
    free(outtrk);
-#pragma acc exit data delete(trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
 
    return 0;
 }
