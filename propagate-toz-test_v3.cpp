@@ -394,12 +394,12 @@ int main (int argc, char* argv[]) {
    start_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    MPTRK* trk = prepareTracks(inputtrk);
    MPHIT* hit = prepareHits(inputhit);
+   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
    gettimeofday(&timecheck, NULL);
    end_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
-   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
 
    // for (size_t ie=0;ie<nevts;++ie) {
    //   for (size_t it=0;it<ntrks;++it) {
@@ -418,7 +418,7 @@ int main (int argc, char* argv[]) {
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
 #pragma omp parallel for
-   for (size_t ie=0;ie<nevts;++ie) { // loop over events
+    for (size_t ie=0;ie<nevts;++ie) { // loop over events
 #pragma omp simd
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
@@ -427,9 +427,9 @@ int main (int argc, char* argv[]) {
        MPTRK* obtracks = bTk(outtrk, ie, ib);
        //
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+     }
     }
-  }
-  } //end of itr loop
+   } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 

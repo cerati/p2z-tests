@@ -10,9 +10,9 @@
 # SRCTYPE options: cpp, c ,cu                 #
 # MODE options: acc, omp, seq, cuda           #
 ###############################################
-COMPILER ?= nvcc
-SRCTYPE ?= cu
-MODE ?= cuda
+COMPILER ?= eigen
+SRCTYPE ?= cpp
+MODE ?= eigen
 
 ######################################
 # Set the input source files (CSRCS) #
@@ -117,6 +117,19 @@ ifeq ($(COMPILER),ibm)
 ###############
 CXX=xlc
 CFLAGS1= -I. -Wall -v -O3 -qsmp=noauto:omp -qnooffload #host power9
+endif
+
+ifeq ($(COMPILER),eigen)
+###############
+# Eigen Setting #
+###############
+CSRCS = propagate-toz-test_Eigen_v2.cu
+CXX=nvcc
+CFLAGS1= -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
+CLIBS1= -L${CUDALIBDIR} -lcudart 
+#CSRCS = propagate-toz-test_Eigen_v2.cpp
+#CXX=icc
+#CFLAGS1= -fopenmp -O3 -fopenmp-simd -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -mtune=native -march=native
 endif
 
 ifeq ($(COMPILER),llvm)
