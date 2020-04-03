@@ -447,7 +447,7 @@ int main (int argc, char* argv[]) {
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
    for(int s=0; s<num_streams; s++) {
-#pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk)
+#pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk) async(s)
    for (size_t ie=0;ie<nevts/num_streams;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
@@ -462,6 +462,7 @@ int main (int argc, char* argv[]) {
    }
    }
    } //end of itr loop
+#pragma acc wait
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 }
