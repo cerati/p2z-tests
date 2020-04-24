@@ -93,8 +93,6 @@ ifeq ($(COMPILER),openarc)
 # OpenARC Setting #
 ###################
 CXX=g++
-# OpenARC in the public repository has bugs in handling async versions.
-# Therefore, do not use propagate-*_OpenACC*_async.c files as input.
 CSRCS = ./cetus_output/propagate-toz-test_OpenACC.cpp
 # On Linux with CUDA GPU
 CFLAGS1 = -O3 -I. -I${openarc}/openarcrt 
