@@ -8,10 +8,11 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <vector>
 
 #define nevts 100
-#define nb    600
-#define bsize 16
+#define nb    9600
+#define bsize 1
 #define ntrks nb*bsize
 #define smear 0.1
 #include <Eigen/Dense>
@@ -21,15 +22,15 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NITER 100
 #endif
 
-#define num_streams 1 
+#define num_streams 10
 
 #define HOSTDEV __host__ __device__
 
 using namespace Eigen;
-
-typedef Matrix<size_t, Dynamic, Dynamic> MatrixXt;
-typedef Matrix<size_t, Dynamic, 1> VectorXt;
-typedef Matrix<float, Dynamic, 1> VectorXf;
+//using Eigen::VectorXt;
+//typedef Matrix<size_t, Dynamic, Dynamic> MatrixXt;
+//typedef Matrix<size_t, Dynamic, 1> VectorXt;
+//typedef Matrix<float, Dynamic, 1> VectorXf;
 
 
 HOSTDEV size_t PosInMtrx(size_t i, size_t j, size_t D) {
@@ -37,7 +38,7 @@ HOSTDEV size_t PosInMtrx(size_t i, size_t j, size_t D) {
 }
 
 HOSTDEV size_t SymOffsets33(size_t i) {
-  VectorXt offs(9);
+  VectorXd offs(9);
   offs << 0, 1, 3, 1, 2, 4, 3, 4, 5;
   return offs(i);
 }
@@ -51,18 +52,28 @@ HOSTDEV size_t SymOffsets66(size_t i) {
 struct ATRK {
   //float par[6];
   //float cov[21];
-  Matrix<float,6,1> par;                                                                                               Matrix<float,21,1> cov;
-  int q;                                                                                                               //int hitidx[22];
-  Matrix<float,22,1> hitidx;                                                                                         };
+  Matrix<float,6,1> par;
+  Matrix<float,21,1> cov;
+  int q;
+  //int hitidx[22];
+  Matrix<float,22,1> hitidx;
+};
 
 struct AHIT {
-  Matrix<float,3,1> pos;                                                                                               Matrix<float,6,1> cov;                                                                                             };                                                                                                                                                                                                                                        struct MP1I {
+  Matrix<float,3,1> pos;
+  Matrix<float,6,1> cov;
+};
+
+struct MP1I {
   Matrix<int,1*bsize,1> data;
   //VectorXi data(1*bsize);
-};                                                                                                                                                                                                                                        struct MP22I {
+};
+struct MP22I {
   Matrix<int,22*bsize,1> data;
   //VectorXi data(22*bsize);
-};                                                                                                                                                                                                                                        struct MP3F {
+};
+
+struct MP3F {
   Matrix<float,3*bsize,1> data;
   //VectorXf data(3*bsize);
 };
@@ -188,9 +199,10 @@ float randn(float mu, float sigma) {
 }
 
 MPTRK* prepareTracks(ATRK inputtrk) {
-  MPTRK* result;
-  cudaMallocManaged((void**)&result,nevts*nb*sizeof(MPTRK)); //fixme, align?
-  cudaMemAdvise(result,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
+  MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  //MPTRK* result;
+  //cudaMallocManaged((void**)&result,nevts*nb*sizeof(MPTRK)); //fixme, align?
+  //cudaMemAdvise(result,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
@@ -211,10 +223,10 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  //MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
-  MPHIT* result;
-  cudaMallocManaged((void**)&result,nevts*nb*sizeof(MPHIT));  //fixme, align?
-  cudaMemAdvise(result,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
+  MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
+  //MPHIT* result;
+  //cudaMallocManaged((void**)&result,nevts*nb*sizeof(MPHIT));  //fixme, align?
+  //cudaMemAdvise(result,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
@@ -229,9 +241,6 @@ MPHIT* prepareHits(AHIT inputhit) {
       }
     }
   }
-  //MPHIT* result_dev;
-  //cudaMalloc((void**)&result_dev,nevts*nb*sizeof(MPHIT));
-  //cudaMemcpy(result,result_dev,nevts*nb*sizeof(MPHIT),cudaMemcpyDeviceToHost);
   return result;
 }
 
@@ -342,7 +351,9 @@ __forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6
   const Matrix<float,6*bsize,6*bsize> a = A->data; //ASSUME_ALIGNED(a, 64);
   const Matrix<float,6*bsize,6*bsize> b = B->data; //ASSUME_ALIGNED(b, 64);
   Matrix<float,6*bsize,6*bsize> c = C->data;       //ASSUME_ALIGNED(c, 64);
+  //printf("a test %f\n", A->data(1,1));
   c = a*b;
+ // printf("c test %f\n", c(0));
 //  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
 //  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
 //  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
@@ -429,10 +440,11 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
 			  const MP1I* inChg,const MP3F* msP, 
 			  MP6x6SF* outErr, MP6F* outPar
 			){//struct MP6x6F* errorProp, struct MP6x6F* temp) {
-  printf("testx\n");
+//  printf("testx\n");
   MP6x6F errorProp, temp;
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     const float zout = z(msP,it);
+//  printf("testx %f\n",zout);
     const float k = q(inChg,it)*100/3.8;
     const float deltaZ = zout - z(inPar,it);
     const float pt = 1./ipt(inPar,it);
@@ -468,23 +480,25 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     errorProp.data(bsize*PosInMtrx(4,3,6) + it) = sinT*deltaZ/(cosT*k);
     errorProp.data(bsize*PosInMtrx(4,5,6) + it) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
-  //__syncthreads(); 
+  __syncthreads();
   MultHelixPropEndcap(&errorProp, inErr, &temp);
+  __syncthreads();
   MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
 }
 
 
 
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
-  printf("test 1\n");
+  //printf("test 1\n");
   for (size_t ie = blockIdx.x; ie<nevts/num_streams; ie+=gridDim.x){
-  printf("test 2\n");
+  //printf("test 2\n");
     for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
-  printf("test 3\n");
       const MPTRK* btracks = bTk(trk,ie+stream*nevts/num_streams,ib);
       const MPHIT* bhits = bHit(hit,ie+stream*nevts/num_streams,ib);
+      //printf("show: %f\n", (bhits->pos).data(0));
       MPTRK* obtracks = bTk(outtrk,ie+stream*nevts/num_streams,ib);
-      ///*__shared__*/ struct MP6x6F errorProp, temp;
+   //   ///*__shared__*/ struct MP6x6F errorProp, temp;
+ // printf("test 3\n");
 	
       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
                    &(*obtracks).cov, &(*obtracks).par);
@@ -492,6 +506,73 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
     }
   }
 }
+
+
+void transfer(MPTRK* trk, MPHIT* hit, MPTRK* trk_dev, MPHIT* hit_dev){
+
+  cudaMemcpy(trk_dev, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->par, &trk->par, sizeof(MP6F), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->par).data), &((trk->par).data), sizeof(Matrix<float,6*bsize,1>), cudaMemcpyHostToDevice);
+  //cudaMemcpy(&((trk_dev->par).data), &((trk->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->cov, &trk->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->cov).data), &((trk->cov).data), sizeof(Matrix<float,6*bsize,6*bsize>), cudaMemcpyHostToDevice);
+  //cudaMemcpy(&((trk_dev->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->q, &trk->q, sizeof(MP1I), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->q).data), &((trk->q).data), sizeof(Matrix<int,1*bsize,1>), cudaMemcpyHostToDevice);
+  //cudaMemcpy(&((trk_dev->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->hitidx).data), &((trk->hitidx).data), sizeof(Matrix<int,22*bsize,1>), cudaMemcpyHostToDevice);
+  //cudaMemcpy(&((trk_dev->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice);
+
+  cudaMemcpy(hit_dev,hit,nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
+  cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
+  cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,sizeof(Matrix<float,3*bsize,1>), cudaMemcpyHostToDevice);
+  //cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice);
+  cudaMemcpy(&(hit_dev->cov).data,&(hit->cov).data,sizeof(Matrix<float,3*bsize,3*bsize>), cudaMemcpyHostToDevice);
+  //cudaMemcpy(&(hit_dev->cov).data,&(hit->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice);
+}
+void transfer_back(MPTRK* trk, MPTRK* trk_host){
+  cudaMemcpy(trk_host, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&trk_host->par, &trk->par, sizeof(MP6F), cudaMemcpyDeviceToHost);
+  //cudaMemcpy(&((trk_host->par).data), &((trk->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&((trk_host->par).data), &((trk->par).data), sizeof(Matrix<float,6*bsize,1>), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&trk_host->cov, &trk->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost);
+  //cudaMemcpy(&((trk_host->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&((trk_host->cov).data), &((trk->cov).data), sizeof(Matrix<float,6*bsize,6*bsize>), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&trk_host->q, &trk->q, sizeof(MP1I), cudaMemcpyDeviceToHost);
+  //cudaMemcpy(&((trk_host->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&((trk_host->q).data), &((trk->q).data), sizeof(Matrix<int,1*bsize,1>), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&trk_host->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyDeviceToHost);
+  //cudaMemcpy(&((trk_host->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&((trk_host->hitidx).data), &((trk->hitidx).data), sizeof(Matrix<int,22*bsize,1>), cudaMemcpyDeviceToHost);
+}
+
+/////////////////////test functions/////////////////////////////////
+__global__ void printtest(Matrix3d *a, Matrix3d *b, Matrix3d *c){
+        int n =1;
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if(idx < n)
+        {
+            c[idx] = a[idx] * b[idx];
+            printf("printtest \n");
+            printf("printtest %f\n",c[idx](0));
+        }
+        return;
+}
+    __global__ void cu_dot(Vector3d *v1, Vector3d *v2, double *out)
+    {
+        int n = 1;
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if(idx < n)
+        {
+            out[idx] = v1[idx].dot(v2[idx]);
+            printf("dottest \n");
+            printf("dottest %f\n",out[idx]);
+        }
+        return;
+    }
+//////////////////////////////////////////////////////////////////
 
 
 
@@ -532,8 +613,14 @@ int main (int argc, char* argv[]) {
   start_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
   MPTRK* trk = prepareTracks(inputtrk);
   MPHIT* hit = prepareHits(inputhit);
-  MPTRK* outtrk;
-  cudaMallocManaged((void**)&outtrk,nevts*nb*sizeof(MPTRK));
+  MPTRK* trk_dev;
+  MPHIT* hit_dev;
+  MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  MPTRK* outtrk_dev;
+  cudaMalloc((MPTRK**)&trk_dev,nevts*nb*sizeof(MPTRK));  
+  cudaMalloc((MPTRK**)&hit_dev,nevts*nb*sizeof(MPHIT));
+  cudaMalloc((MPTRK**)&outtrk_dev,nevts*nb*sizeof(MPTRK));  
+  //cudaMallocManaged((void**)&outtrk,nevts*nb*sizeof(MPTRK));
   dim3 grid(10,1,1);
   dim3 block(32,32,1); 
   int device = -1;
@@ -554,38 +641,73 @@ int main (int argc, char* argv[]) {
   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
-  
 
+///////////////////////////////////////TEST Functions///////////////////////////////////////////// 
+//std::vector<Matrix3d> m1(10, Matrix3d{{ 1.0, 1.0, 1.0},{1.0,1.0,1.0},{1.0,1.0,1.0 }});
+//std::vector<Matrix3d> m2(10, Matrix3d{{ -1.0, 1.0, 1.0},{1.0,1.0,1.0},{1.0,1.0,1.0 }});
+//  Matrix3d* A_dev;// =Matrix<float,6*bsize,6*bsize>::Random(6*bsize,6*bsize);
+//  Matrix3d* B_dev;// =Matrix<float,6*bsize,6*bsize>::Random(6*bsize,6*bsize);
+//  Matrix3d* C_dev;// =Matrix<float,6*bsize,6*bsize>::Random(6*bsize,6*bsize);
+//  int n = 1;
+//  cudaMalloc((void**)&A_dev,sizeof(Matrix3d)*n);
+//  cudaMalloc((void**)&B_dev,sizeof(Matrix3d)*n);
+//  cudaMalloc((void**)&C_dev,sizeof(Matrix3d)*n);
+//
+//  cudaMemcpy(A_dev, m1.data(), sizeof(Matrix3d)*n, cudaMemcpyHostToDevice);
+//  cudaMemcpy(B_dev, m2.data(), sizeof(Matrix3d)*n, cudaMemcpyHostToDevice);
+//
+//printtest<<<1,1>>>(A_dev,B_dev,C_dev);
+//
+//
+//std::vector<Vector3d> v1(10, Vector3d{ 1.0, 1.0, 1.0 });
+//std::vector<Vector3d> v2(10, Vector3d{ -1.0, 1.0, 1.0 });
+//Vector3d *dev_v1, *dev_v2;
+//        cudaMalloc((void **)&dev_v1, sizeof(Vector3d)*n);
+//        cudaMalloc((void **)&dev_v2, sizeof(Vector3d)*n);
+//        double* dev_ret;
+//        cudaMalloc((void **)&dev_ret, sizeof(double)*n);
+//
+//        // Copy to device
+//        cudaMemcpy(dev_v1, v1.data(), sizeof(Vector3d)*n, cudaMemcpyHostToDevice);
+//        cudaMemcpy(dev_v2, v2.data(), sizeof(Vector3d)*n, cudaMemcpyHostToDevice);
+//
+//        // Dot product
+//        cu_dot<<<1,1>>>(dev_v1, dev_v2, dev_ret);
+/////////////////////////////////////////
 
   cudaEventRecord(start);	
   gettimeofday(&timecheck, NULL);
   start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-  for (int s = 0; s<num_streams;s++){
-    cudaMemPrefetchAsync(trk,nevts*nb*sizeof(MPTRK), device,streams[s]);
-    cudaMemPrefetchAsync(hit,nevts*nb*sizeof(MPHIT), device,streams[s]);
-  }
-  cudaMemAdvise(trk,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
-  cudaMemAdvise(hit,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
-  cudaMemAdvise(trk,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetReadMostly,device);
-  cudaMemAdvise(hit,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetReadMostly,device);
+  transfer(trk,hit,trk_dev,hit_dev);
+//  for (int s = 0; s<num_streams;s++){
+//    cudaMemPrefetchAsync(trk,nevts*nb*sizeof(MPTRK), device,streams[s]);
+//    cudaMemPrefetchAsync(hit,nevts*nb*sizeof(MPHIT), device,streams[s]);
+//  }
+//  cudaMemAdvise(trk,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
+//  cudaMemAdvise(hit,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
+//  cudaMemAdvise(trk,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetReadMostly,device);
+//  cudaMemAdvise(hit,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetReadMostly,device);
 
 
   cudaEventRecord(copy);	
   cudaEventSynchronize(copy);
   for(int itr=0; itr<NITER; itr++){
     for (int s = 0; s<num_streams;s++){
-  	  GPUsequence<<<grid,block,0,streams[s]>>>(trk,hit,outtrk,s);
+      //printf("testx\n");
+  	  GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev,hit_dev,outtrk_dev,s);
+  	  //GPUsequence<<<grid,block,0,streams[s]>>>(trk,hit,outtrk,s);
     }  
 	  //cudaDeviceSynchronize(); // Normal sync
 
   } //end itr loop
-  //cudaDeviceSynchronize(); // shaves a few seconds
+  cudaDeviceSynchronize(); // shaves a few seconds
   
   cudaEventRecord(copyback);
   cudaEventSynchronize(copyback);
-  for (int s = 0; s<num_streams;s++){
-    cudaMemPrefetchAsync(outtrk,nevts*nb*sizeof(MPTRK), cudaCpuDeviceId,streams[s]);
-  }
+  transfer_back(outtrk_dev,outtrk);
+  //for (int s = 0; s<num_streams;s++){
+  //  cudaMemPrefetchAsync(outtrk,nevts*nb*sizeof(MPTRK), cudaCpuDeviceId,streams[s]);
+  //}
   cudaDeviceSynchronize(); // shaves a few seconds
   gettimeofday(&timecheck, NULL);
   end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;

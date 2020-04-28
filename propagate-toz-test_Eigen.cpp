@@ -368,7 +368,7 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 	                MP6x6SF* outErr, MP6F* outPar) {
   //
   MP6x6F errorProp, temp;
-
+#pragma omp simd
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z(msP,it);
     const float k = q(inChg,it)*100/3.8;

@@ -19,7 +19,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NITER 100
 #endif
 
-#define num_streams 1 
+#define num_streams 10 
 
 #define HOSTDEV __host__ __device__
 

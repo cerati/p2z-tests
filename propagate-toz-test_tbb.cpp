@@ -7,6 +7,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <tbb/tbb.h>
 
 #define nevts 100
 #define nb    600
@@ -17,6 +18,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef NITER
 #define NITER 100
 #endif
+
+using namespace tbb;
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -244,8 +247,9 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp simd
-  for (int n = 0; n < N; ++n)
+//parallel_for(0,N,[&](int n){
+#pragma omp simd 
+ for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
@@ -283,13 +287,14 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
     c[33*N+n] = b[18*N+n];
     c[34*N+n] = b[19*N+n];
     c[35*N+n] = b[20*N+n];
-  }
+  }//);
 }
 
 void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+//parallel_for(0,N,[&](int n){
 #pragma omp simd
   for (int n = 0; n < N; ++n)
   {
@@ -314,7 +319,7 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
     c[18*N+n] = b[33*N+n];
     c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
     c[20*N+n] = b[35*N+n];
-  }
+  }//);
 }
 
 void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
@@ -322,6 +327,7 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 	                MP6x6SF* outErr, MP6F* outPar) {
   //
   MP6x6F errorProp, temp;
+//parallel_for(0,bsize,[&](size_t it){
 #pragma omp simd
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z(msP,it);
@@ -359,7 +365,7 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
     errorProp.data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
     errorProp.data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
     errorProp.data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
-  }
+  }//);
   //
   MultHelixPropEndcap(&errorProp, inErr, &temp);
   MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
@@ -417,21 +423,28 @@ int main (int argc, char* argv[]) {
    // }
   
 
+   task_scheduler_init init(64);
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-#pragma omp parallel for
-    for (size_t ie=0;ie<nevts;++ie) { // loop over events
-#pragma omp simd
-     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+//#pragma omp parallel for
+//parallel_for(0,nevts,[&](size_t ie){  
+parallel_for(blocked_range<size_t>(0,nevts,4),[&](blocked_range<size_t> iex){
+      for(size_t ie =iex.begin(); ie<iex.end();++ie){
+      //for (size_t ie=0;ie<nevts;++ie) { // loop over events
+//#pragma omp simd
+//     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+//parallel_for((0,nb),[&](size_t ib){
+parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){
+      for(size_t ib =ibx.begin(); ib<ibx.end();++ib){
        //
        const MPTRK* btracks = bTk(trk, ie, ib);
        const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
        //
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-     }
-    }
+     }});
+    }});
    } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;

@@ -10,24 +10,25 @@
 # SRCTYPE options: cpp, c ,cu                 #
 # MODE options: acc, omp, seq, cuda           #
 ###############################################
-COMPILER ?= eigen
+COMPILER ?= gcc
 SRCTYPE ?= cpp
-MODE ?= eigen
+MODE ?= omp
 
 ######################################
 # Set the input source files (CSRCS) #
 ######################################
 ifeq ($(SRCTYPE),cpp)
 ifeq ($(MODE),acc)
+#CSRCS = propagate-toz-test_OpenACC_v5.cpp
 CSRCS = propagate-toz-test_OpenACC.cpp
 else
-CSRCS = propagate-toz-test.cpp
+CSRCS = propagate-toz-test_v3.cpp
 endif
 else
 ifeq ($(MODE),acc)
 CSRCS = propagate-toz-test_OpenACC.c
-else ifeq ($(MODE),cuda)
-CSRCS = propagate-toz-test_CUDA.cu
+#else ifeq ($(MODE),cuda)
+#CSRCS = propagate-toz-test_CUDA.cu
 else
 CSRCS = propagate-toz-test.c
 endif
@@ -73,8 +74,35 @@ ifeq ($(MODE),omp)
 CFLAGS1 = -O3 -I. -fopenmp 
 CLIBS1 = -lm -lgomp
 else
+ifeq ($(MODE),eigen)
+###############
+# Eigen Setting #
+###############
+CSRCS = propagate-toz-test_Eigen.cpp
+CFLAGS1= -fopenmp -O3 -fopenmp-simd -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -lm -lgomp 
+else
+ifeq ($(MODE),tbb)
+CSRCS = propagate-toz-test_tbb.cpp
+TBB_PREIX := /opt/intel
+CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
+CFLAGS1+= -L/opt/intel/compilers_and_libraries/linux/tbb/lib/intel64/gcc4.8 -fopenmp -O3 -I.
+CLIBS1 = -lm -lgomp
+else
+ifeq ($(MODE),alpaka)
+#CXX=icc
+CSRCS = propagate-toz-test_alpaka.cpp
+#CSRCS = alpaka_test.cpp
+CFLAGS1+= -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+TBB_PREIX := /opt/intel
+CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
+CFLAGS1+= -fopenmp -O3 -I.
+CLIBS1 = -lm -lgomp
+else
 CFLAGS1 = -O3 -I. 
 CLIBS1 = -lm
+endif
+endif
+endif
 endif
 else
 CXX=gcc
@@ -102,13 +130,29 @@ CLIBS1 = -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper
 #CLIBS1 = -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
 endif
 
-ifeq ($(COMPILER),intel)
+ifeq ($(COMPILER),icc)
 #################
 # Intel Setting #
 #################
 CXX=icc
-CFLAGS1= -Wall -I. -O3 -fopenmp -fopenmp-simd
+ifeq ($(MODE),tbb)
+CSRCS = propagate-toz-test_tbb.cpp
+TBB_PREIX := /opt/local
+CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
+CFLAGS1+= -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
+else
+ifeq ($(MODE),eigen)
+###############
+# Eigen Setting #
+###############
+CSRCS = propagate-toz-test_Eigen.cpp
+CXX=icc
+CFLAGS1= -fopenmp -O3 -fopenmp-simd -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -mtune=native -march=native -xHost -qopt-zmm-usage=high
+else
+CFLAGS1= -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
 #CFLAGS1= -Wall -I. -O3 -xMIC-AVX512 -qopenmp -qopenmp-offload=host -fimf-precision=low:sqrt,exp,log,/
+endif
+endif
 endif
 
 ifeq ($(COMPILER),ibm)
@@ -119,18 +163,6 @@ CXX=xlc
 CFLAGS1= -I. -Wall -v -O3 -qsmp=noauto:omp -qnooffload #host power9
 endif
 
-ifeq ($(COMPILER),eigen)
-###############
-# Eigen Setting #
-###############
-CSRCS = propagate-toz-test_Eigen_v2.cu
-CXX=nvcc
-CFLAGS1= -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
-CLIBS1= -L${CUDALIBDIR} -lcudart 
-#CSRCS = propagate-toz-test_Eigen_v2.cpp
-#CXX=icc
-#CFLAGS1= -fopenmp -O3 -fopenmp-simd -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -mtune=native -march=native
-endif
 
 ifeq ($(COMPILER),llvm)
 ################
@@ -145,9 +177,32 @@ ifeq ($(COMPILER),nvcc)
 ################
 # NVCC Setting #
 ################
+ifeq ($(MODE),eigen)
+###############
+# Eigen Setting #
+###############
+CSRCS = propagate-toz-test_Eigen.cu
+CXX=nvcc
+CFLAGS1= -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
+CLIBS1= -L${CUDALIBDIR} -lcudart 
+#CSRCS = propagate-toz-test_Eigen.cpp
+#CXX=icc
+#CFLAGS1= -fopenmp -O3 -fopenmp-simd -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -mtune=native -march=native
+else
+ifeq ($(MODE),alpaka)
+CXX=nvcc
+CSRCS = propagate-toz-test_alpaka.cu
+#CSRCS = alpaka_test.cpp
+#CFLAGS1+= -I/mnt/data1/mgr85/p2z-tests/include -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+CFLAGS1+= -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -L${CUDALIBDIR} -lcudart -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda 
+#CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
+else
+CSRCS = propagate-toz-test_CUDA.cu
 CXX=nvcc
 CFLAGS1= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread 
 CLIBS1= -L${CUDALIBDIR} -lcudart 
+endif
+endif
 endif
 
 ################################################
