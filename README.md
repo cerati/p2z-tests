@@ -15,6 +15,8 @@ $ make COMPILER=pgi MODE=acc SRCTYPE=c
 1. set the environment variable, openarc to the root directory of the OpenARC repository.
 2. $ O2GBuild.script
 3. $ make COMPILER=openarc MODE=acc SRCTYPE=c
+# OpenARC in the public repository has bugs in handling async versions.
+# Therefore, do not use propagate-*_async.c files as input.
 
 ## Kokkos
 
