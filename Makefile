@@ -3,13 +3,13 @@
 ########################
 #BENCHMARK = propagate
 
-###############################################
-#    Set macros used for the input program    #
-###############################################
-# COMPILER options: pgi, gcc, openarc, nvcc   #
-# SRCTYPE options: cpp, c ,cu                 #
-# MODE options: acc, omp, seq, cuda           #
-###############################################
+##########################################################
+#       Set macros used for the input program            #
+##########################################################
+# COMPILER options: pgi, gcc, openarc, nvcc, icc         #
+# SRCTYPE options: cpp, c ,cu                            #
+# MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka  #
+##########################################################
 COMPILER ?= gcc
 SRCTYPE ?= cpp
 MODE ?= omp
@@ -19,7 +19,6 @@ MODE ?= omp
 ######################################
 ifeq ($(SRCTYPE),cpp)
 ifeq ($(MODE),acc)
-#CSRCS = propagate-toz-test_OpenACC_v5.cpp
 CSRCS = propagate-toz-test_OpenACC.cpp
 else
 CSRCS = propagate-toz-test_v3.cpp
@@ -27,8 +26,6 @@ endif
 else
 ifeq ($(MODE),acc)
 CSRCS = propagate-toz-test_OpenACC.c
-#else ifeq ($(MODE),cuda)
-#CSRCS = propagate-toz-test_CUDA.cu
 else
 CSRCS = propagate-toz-test.c
 endif
@@ -75,9 +72,6 @@ CFLAGS1 = -O3 -I. -fopenmp
 CLIBS1 = -lm -lgomp
 else
 ifeq ($(MODE),eigen)
-###############
-# Eigen Setting #
-###############
 CSRCS = propagate-toz-test_Eigen.cpp
 CFLAGS1= -fopenmp -O3 -fopenmp-simd -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -lm -lgomp 
 else
@@ -89,7 +83,6 @@ CFLAGS1+= -L/opt/intel/compilers_and_libraries/linux/tbb/lib/intel64/gcc4.8 -fop
 CLIBS1 = -lm -lgomp
 else
 ifeq ($(MODE),alpaka)
-#CXX=icc
 CSRCS = propagate-toz-test_alpaka.cpp
 #CSRCS = alpaka_test.cpp
 CFLAGS1+= -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
@@ -142,9 +135,6 @@ CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/l
 CFLAGS1+= -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
 else
 ifeq ($(MODE),eigen)
-###############
-# Eigen Setting #
-###############
 CSRCS = propagate-toz-test_Eigen.cpp
 CXX=icc
 CFLAGS1= -fopenmp -O3 -fopenmp-simd -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -mtune=native -march=native -xHost -qopt-zmm-usage=high
@@ -178,16 +168,10 @@ ifeq ($(COMPILER),nvcc)
 # NVCC Setting #
 ################
 ifeq ($(MODE),eigen)
-###############
-# Eigen Setting #
-###############
 CSRCS = propagate-toz-test_Eigen.cu
 CXX=nvcc
 CFLAGS1= -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
 CLIBS1= -L${CUDALIBDIR} -lcudart 
-#CSRCS = propagate-toz-test_Eigen.cpp
-#CXX=icc
-#CFLAGS1= -fopenmp -O3 -fopenmp-simd -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -mtune=native -march=native
 else
 ifeq ($(MODE),alpaka)
 CXX=nvcc

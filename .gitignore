@@ -5,3 +5,4 @@ bin/*
 backup/*
 alpaka_lib
 setup_vtune
+p2z-tests
