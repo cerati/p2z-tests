@@ -19,7 +19,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NITER 100
 #endif
 
-#define num_streams 1 
+#define num_streams 10 
 
 #define HOSTDEV __host__ __device__
 
@@ -416,7 +416,6 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
 int main (int argc, char* argv[]) {
 
   printf("RUNNING CUDA!!\n");
-  int itr;
   ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
      {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
@@ -491,7 +490,7 @@ int main (int argc, char* argv[]) {
 
   cudaEventRecord(copy);	
   cudaEventSynchronize(copy);
-  for(itr=0; itr<NITER; itr++){
+  for(int itr=0; itr<NITER; itr++){
     for (int s = 0; s<num_streams;s++){
   	  GPUsequence<<<grid,block,0,streams[s]>>>(trk,hit,outtrk,s);
     }  

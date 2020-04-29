@@ -10,9 +10,9 @@
 # SRCTYPE options: cpp, c ,cu                            #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka  #
 ##########################################################
-COMPILER ?= openarc
+COMPILER ?= gcc
 SRCTYPE ?= cpp
-MODE ?= acc
+MODE ?= omp
 
 ######################################
 # Set the input source files (CSRCS) #
@@ -89,7 +89,7 @@ CFLAGS1+= -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include -DALPAKA_ACC_CPU_BT_OM
 TBB_PREIX := /opt/intel
 CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
 CFLAGS1+= -fopenmp -O3 -I.
-CLIBS1 += -lm -lgomp
+CLIBS1 = -lm -lgomp
 else
 CFLAGS1 = -O3 -I. 
 CLIBS1 = -lm

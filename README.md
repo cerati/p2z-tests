@@ -1,7 +1,11 @@
 # p2z-tests
 
 ## OpenMP
-TODO
+####Compilers: gcc, icc, pgi.
+version 3 is most up to date. 
+$ make COMPILER=gcc MODE=omp
+$ make COMPILER=icc MODE=omp
+$ make COMPILER=pgi MODE=omp
 
 
 ## OpenACC
@@ -10,6 +14,27 @@ TODO
 $ make COMPILER=pgi MODE=acc SRCTYPE=cpp
 //Compile OpenACC C version
 $ make COMPILER=pgi MODE=acc SRCTYPE=c
+
+## Tbb
+####Compilers: gcc, icc
+$ make COMPILER=gcc MODE=tbb
+$ make COMPILER=icc MODE=tbb
+
+## CUDA
+####Compilers: nvcc
+Version 1 uses unified memory. Version 2 uses explicit memory transfers
+$ make COMPILER=nvcc MODE=cuda
+
+## Eigen
+####Compilers: gcc, icc, nvcc
+$ make COMPILER=gcc MODE=eigen
+$ make COMPILER=icc MODE=eigen
+$ make COMPILER=nvcc MODE=eigen
+
+## Alpaka
+####Compilers: gcc, nvcc 
+$ make COMPILER=gcc MODE=alpaka
+$ make COMPILER=nvcc MODE=alpaka//not yet functional
 
 #### Compile with OpenARC
 1. set the environment variable, openarc to the root directory of the OpenARC repository.
