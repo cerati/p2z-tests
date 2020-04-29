@@ -9,8 +9,8 @@
 # COMPILER options: pgi, gcc, openarc, nvcc, icc         #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka  #
 ##########################################################
-COMPILER ?= nvcc
-MODE ?= eigen
+COMPILER ?= openarc
+MODE ?= acc
 
 
 ################
