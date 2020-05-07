@@ -483,8 +483,6 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks,
 
   } // bsize
 
-  // batch_gemm(errorProp, inTrks.cov, temp); 
-  // batch_gemm_T(errorProp, temp, outErr);
 
   for ( int i = 0; i < 6; ++i ) {
     for ( int j = 0; j < 6; ++j ) {
