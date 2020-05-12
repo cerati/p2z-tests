@@ -9,10 +9,16 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <sys/time.h>
 #include <tbb/tbb.h>
 
-#define nevts 100
-#define nb    600
+#ifndef bsize
 #define bsize 16
-#define ntrks nb*bsize
+#endif
+#ifndef ntrks
+#define ntrks 9600
+#endif
+
+#define nb    ntrks/bsize
+
+#define nevts 100
 #define smear 0.1
 
 #ifndef NITER
@@ -459,7 +465,7 @@ parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){
    // }
    
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-   printf("formatted %i %f %e %f 0 %f 0 (s)\n",nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks), (end-start)*0.001, (end_setup-start_setup)*0.001);
+   printf("formatted %i %f %e %f 0 %f 0\n",nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks), (end-start)*0.001, (end_setup-start_setup)*0.001);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;
