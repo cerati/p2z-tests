@@ -1,6 +1,7 @@
 *.o
 *.txt
 *.data
+*.out
 bin/*
 backup/*
 alpaka_lib

@@ -1,8 +1,8 @@
 CC = icpc -g
 
-# MKL_LINK =  -L${MKLROOT}/lib/intel64 -mkl=parallel -liomp5 -lpthread -lm -ldl
+MKL_LINK =  -L${MKLROOT}/lib/intel64 -mkl=parallel -liomp5 -lpthread -lm -ldl
 # MKL_LINK =  -L${MKLROOT}/lib/intel64 -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl #
-MKL_LINK = -L${MKLROOT}/lib/intel64 -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lm -ldl #
+# MKL_LINK = -L${MKLROOT}/lib/intel64 -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lm -ldl #
 # MKL_OPT  = -DMKL_ILP64 -I${MKLROOT}/include #
 MKL_OPT  = -I${MKLROOT}/include #
 
