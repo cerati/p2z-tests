@@ -10,9 +10,15 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <sys/time.h>
 
 #define nevts 100
-#define nb    300
+
+#ifndef bsize
 #define bsize 32
-#define ntrks nb*bsize
+#endif
+#ifndef ntrks
+#define ntrks 9600
+#endif
+
+#define nb    ntrks/bsize
 #define smear 0.1
 
 #ifndef NITER
@@ -525,7 +531,7 @@ int main (int argc, char* argv[]) {
    printf("data region time=%f (s)\n", regiontime*0.001);
    printf("memory transfer time=%f (s)\n", (copytime+copybacktime)*0.001);
    printf("setup time time=%f (s)\n", (end_setup-start_setup)*0.001);
-   printf("formatted %i %f %e %f %f %f %f(s)\n",nevts*ntrks, (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks), (regiontime)*0.001,  (copytime+copybacktime)*0.001, (end_setup-start_setup)*0.001, walltime*0.001);
+   printf("formatted %i %f %e %f %f %f %f\n",nevts*ntrks, (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks), (regiontime)*0.001,  (copytime+copybacktime)*0.001, (end_setup-start_setup)*0.001, walltime*0.001);
 
    printf("wall region time=%f (s)\n", (end_wall-start_wall)*0.001);
    float avgx = 0, avgy = 0, avgz = 0;

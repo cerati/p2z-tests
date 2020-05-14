@@ -1,7 +1,7 @@
 # p2z-tests
 
 ## OpenMP
-####Compilers: gcc, icc, pgi.
+#### Compilers: gcc, icc, pgi.
 version 3 is most up to date. 
 $ make COMPILER=gcc MODE=omp
 $ make COMPILER=icc MODE=omp
@@ -16,23 +16,23 @@ $ make COMPILER=pgi MODE=acc SRCTYPE=cpp
 $ make COMPILER=pgi MODE=acc SRCTYPE=c
 
 ## Tbb
-####Compilers: gcc, icc
+#### Compilers: gcc, icc
 $ make COMPILER=gcc MODE=tbb
 $ make COMPILER=icc MODE=tbb
 
 ## CUDA
-####Compilers: nvcc
+#### Compilers: nvcc
 Version 1 uses unified memory. Version 2 uses explicit memory transfers
 $ make COMPILER=nvcc MODE=cuda
 
 ## Eigen
-####Compilers: gcc, icc, nvcc
+#### Compilers: gcc, icc, nvcc
 $ make COMPILER=gcc MODE=eigen
 $ make COMPILER=icc MODE=eigen
 $ make COMPILER=nvcc MODE=eigen
 
 ## Alpaka
-####Compilers: gcc, nvcc 
+#### Compilers: gcc, nvcc 
 $ make COMPILER=gcc MODE=alpaka
 $ make COMPILER=nvcc MODE=alpaka//not yet functional
 
