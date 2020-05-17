@@ -1,5 +1,7 @@
 CC = icpc -g
 
+USE_CALI = 1
+
 MKL_LINK =  -L${MKLROOT}/lib/intel64 -mkl=parallel -liomp5 -lpthread -lm -ldl
 # MKL_LINK =  -L${MKLROOT}/lib/intel64 -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl #
 # MKL_LINK = -L${MKLROOT}/lib/intel64 -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lm -ldl #
@@ -16,10 +18,14 @@ OPT += -march=skylake-avx512
 OPT +=  -qopt-zmm-usage=high
 OPT +=  -fopenmp
 # OPT += -no-vec 
-# OPT += -DUSE_CALI
-# OPT += -I${CALIPER_DIR}/include
-# OPT += -L${CALIPER_DIR}/lib
-# OPT +=  -lcaliper 
+
+
+ifdef USE_CALI
+	OPT += -DUSE_CALI
+	OPT += -I${CALIPER_DIR}/include
+	OPT += -L${CALIPER_DIR}/lib
+	OPT +=  -lcaliper 
+endif
 
 all: mkl_p2z
 

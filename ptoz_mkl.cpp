@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <string.h>
+#include <omp.h>
 
 #include "ptoz_data.h"
 
@@ -21,7 +22,8 @@ void convertOutput(MKLTRK &mkl_in, MPTRK* &mp_out);
 
 void propagateToZ(const MKLTRK &inTrks, const MKLHIT &inHits, MKLTRK &outTrks, 
                   MatrixMKL &errorProp,
-                  float *_A, float *_B, float *_C);
+                  float *_A, float *_B, float *_C,
+                  int _nevts_nb, int _bsize);
 void averageOutputs(MPTRK* &outtrk, MPHIT* &hit);
 
 // void gemm(MatrixMP A, ViewMatrixMP B, ViewMatrixMP C);
@@ -37,6 +39,14 @@ float randn(float mu, float sigma);
 
 int main( int argc, char* argv[] )
 {
+
+#ifdef USE_CALI
+cali_id_t thread_attr = cali_create_attribute("thread_id", CALI_TYPE_INT, CALI_ATTR_ASVALUE | CALI_ATTR_SKIP_EVENTS);
+#pragma omp parallel
+{
+cali_set_int(thread_attr, omp_get_thread_num());
+}
+#endif
 
   int itr;
   ATRK inputtrk = {
@@ -105,15 +115,41 @@ int main( int argc, char* argv[] )
   
   convert_in_t = get_time();
   
+  // int block_size = 500; // must divide into 60,000, 500 -> 2e-6s
+  // int block_size = 1500; // must divide into 60,000
+  int block_size = 25; // must divide into 60,000
+  // int block_size = nevts*nb;
+  int b = 0;
+  MKLTRK block_tracks;
+  MKLHIT block_hits;
+  MKLTRK block_out;
+  MatrixMKL blockProp;
 
   for(itr=0; itr<NITER; itr++) {
   
-      propagateToZ(all_tracks, all_hits, all_out, errorProp, _A, _B, _C);
+    #pragma omp parallel for
+    for(b = 0; b < nevts*nb*bsize; b+=block_size*bsize) {
+      block_tracks.par = &(all_tracks.par[b]);
+      block_tracks.cov = &(all_tracks.cov[b]);
+      block_tracks.q   = &(all_tracks.q[b]);
+
+      block_hits.pos   = &(all_hits.pos[b]);
+      block_hits.cov   = &(all_hits.cov[b]);
+
+      block_out.par    = &(all_out.par[b]);
+      block_out.cov    = &(all_out.cov[b]);
+      block_out.q      = &(all_out.q[b]);
+
+      blockProp.vals   = &(errorProp.vals[b]);
+
+      propagateToZ(block_tracks, block_hits, block_out, blockProp, 
+                  _A, _B, _C,
+                  block_size, bsize);
+    }
 
   } // end of itr loop
 
   p2z_t = get_time();
-
 
   // TODO allout -> outtrk
   convertOutput(all_out, outtrk);
@@ -149,7 +185,6 @@ int main( int argc, char* argv[] )
   //     free_MPTRK(outtrk[ib + nb*ie]);
   //   }
   // }
-
 
   mkl_free(_A);
   mkl_free(_B);
@@ -296,7 +331,7 @@ void prepareHits(AHIT inputhit, MPHIT* &result) {
     for (size_t ib=0;ib<nb;++ib) {
       allocate_MPHIT(result[ib + nb*ie]);
     }
-  }	
+  } 
 
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
@@ -364,54 +399,56 @@ void separateHits(MPHIT* &mp_in, MKLHIT &mkl_out) {
 
 void propagateToZ(const MKLTRK &inTrks, const MKLHIT &inHits, MKLTRK &outTrks, 
                   MatrixMKL &errorProp,
-                  float *_A, float *_B, float *_C) { 
+                  float *_A, float *_B, float *_C,
+                  int _nevts_nb, int _bsize) { 
 
-  #pragma omp parallel for
-  for (size_t ie=0;ie<nevts;++ie) { // combined these two loop over batches
-  for (size_t ib=0;ib<nb;++ib) { 
-  size_t batch = ib + nb*ie;
+  // #pragma omp parallel for
+  // for (size_t ie=0;ie<_nevts;++ie) { // combined these two loop over batches
+  // for (size_t ib=0;ib<_nb;++ib) { 
+  // size_t batch = ib + _nb*ie;
+  for (size_t batch=0; batch < _nevts_nb; ++batch) { // combined these two loop over batches
   #pragma ivdep
   #pragma simd
-  for (size_t it=0;it<bsize;++it) { 
+  for (size_t it=0;it<_bsize;++it) { 
 
-    const float zout = inHits.pos[batch*bsize+it][Z_IND]; 
-    const float k = inTrks.q[batch*bsize+it]*100/3.8; 
-    const float deltaZ = zout - inTrks.par[batch*bsize+it][Z_IND]; 
-    const float pt = 1./inTrks.par[batch*bsize+it][IPT_IND]; 
-    const float cosP = cosf( inTrks.par[batch*bsize+it][PHI_IND] ); 
-    const float sinP = sinf( inTrks.par[batch*bsize+it][PHI_IND] ); 
-    const float cosT = cosf( inTrks.par[batch*bsize+it][THETA_IND] ); 
-    const float sinT = sinf( inTrks.par[batch*bsize+it][THETA_IND] ); 
+    const float zout = inHits.pos[batch*_bsize+it][Z_IND]; 
+    const float k = inTrks.q[batch*_bsize+it]*100/3.8; 
+    const float deltaZ = zout - inTrks.par[batch*_bsize+it][Z_IND]; 
+    const float pt = 1./inTrks.par[batch*_bsize+it][IPT_IND]; 
+    const float cosP = cosf( inTrks.par[batch*_bsize+it][PHI_IND] ); 
+    const float sinP = sinf( inTrks.par[batch*_bsize+it][PHI_IND] ); 
+    const float cosT = cosf( inTrks.par[batch*_bsize+it][THETA_IND] ); 
+    const float sinT = sinf( inTrks.par[batch*_bsize+it][THETA_IND] ); 
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float alpha = deltaZ*sinT*inTrks.par[batch*bsize+it][IPT_IND]/(cosT*k); 
+    const float alpha = deltaZ*sinT*inTrks.par[batch*_bsize+it][IPT_IND]/(cosT*k); 
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
 
     // array of state
-    outTrks.par[batch*bsize+it][X_IND]     = inTrks.par[batch*bsize+it][X_IND] + k*(pxin*sina - pyin*(1.-cosa));
-    outTrks.par[batch*bsize+it][Y_IND]     = inTrks.par[batch*bsize+it][Y_IND] + k*(pyin*sina + pxin*(1.-cosa));
-    outTrks.par[batch*bsize+it][Z_IND]     = zout;
-    outTrks.par[batch*bsize+it][IPT_IND]   = inTrks.par[batch*bsize+it][IPT_IND];
-    outTrks.par[batch*bsize+it][PHI_IND]   = inTrks.par[batch*bsize+it][PHI_IND]+alpha;
-    outTrks.par[batch*bsize+it][THETA_IND] = inTrks.par[batch*bsize+it][THETA_IND];
+    outTrks.par[batch*_bsize+it][X_IND]     = inTrks.par[batch*_bsize+it][X_IND] + k*(pxin*sina - pyin*(1.-cosa));
+    outTrks.par[batch*_bsize+it][Y_IND]     = inTrks.par[batch*_bsize+it][Y_IND] + k*(pyin*sina + pxin*(1.-cosa));
+    outTrks.par[batch*_bsize+it][Z_IND]     = zout;
+    outTrks.par[batch*_bsize+it][IPT_IND]   = inTrks.par[batch*_bsize+it][IPT_IND];
+    outTrks.par[batch*_bsize+it][PHI_IND]   = inTrks.par[batch*_bsize+it][PHI_IND]+alpha;
+    outTrks.par[batch*_bsize+it][THETA_IND] = inTrks.par[batch*_bsize+it][THETA_IND];
     
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp.vals[batch*bsize+it][i*6+i] = 1.;
+    for (size_t i=0;i<6;++i) errorProp.vals[batch*_bsize+it][i*6+i] = 1.;
     //there are two cause we're doing symmetry
-    errorProp.vals[batch*bsize+it][2*6+0] = errorProp.vals[batch*bsize+it][0*6+2] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp.vals[batch*bsize+it][3*6+0] = errorProp.vals[batch*bsize+it][0*6+3] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inTrks.par[batch*bsize+it][IPT_IND])-k*(cosP*sina-sinP*(1.-cCosPsina))/(inTrks.par[batch*bsize+it][IPT_IND]*inTrks.par[batch*bsize+it][IPT_IND]);
-    errorProp.vals[batch*bsize+it][4*6+0] = errorProp.vals[batch*bsize+it][0*6+4] = (k/inTrks.par[batch*bsize+it][IPT_IND])*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp.vals[batch*bsize+it][5*6+0] = errorProp.vals[batch*bsize+it][0*6+5] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    errorProp.vals[batch*bsize+it][2*6+1] = errorProp.vals[batch*bsize+it][1*6+2] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp.vals[batch*bsize+it][3*6+1] = errorProp.vals[batch*bsize+it][1*6+3] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inTrks.par[batch*bsize+it][IPT_IND])-k*(sinP*sina+cosP*(1.-cCosPsina))/(inTrks.par[batch*bsize+it][IPT_IND]*inTrks.par[batch*bsize+it][IPT_IND]);
-    errorProp.vals[batch*bsize+it][4*6+1] = errorProp.vals[batch*bsize+it][1*6+4] = (k/inTrks.par[batch*bsize+it][IPT_IND])*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp.vals[batch*bsize+it][5*6+1] = errorProp.vals[batch*bsize+it][1*6+5] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp.vals[batch*bsize+it][2*6+4] = errorProp.vals[batch*bsize+it][4*6+2] = -inTrks.par[batch*bsize+it][IPT_IND]*sinT/(cosT*k);
-    errorProp.vals[batch*bsize+it][3*6+4] = errorProp.vals[batch*bsize+it][4*6+3] = sinT*deltaZ/(cosT*k);
-    errorProp.vals[batch*bsize+it][5*6+4] = errorProp.vals[batch*bsize+it][4*6+5] = inTrks.par[batch*bsize+it][IPT_IND]*deltaZ/(cosT*cosT*k);
+    errorProp.vals[batch*_bsize+it][2*6+0] = errorProp.vals[batch*_bsize+it][0*6+2] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+    errorProp.vals[batch*_bsize+it][3*6+0] = errorProp.vals[batch*_bsize+it][0*6+3] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inTrks.par[batch*_bsize+it][IPT_IND])-k*(cosP*sina-sinP*(1.-cCosPsina))/(inTrks.par[batch*_bsize+it][IPT_IND]*inTrks.par[batch*_bsize+it][IPT_IND]);
+    errorProp.vals[batch*_bsize+it][4*6+0] = errorProp.vals[batch*_bsize+it][0*6+4] = (k/inTrks.par[batch*_bsize+it][IPT_IND])*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp.vals[batch*_bsize+it][5*6+0] = errorProp.vals[batch*_bsize+it][0*6+5] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    errorProp.vals[batch*_bsize+it][2*6+1] = errorProp.vals[batch*_bsize+it][1*6+2] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+    errorProp.vals[batch*_bsize+it][3*6+1] = errorProp.vals[batch*_bsize+it][1*6+3] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inTrks.par[batch*_bsize+it][IPT_IND])-k*(sinP*sina+cosP*(1.-cCosPsina))/(inTrks.par[batch*_bsize+it][IPT_IND]*inTrks.par[batch*_bsize+it][IPT_IND]);
+    errorProp.vals[batch*_bsize+it][4*6+1] = errorProp.vals[batch*_bsize+it][1*6+4] = (k/inTrks.par[batch*_bsize+it][IPT_IND])*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp.vals[batch*_bsize+it][5*6+1] = errorProp.vals[batch*_bsize+it][1*6+5] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+    errorProp.vals[batch*_bsize+it][2*6+4] = errorProp.vals[batch*_bsize+it][4*6+2] = -inTrks.par[batch*_bsize+it][IPT_IND]*sinT/(cosT*k);
+    errorProp.vals[batch*_bsize+it][3*6+4] = errorProp.vals[batch*_bsize+it][4*6+3] = sinT*deltaZ/(cosT*k);
+    errorProp.vals[batch*_bsize+it][5*6+4] = errorProp.vals[batch*_bsize+it][4*6+5] = inTrks.par[batch*_bsize+it][IPT_IND]*deltaZ/(cosT*cosT*k);
 
   } // bsize
 
@@ -421,11 +458,11 @@ void propagateToZ(const MKLTRK &inTrks, const MKLHIT &inHits, MKLTRK &outTrks,
   // mkl_compact(&(errorProp.vals[batch*bsize]), &(inTrks.cov[batch*bsize]), &(outTrks.cov[batch*bsize]),   
   //           &(_A[batch*size]), &(_B[batch*size]), &(_C[batch*size]), bsize);
 
-} // nb
+// } // nb
 }  // nevts
 
   mkl_compact(errorProp.vals, inTrks.cov, outTrks.cov,   
-            _A, _B, _C, nevts*nb*bsize);
+            _A, _B, _C, _nevts_nb*_bsize);
 // for (size_t ie=0;ie<nevts;++ie) { // combined these two loop over batches
 // for (size_t ib=0;ib<nb;++ib) { 
 //   size_t batch = ib + nb*ie;

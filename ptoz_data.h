@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+#ifdef USE_CALI
+#include <caliper/cali.h>
+#endif
 
 #include <mkl.h>
 #include <mkl_cblas.h>
