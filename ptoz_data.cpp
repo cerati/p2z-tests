@@ -155,10 +155,6 @@ void mkl_compact(float **A, float **B, float **C,
                  float *_A, float *_B, float *_C, 
                  int num_mats) {
 
-#ifdef USE_CALI
-CALI_CXX_MARK_FUNCTION;
-#endif
-
   int i,j,l;
 
   // float *_A, *_B, *_C;

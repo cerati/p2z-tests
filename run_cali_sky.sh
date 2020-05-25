@@ -52,9 +52,8 @@ declare -a metrics=( \
                    )
 
 
+out_dir=cali_p2z_mkl
 # out_dir=cali_p2z_mkl_block1500
-out_dir=cali_p2z_mkl_block25
-# out_dir=cali_p2z_mkl_block1000
 mkdir ${out_dir}
 
 export OMP_PROC_BIND=close

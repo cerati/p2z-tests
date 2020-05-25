@@ -1,6 +1,6 @@
 CC = icpc -g
 
-USE_CALI = 1
+#USE_CALI = 1
 
 MKL_LINK =  -L${MKLROOT}/lib/intel64 -mkl=parallel -liomp5 -lpthread -lm -ldl
 # MKL_LINK =  -L${MKLROOT}/lib/intel64 -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl #

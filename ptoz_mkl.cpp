@@ -48,6 +48,10 @@ cali_set_int(thread_attr, omp_get_thread_num());
 }
 #endif
 
+
+  int block_in = -1;
+  if (argc > 1) block_in = std::atoi(argv[1]);
+
   int itr;
   ATRK inputtrk = {
    {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
@@ -115,9 +119,11 @@ cali_set_int(thread_attr, omp_get_thread_num());
   
   convert_in_t = get_time();
   
-  // int block_size = 500; // must divide into 60,000, 500 -> 2e-6s
+  int block_size = 500;  // must divide into 60,000, 500 -> 2e-6s
   // int block_size = 1500; // must divide into 60,000
-  int block_size = 25; // must divide into 60,000
+  // int block_size = 60000;    // must divide into 60,000
+  if (block_in > 0)
+    block_size = block_in;
   // int block_size = nevts*nb;
   int b = 0;
   MKLTRK block_tracks;
@@ -171,11 +177,12 @@ cali_set_int(thread_attr, omp_get_thread_num());
   printf("done ntracks =%i \n", nevts*ntrks);
   printf("done niter   =%i \n", NITER);
   printf("total tracks =%i \n", nevts*ntrks*NITER);
+  printf("block size   =%i \n", block_size);
   printf("Total time   =%f \n", end_t - start_t);
-  printf("MP prep time =%f \n", prep_t - start_t);
-  printf("MKL convert  =%f \n", (convert_in_t - prep_t) + (convert_out_t - p2z_t));
-  printf("p2z time     =%f \n", p2z_t - convert_in_t);
-  printf("Time / track =%f \n", (p2z_t - convert_in_t) / (float)(nevts*ntrks) );
+  printf("MP prep time =%e \n", prep_t - start_t);
+  printf("MKL convert  =%e \n", (convert_in_t - prep_t) + (convert_out_t - p2z_t));
+  printf("p2z time     =%e \n", p2z_t - convert_in_t);
+  printf("Time / track =%e \n", (p2z_t - convert_in_t) / (float)(nevts*ntrks) );
   
 
   // for (size_t ie=0;ie<nevts;++ie) {
@@ -401,6 +408,10 @@ void propagateToZ(const MKLTRK &inTrks, const MKLHIT &inHits, MKLTRK &outTrks,
                   MatrixMKL &errorProp,
                   float *_A, float *_B, float *_C,
                   int _nevts_nb, int _bsize) { 
+
+#ifdef USE_CALI
+CALI_CXX_MARK_FUNCTION;
+#endif
 
   // #pragma omp parallel for
   // for (size_t ie=0;ie<_nevts;++ie) { // combined these two loop over batches
