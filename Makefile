@@ -17,8 +17,9 @@ EXE = ${EXE_NAME}.cuda
 KOKKOS_ARCH = "BDW,Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
 else
-# CXX = g++
-CXX = icpc
+# -9 needed on apollo
+CXX = g++-9
+# CXX = icpc
 EXE = ${EXE_NAME}.host
 KOKKOS_ARCH = "BDW"
 endif

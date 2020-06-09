@@ -139,7 +139,7 @@ int main( int argc, char* argv[] )
   printf("MP prep time =%f \n", prep_t - start_t);
   printf("CB convert   =%f \n", (convert_in_t - prep_t) + (convert_out_t - p2z_t));
   printf("p2z time     =%f \n", p2z_t - convert_in_t);
-  printf("Time / track =%f \n", (p2z_t - convert_in_t) / (float)(nevts*ntrks) );
+  printf("Time / track =%e \n", (p2z_t - convert_in_t) / (float)(nevts*ntrks) );
 
 
   // for (size_t ie=0;ie<nevts;++ie) {
