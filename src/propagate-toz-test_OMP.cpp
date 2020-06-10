@@ -2,6 +2,7 @@
 icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 */
 
+#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -11,7 +12,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define nevts 100
 
 #ifndef bsize
-#define bsize 16
+#define bsize 128
 #endif
 #ifndef ntrks
 #define ntrks 9600
@@ -23,6 +24,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 
 #ifndef NITER
 #define NITER 100
+#endif
+
+#ifndef nthreads
+#define nthreads 64
 #endif
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
@@ -373,7 +378,9 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 }
 
 int main (int argc, char* argv[]) {
-printf("bsize: %d, nb:%d\n",(int)bsize,(int)nb);
+printf("bsize: %d, nb:%d, omp threads:%d\n",(int)bsize,(int)nb,(int)nthreads);
+omp_set_dynamic(0);
+omp_set_num_threads(nthreads);
    int itr;
    ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},

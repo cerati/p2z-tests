@@ -7,10 +7,9 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
-#include <tbb/tbb.h>
 
 #ifndef bsize
-#define bsize 16
+#define bsize 128
 #endif
 #ifndef ntrks
 #define ntrks 9600
@@ -24,8 +23,6 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef NITER
 #define NITER 100
 #endif
-
-using namespace tbb;
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -249,13 +246,13 @@ MPHIT* prepareHits(AHIT inputhit) {
 }
 
 #define N bsize
+#pragma acc routine vector nohost
 void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-//parallel_for(0,N,[&](int n){
-#pragma omp simd 
- for (int n = 0; n < N; ++n)
+  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
+  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
+  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
+ #pragma acc loop vector
+  for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
@@ -293,15 +290,15 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
     c[33*N+n] = b[18*N+n];
     c[34*N+n] = b[19*N+n];
     c[35*N+n] = b[20*N+n];
-  }//);
+  }
 }
 
+#pragma acc routine vector nohost
 void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-//parallel_for(0,N,[&](int n){
-#pragma omp simd
+  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
+  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
+  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
+ #pragma acc loop vector
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -325,16 +322,16 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
     c[18*N+n] = b[33*N+n];
     c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
     c[20*N+n] = b[35*N+n];
-  }//);
+  }
 }
 
+#pragma acc routine vector nohost
 void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
-	                MP6x6SF* outErr, MP6F* outPar) {
+	                MP6x6SF* outErr, MP6F* outPar,
+ 		struct MP6x6F* errorProp, struct MP6x6F* temp) {
   //
-  MP6x6F errorProp, temp;
-//parallel_for(0,bsize,[&](size_t it){
-#pragma omp simd
+ #pragma acc loop vector
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z(msP,it);
     const float k = q(inChg,it)*100/3.8;
@@ -359,22 +356,22 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp.data[bsize*PosInMtrx(i,i,6) + it] = 1.;
-    errorProp.data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp.data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp.data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp.data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    errorProp.data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp.data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp.data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp.data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp.data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
-    errorProp.data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
-    errorProp.data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
-  }//);
+    for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
+    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
+    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
+    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+  }
   //
-  MultHelixPropEndcap(&errorProp, inErr, &temp);
-  MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
+  MultHelixPropEndcap(errorProp, inErr, temp);
+  MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }
 
 int main (int argc, char* argv[]) {
@@ -402,20 +399,24 @@ int main (int argc, char* argv[]) {
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
-   long start, end, start_setup, end_setup;
-   struct timeval timecheck;
    
+   long start, end, setup_start, setup_end;
+   long start2, end2;
+   struct timeval timecheck;
+
    gettimeofday(&timecheck, NULL);
-   start_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    MPTRK* trk = prepareTracks(inputtrk);
    MPHIT* hit = prepareHits(inputhit);
    MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+
+#pragma acc enter data create(trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
+
    gettimeofday(&timecheck, NULL);
-   end_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   setup_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
-
    // for (size_t ie=0;ie<nevts;++ie) {
    //   for (size_t it=0;it<ntrks;++it) {
    //     printf("ie=%lu it=%lu\n",ie,it);
@@ -429,31 +430,42 @@ int main (int argc, char* argv[]) {
    // }
   
 
-   task_scheduler_init init(64);
+   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
+   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
+   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
+
+   gettimeofday(&timecheck, NULL);
+   start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
+#pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb])
+
+{
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-//#pragma omp parallel for
-//parallel_for(0,nevts,[&](size_t ie){  
-parallel_for(blocked_range<size_t>(0,nevts,4),[&](blocked_range<size_t> iex){
-      for(size_t ie =iex.begin(); ie<iex.end();++ie){
-      //for (size_t ie=0;ie<nevts;++ie) { // loop over events
-//#pragma omp simd
-//     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-//parallel_for((0,nb),[&](size_t ib){
-parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){
-      for(size_t ib =ibx.begin(); ib<ibx.end();++ib){
+#pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk)
+   for (size_t ie=0;ie<nevts;++ie) { // loop over events
+     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
        const MPTRK* btracks = bTk(trk, ie, ib);
        const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
+ 	   struct MP6x6F errorProp, temp;
        //
-       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-     }});
-    }});
-   } //end of itr loop
+       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+	   &errorProp, &temp); // vectorized function
+    }
+  }
+  } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+}
+
+#pragma acc update host(outtrk[0:nevts*nb])
+
+   gettimeofday(&timecheck, NULL);
+   end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
 
    // for (size_t ie=0;ie<nevts;++ie) {
    //   for (size_t it=0;it<ntrks;++it) {
@@ -465,7 +477,10 @@ parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){
    // }
    
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-   printf("formatted %i %f %e %f 0 %f 0\n",nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks), (end-start)*0.001, (end_setup-start_setup)*0.001);
+   printf("data region time=%f (s)\n", (end2-start2)*0.001);
+   printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
+   printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
+   printf("formatted %i %f %e %f %f %f 0\n",nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks), (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;
@@ -528,6 +543,7 @@ parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){
    free(trk);
    free(hit);
    free(outtrk);
+#pragma acc exit data delete(trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
 
    return 0;
 }

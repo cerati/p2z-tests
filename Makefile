@@ -9,23 +9,44 @@
 # COMPILER options: pgi, gcc, openarc, nvcc, icc         #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka  #
 ##########################################################
-COMPILER ?= gcc
-MODE ?= omp
+COMPILER ?= nvcc
+MODE ?= cuda
+###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
-
+STREAMS ?= 0
+NTHREADS ?= 0
 ifneq ($(TUNEB),0)
 TUNE += -Dbsize=$(TUNEB)
 endif
 ifneq ($(TUNETRK),0)
 TUNE += -Dntrks=$(TUNETRK)
 endif
+ifneq ($(STREAMS),0)
+TUNE += -Dnum_streams=$(STREAMS)
+endif
+ifneq ($(NTHREADS),0)
+TUNE += -Dnthreads=$(NTHREADS)
+endif
+##########CUDA Tunable parameters########################
+THREADSX ?= 0
+THREADSY ?= 0
+BLOCKS ?= 0
+ifneq ($(THREADSX),0)
+TUNE += -Dthreadsperblockx=$(THREADSX)
+endif
+ifneq ($(THREADSY),0)
+TUNE += -Dthreadsperblocky=$(THREADSY)
+endif
+ifneq ($(BLOCKS),0)
+TUNE += -Dblockspergrid=$(BLOCKS)
+endif
 
 ################
 #  OMP Setting #
 ################
 ifeq ($(MODE),omp)
-CSRCS = propagate-toz-test_v4_tune.cpp
+CSRCS = propagate-toz-test_OMP.cpp
 ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1 += -O3 -I. -fopenmp 
@@ -88,6 +109,10 @@ ifeq ($(COMPILER),icc)
 CXX=icc
 CFLAGS1+= -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
 endif
+ifeq ($(COMPILER),pgi)
+CXX=pgc++
+CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
+endif
 endif
 
 
@@ -104,6 +129,16 @@ CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
 
+ifeq ($(MODE),cudav2)
+#CSRCS = propagate-toz-test_CUDA.cu
+CSRCS = propagate-toz-test_CUDA_v2.cu
+ifeq ($(COMPILER),nvcc)
+CXX=nvcc
+CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread
+CLIBS1 += -L${CUDALIBDIR} -lcudart 
+endif
+endif
+
 ##################
 #  EIGEN Setting #
 ##################
@@ -112,11 +147,15 @@ CSRCS = propagate-toz-test_Eigen.cpp
 CLIBS1 += -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -L${CUDALIBDIR} -lcudart 
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1 += -fopenmp -O3 -fopenmp-simd -lm -lgomp 
+CFLAGS1 += -fopenmp -O3 -fopenmp-simd -lm -lgomp -march=native 
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
 CFLAGS1 += -fopenmp -O3 -fopenmp-simd  -mtune=native -march=native -xHost -qopt-zmm-usage=high
+endif
+ifeq ($(COMPILER),pgi)
+CXX=pgc++
+CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
@@ -142,8 +181,10 @@ CLIBS1 += -lm -lgomp
 endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
+CSRCS = propagate-toz-test_alpaka.cu
 CFLAGS1+= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda 
-CLIBS1 += -L${CUDALIBDIR} -lcudart
+CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+CLIBS1 += -L${CUDALIBDIR} -lcudart -g
 endif
 endif
 
@@ -155,9 +196,9 @@ TARGET = ./bin
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
 
 
-$(TARGET)/$(BENCHMARK): $(CSRCS)
+$(TARGET)/$(BENCHMARK): src/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi
-	$(CXX) $(CFLAGS1) $(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK)
+	$(CXX) $(CFLAGS1) src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK)
 	if [ -f $(TARGET)/*.ptx ]; then rm $(TARGET)/*.ptx; fi
 	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
