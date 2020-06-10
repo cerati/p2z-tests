@@ -247,12 +247,12 @@ struct MPHIT* prepareHits(struct AHIT inputhit) {
 }
 
 #define N bsize
-#pragma acc routine vector nohost
+#pragma omp declare target 
 void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct MP6x6F* C) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
-#pragma acc loop vector
+#pragma omp parallel for num_threads(N) 
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -293,13 +293,14 @@ void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct
     c[35*N+n] = b[20*N+n];
   }
 }
+#pragma omp end declare target
 
-#pragma acc routine vector nohost
+#pragma omp declare target
 void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, struct MP6x6SF* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma acc loop vector
+#pragma omp parallel for num_threads(64)
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -325,13 +326,14 @@ void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, s
     c[20*N+n] = b[35*N+n];
   }
 }
+#pragma omp end declare target
 
-#pragma acc routine vector nohost
+#pragma omp declare target
 void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
 		  const struct MP1I* inChg, const struct MP3F* msP,
 	                struct MP6x6SF* outErr, struct MP6F* outPar,
 			struct MP6x6F* errorProp, struct MP6x6F* temp) {
-#pragma acc loop vector
+#pragma omp parallel for num_threads(bsize)
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z_pos1(msP,it);
     const float k = q(inChg,it)*100/3.8;
@@ -373,6 +375,7 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
   MultHelixPropEndcap(errorProp, inErr, temp);
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }
+#pragma omp end declare target
 
 int main (int argc, char* argv[]) {
 
@@ -410,7 +413,7 @@ int main (int argc, char* argv[]) {
    struct MPHIT* hit = prepareHits(inputhit);
    struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
 
-#pragma acc enter data create(trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
+#pragma omp target enter data map(alloc: trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
 
    gettimeofday(&timecheck, NULL);
    setup_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -438,13 +441,13 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-#pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb])
+#pragma omp target update to(trk[0:nevts*nb], hit[0:nevts*nb])
 
 {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-#pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk)
+#pragma omp target teams distribute collapse(2) map(to: trk[0:nevts*nb], hit[0:nevts*nb]) map(from: outtrk[0:nevts*nb])
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
@@ -462,7 +465,8 @@ int main (int argc, char* argv[]) {
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 }
 
-#pragma acc update host(outtrk[0:nevts*nb])
+#pragma omp target update from(outtrk[0:nevts*nb])
+
 
    gettimeofday(&timecheck, NULL);
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -543,7 +547,7 @@ int main (int argc, char* argv[]) {
    free(trk);
    free(hit);
    free(outtrk);
-#pragma acc exit data delete(trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
+#pragma omp target exit data map(delete: trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
 
    return 0;
 }

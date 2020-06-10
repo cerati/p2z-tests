@@ -1,9 +1,19 @@
 #! /bin/bash
 
-if [ $# -gt 1 ]; then
+if [ $# -eq 2 ]; then
 	ompaccInter=$1
+	inputFile="$2"
+elif [ $# -eq 1 ]; then
+	ompaccInter=$1
+	inputFile="propagate-toz-test_OpenACC.c"
 else
 	ompaccInter=0
+	inputFile="propagate-toz-test_OpenACC.c"
+fi
+
+if [ ! -f "$inputFile" ]; then
+	echo "input file, $inputFile does not exits; exit"
+	exit
 fi
 
 verLevel=0
@@ -30,11 +40,11 @@ if [ "$openarcrt" != "" ]; then
     rm "openarcConf.txt_tmp"
 fi
 
-java -classpath $openarclib/cetus.jar:$openarclib/antlr.jar openacc.exec.ACC2GPUDriver -verbosity=${verLevel} -ompaccInter=${ompaccInter} -gpuConfFile=openarcConf.txt propagate-toz-test_OpenACC.c
+java -classpath $openarclib/cetus.jar:$openarclib/antlr.jar openacc.exec.ACC2GPUDriver -verbosity=${verLevel} -ompaccInter=${ompaccInter} -gpuConfFile=openarcConf.txt $inputFile
 
 echo ""
 echo "====> To compile the translated output file:"
-echo "\$ make COMPILER=openarc MODE=acc SRCTYPE=c"
+echo "\$ make COMPILER=openarc MODE=acc"
 echo ""
 echo "====> To run the compiled binary:"
 echo "\$ cd bin; propagate_openarc_acc"

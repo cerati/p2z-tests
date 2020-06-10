@@ -6,8 +6,9 @@
 ##########################################################
 #       Set macros used for the input program            #
 ##########################################################
-# COMPILER options: pgi, gcc, openarc, nvcc, icc         #
-# MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka  #
+# COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
+# MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
+#               omp4                                     #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= cuda
@@ -67,7 +68,38 @@ CFLAGS1 += -Wall -O3 -I. -fopenmp -fopenmp-targets=x86_64 -lm
 endif
 ifeq ($(COMPILER),ibm)
 CXX=xlc
-CFLAGS1 += -I. -Wall -v -O3 -qsmp=noauto:omp -qnooffload #host power9
+CFLAGS1 += -I. -Wall -v -O3 -qarch=pwr9 -qsmp=noauto:omp -qnooffload #host power9
+endif
+endif
+
+#################
+#  OMP4 Setting #
+#################
+ifeq ($(MODE),omp4)
+CSRCS = propagate-toz-test_OpenMP4.c
+ifeq ($(COMPILER),gcc)
+CXX=gcc
+CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
+CLIBS1 += -lm -lgomp 
+endif
+ifeq ($(COMPILER),llvm)
+CXX=clang
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu -lm
+endif
+ifeq ($(COMPILER),ibm)
+CXX=xlc
+CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+endif
+ifeq ($(COMPILER),openarc)
+CXX=g++
+CSRCS = ./cetus_output/propagate-toz-test_OpenMP4.cpp
+# On Linux with CUDA GPU
+CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
+CLIBS1 += -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper
+# On macOS
+#CFLAGS1 = -O3 -I. -I${openarc}/openarcrt -arch x86_64
+#CLIBS1 = -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
 endif
 endif
 
