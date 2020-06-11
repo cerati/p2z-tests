@@ -7,16 +7,18 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <alpaka/alpaka.hpp>
+#include <functional>
+#include <iostream>
 
 #ifndef bsize
-#define bsize 32
+#define bsize 128
 #endif
 #ifndef ntrks
 #define ntrks 9600
 #endif
 
 #define nb    ntrks/bsize
-
 #define nevts 100
 #define smear 0.1
 
@@ -205,6 +207,15 @@ float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2
 
 MPTRK* prepareTracks(ATRK inputtrk) {
   MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
+  //using DevHost = alpaka::dev::DevCpu;
+  //using PltfHost = alpaka::pltf::Pltf<DevHost>;
+  //DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
+  //using Data = MPTRK;
+  //using Dim = alpaka::dim::DimInt<1u>;
+  //using Idx = std::size_t;
+  //using BufHost = alpaka::mem::buf::Buf<DevHost,Data,Dim,Idx>;
+  //BufHost bufhostA(alpaka::mem::buf::alloc<Data, Idx>(devHost, nevts*nb*sizeof(MPTRK)));
+  //Data * result(alpaka::mem::view::getPtrNative(bufhostA));
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -227,6 +238,15 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 
 MPHIT* prepareHits(AHIT inputhit) {
   MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));  //fixme, align?
+  //using DevHost = alpaka::dev::DevCpu;
+  //using PltfHost = alpaka::pltf::Pltf<DevHost>;
+  //DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
+  //using Data = MPHIT;
+  //using Dim = alpaka::dim::DimInt<1u>;
+  //using Idx = std::size_t;
+  //using BufHost = alpaka::mem::buf::Buf<DevHost,Data,Dim,Idx>;
+  //BufHost bufhostA(alpaka::mem::buf::alloc<Data, Idx>(devHost, nevts*nb*sizeof(MPHIT)));
+  //Data * result(alpaka::mem::view::getPtrNative(bufhostA));
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -246,13 +266,22 @@ MPHIT* prepareHits(AHIT inputhit) {
 }
 
 #define N bsize
-#pragma acc routine vector nohost
-void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
+//#pragma acc routine vector nohost
+template< typename TAcc>
+inline void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, TAcc const & acc) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
- #pragma acc loop vector
-  for (int n = 0; n < N; ++n)
+// #pragma acc loop vector
+    using Dim = alpaka::dim::Dim<TAcc>;
+    using Idx = alpaka::idx::Idx<TAcc>;
+    using Vec = alpaka::vec::Vec<Dim, Idx>;
+
+    Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
+    Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+//#pragma omp simd
+  for (int n = threadIdx[0]; n < N; n+=threadExtent[0])
+  //for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
@@ -293,13 +322,22 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   }
 }
 
-#pragma acc routine vector nohost
-void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
+//#pragma acc routine vector nohost
+template< typename TAcc>
+inline void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, TAcc const & acc) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
- #pragma acc loop vector
-  for (int n = 0; n < N; ++n)
+// #pragma acc loop vector
+    using Dim = alpaka::dim::Dim<TAcc>;
+    using Idx = alpaka::idx::Idx<TAcc>;
+    using Vec = alpaka::vec::Vec<Dim, Idx>;
+
+    Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
+    Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+//#pragma omp simd
+  for (int n = threadIdx[0]; n < N; n+=threadExtent[0])
+  //for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
@@ -325,15 +363,32 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   }
 }
 
-#pragma acc routine vector nohost
-void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
+//#pragma acc routine vector nohost
+template< typename TAcc>
+inline void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
+//void ALPAKA_FN_ACC propagateToZ(TAcc const & acc, const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar,
- 		struct MP6x6F* errorProp, struct MP6x6F* temp) {
+ 		struct MP6x6F* errorProp, struct MP6x6F* temp, TAcc const & acc) {
+    using Dim = alpaka::dim::Dim<TAcc>;
+    using Idx = alpaka::idx::Idx<TAcc>;
+    using Vec = alpaka::vec::Vec<Dim, Idx>;
+
+    Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
+    Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
   //
- #pragma acc loop vector
-  for (size_t it=0;it<bsize;++it) {	
+//    using Dim = alpaka::dim::Dim<TAcc>;
+//    using Idx = alpaka::idx::Idx<TAcc>;
+//    using Vec = alpaka::vec::Vec<Dim, Idx>;
+//    using Vec1 = alpaka::vec::Vec<alpaka::dim::DimInt<1u>, Idx>;
+//
+//    Vec const globalThreadIdx    = alpaka::idx::getIdx<alpaka::Grid, alpaka::Threads>(acc);
+//    Vec const globalThreadExtent = alpaka::workdiv::getWorkDiv<alpaka::Grid, alpaka::Threads>(acc);
+// #pragma acc loop vector
+  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) {	
+  //for (size_t it=0;it<bsize;it++) {	
     const float zout = z(msP,it);
+    //printf ("running prop: %f\n",zout);
     const float k = q(inChg,it)*100/3.8;
     const float deltaZ = zout - z(inPar,it);
     const float pt = 1./ipt(inPar,it);
@@ -370,11 +425,114 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
     errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
   //
-  MultHelixPropEndcap(errorProp, inErr, temp);
-  MultHelixPropTranspEndcap(errorProp, temp, outErr);
+  MultHelixPropEndcap(errorProp, inErr, temp,acc);
+  MultHelixPropTranspEndcap(errorProp, temp, outErr,acc);
 }
 
+
+
+
+
+template< typename TAcc>
+void ALPAKA_FN_ACC alpaka_kernel(TAcc const & acc, MPTRK* trk, MPHIT* hit, MPTRK* outtrk){
+    //printf ("running kernel\n");
+    using Dim = alpaka::dim::Dim<TAcc>;
+    using Idx = alpaka::idx::Idx<TAcc>;
+    using Vec = alpaka::vec::Vec<Dim, Idx>;
+
+    //Vec const globalThreadIdx    = alpaka::idx::getIdx<alpaka::Grid, alpaka::Threads>(acc);
+    //Vec const globalThreadExtent = alpaka::workdiv::getWorkDiv<alpaka::Grid, alpaka::Threads>(acc);
+//
+  // for (size_t ie=globalThreadIdx[2];ie<nevts;ie+=globalThreadExtent[2]) { // loop over events
+    // for (size_t ib=globalThreadIdx[1];ib<nb;ib+=globalThreadExtent[1]) { // loop over bunches of tracks
+    Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
+    Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+    Vec const blockIdx    = alpaka::idx::getIdx<alpaka::Grid, alpaka::Blocks>(acc);
+    Vec const blockExtent = alpaka::workdiv::getWorkDiv<alpaka::Grid, alpaka::Blocks>(acc);
+
+   //for (size_t ie=blockIdx[0];ie<nevts;ie+=blockExtent[0]) { // loop over events
+   for (size_t ie=threadIdx[2];ie<nevts;ie+=threadExtent[2]) { // loop over bunches of tracks
+     for (size_t ib=threadIdx[1];ib<nb;ib+=threadExtent[1]) { // loop over bunches of tracks
+     //for (size_t ib=blockIdx[1];ib<nb;ib+=blockExtent[1]) { // loop over bunches of tracks
+   //for (size_t ie=0;ie<nevts;++ie) { // loop over events
+     //for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+       //
+       //printf ("running kernel: %f\n",trk[0].par.data[0]);
+       const MPTRK* btracks = bTk(trk, ie, ib);
+       const MPHIT* bhits = bHit(hit, ie, ib);
+       MPTRK* obtracks = bTk(outtrk, ie, ib);
+ 	     struct MP6x6F errorProp, temp;
+       //printf ("running kernel: %f\n",(btracks->par).data[0]);
+       //
+       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+	   &errorProp, &temp, acc); // vectorized function
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 int main (int argc, char* argv[]) {
+
+  using Dim = alpaka::dim::DimInt<3>;
+  using Idx = std::size_t;
+  // set type of accelerator
+  //using Acc = alpaka::acc::AccCpuSerial<Dim, Idx>;
+  //using Acc = alpaka::acc::AccCpuOmp4<Dim, Idx>;
+  //using Acc = alpaka::acc::AccCpuThreads<Dim, Idx>;
+  using Acc = alpaka::acc::AccCpuOmp2Threads<Dim, Idx>;
+  //using Acc = alpaka::acc::AccCpuOmp2Blocks<Dim, Idx>;
+  /////////////
+  //using Acc = alpaka::acc::AccCpuTbbBlocks<Dim, Idx>;
+  //using Acc = alpaka::acc::AccGpuCudaRt<Dim, Idx>;
+
+  using DevAcc = alpaka::dev::Dev<Acc>;
+  using PltfAcc = alpaka::pltf::Pltf<DevAcc>;
+
+  using QueueProperty = alpaka::queue::Blocking;
+  using QueueAcc = alpaka::queue::Queue<Acc,QueueProperty>;
+
+  // select device
+  DevAcc const devAcc(alpaka::pltf::getDevByIdx<PltfAcc>(0u));
+
+  //make queue on device
+  QueueAcc queue(devAcc);
+
+
+  using Vec = alpaka::vec::Vec<Dim,Idx>;
+  //Vec const elementsPerThread(Vec::all(static_cast<Idx>(4)));
+  //Vec const threadsPerBlock(Vec::all(static_cast<Idx>(8)));
+  //Vec const blocksPerGrid(static_cast<Idx>(4),static_cast<Idx>(1));//,static_cast<Idx>(2));
+  //static constexpr uint64_t blockSize = alpaka::dim::DimInt<2>::value; 
+  //Idx blockCount = static_cast<Idx>(alpaka::acc::getAccDevProps<Acc,DevAcc>(devAcc).m_multiProcessorCount*8);
+
+  Vec const elementsPerThread(Vec::all(static_cast<Idx>(1)));
+  //Vec const threadsPerBlock(Vec::all(static_cast<Idx>(8)));
+  Vec const threadsPerBlock(static_cast<Idx>(1),static_cast<Idx>(16),static_cast<Idx>(8));
+  //Vec const threadsPerBlock(Vec::all(static_cast<Idx>(1)));
+  Vec const blocksPerGrid(static_cast<Idx>(1),static_cast<Idx>(1),static_cast<Idx>(1));
+  //Vec const blocksPerGrid(static_cast<Idx>(4),static_cast<Idx>(4),static_cast<Idx>(4));
+
+  using WorkDiv = alpaka::workdiv::WorkDivMembers<Dim, Idx>;
+  //WorkDiv const workDiv( static_cast<Idx>(blockCount), static_cast<Idx>(blockSize),block);
+  //WorkDiv workDiv{ static_cast<Idx>(blockCount), static_cast<Idx>(blockSize),static_cast<Idx>(1)};
+  //WorkDiv const workDiv( blocksPerGrid, static_cast<Idx>(blockSize),elementsPerThread);
+  WorkDiv const workDiv( blocksPerGrid, threadsPerBlock,elementsPerThread);
+
+
 
    int itr;
    ATRK inputtrk = {
@@ -409,14 +567,32 @@ int main (int argc, char* argv[]) {
    MPTRK* trk = prepareTracks(inputtrk);
    MPHIT* hit = prepareHits(inputhit);
    MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
-
-#pragma acc enter data create(trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
-
    gettimeofday(&timecheck, NULL);
    setup_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
+  
+  //using Data_hit = MPHIT;
+  //using Data_trk = MPTRK;
+  //using Dim = alpaka::dim::DimInt<1>;
+  //using Idx = std::size_t;
+  //using BufHost_hit = alpaka::mem::buf::Buf<DevAcc,Data_hit,Dim,Idx>;
+  //using BufHost_trk = alpaka::mem::buf::Buf<DevAcc,Data_trk,Dim,Idx>;
+  //BufHost_hit bufhit_dev(alpaka::mem::buf::alloc<Data_hit, Idx>(devAcc, nevts*nb*sizeof(MPHIT)));
+  //BufHost_trk buftrk_dev(alpaka::mem::buf::alloc<Data_trk, Idx>(devAcc, nevts*nb*sizeof(MPTRK)));
+  //BufHost_trk bufouttrk_dev(alpaka::mem::buf::alloc<Data_trk, Idx>(devAcc, nevts*nb*sizeof(MPTRK)));
+  //using DevHost = alpaka::dev::DevCpu;
+  //using PltfHost = alpaka::pltf::Pltf<DevHost>;
+  //DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
+  //BufHost_trk bufouttrk(alpaka::mem::buf::alloc<Data_trk, Idx>(devHost, nevts*nb*sizeof(MPTRK)));
+  //Data_trk * outtrk_dev(alpaka::mem::view::getPtrNative(bufouttrk_dev));
+  //Data_trk * outtrk(alpaka::mem::view::getPtrNative(bufouttrk));
+  //Data_trk * trk_dev(alpaka::mem::view::getPtrNative(buftrk_dev));
+  //Data_hit * hit_dev(alpaka::mem::view::getPtrNative(bufhit_dev));
+
+
+
    // for (size_t ie=0;ie<nevts;++ie) {
    //   for (size_t it=0;it<ntrks;++it) {
    //     printf("ie=%lu it=%lu\n",ie,it);
@@ -437,35 +613,40 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-#pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb])
+  //copy host to acc
+  //alpaka::mem::view::copy(queue,trk_dev,trk,nevts*nb*sizeof(MPTRK));
+  //alpaka::mem::view::copy(queue,trk_dev->par,trk->par,sizeof(MP6F));
+  //alpaka::mem::view::copy(queue,hit_dev,hit,nevts*nb*sizeof(MPHIT));
 
-{
+
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-#pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk)
-   for (size_t ie=0;ie<nevts;++ie) { // loop over events
-     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-       //
-       const MPTRK* btracks = bTk(trk, ie, ib);
-       const MPHIT* bhits = bHit(hit, ie, ib);
-       MPTRK* obtracks = bTk(outtrk, ie, ib);
- 	   struct MP6x6F errorProp, temp;
-       //
-       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-	   &errorProp, &temp); // vectorized function
-    }
-  }
+     alpaka::kernel::exec<Acc>( queue,workDiv,
+     [] ALPAKA_FN_ACC (Acc const & acc, MPTRK* trk, MPHIT* hit, MPTRK* outtrk){
+     alpaka_kernel(acc, trk,hit,outtrk);
+     }, trk, hit, outtrk);
+
+     alpaka::wait::wait(queue);
+//   for (size_t ie=0;ie<nevts;++ie) { // loop over events
+//     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+//       //
+//       const MPTRK* btracks = bTk(trk, ie, ib);
+//       const MPHIT* bhits = bHit(hit, ie, ib);
+//       MPTRK* obtracks = bTk(outtrk, ie, ib);
+// 	     struct MP6x6F errorProp, temp;
+//       //
+//       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+//	   &errorProp, &temp); // vectorized function
+//    }
+//  }
   } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-}
-
-#pragma acc update host(outtrk[0:nevts*nb])
+//}
 
    gettimeofday(&timecheck, NULL);
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-
 
    // for (size_t ie=0;ie<nevts;++ie) {
    //   for (size_t it=0;it<ntrks;++it) {
@@ -540,10 +721,9 @@ int main (int argc, char* argv[]) {
    printf("track dy/y avg=%f std=%f\n", avgdy, stddy);
    printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
 
-   free(trk);
-   free(hit);
-   free(outtrk);
-#pragma acc exit data delete(trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
+//   free(trk);
+//   free(hit);
+//   free(outtrk);
 
    return 0;
 }

@@ -1,10 +1,11 @@
 #!/bin/bash
 
-source ../mkFit/xeon_scripts/init-env.sh
+source ../../mkFit/xeon_scripts/init-env.sh
 
 rm compare_output.txt
 
-for filename in bin/*; do
+for filename in ../bin/*; do
+  echo ${filename}
   compiler=$(echo ${filename} | cut -f2 -d_)
   mode=$(echo ${filename} | cut -f3 -d_)
   for ((i=0; i<20; i++)); do
