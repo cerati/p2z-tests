@@ -26,7 +26,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NITER 100
 #endif
 #ifndef num_streams
-#define num_streams 10
+#define num_streams 7
 #endif
 
 #ifndef threadsperblockx
