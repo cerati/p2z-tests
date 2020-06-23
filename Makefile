@@ -7,6 +7,7 @@
 #       Set macros used for the input program            #
 ##########################################################
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
+#                   ibm                                  #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
 #               omp4                                     #
 ##########################################################
@@ -93,7 +94,7 @@ CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
 endif
 ifeq ($(COMPILER),openarc)
 CXX=g++
-CSRCS = ./cetus_output/propagate-toz-test_OpenMP4.cpp
+CSRCS = ../cetus_output/propagate-toz-test_OpenMP4.cpp
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
 CLIBS1 += -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper
@@ -115,7 +116,7 @@ CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlar
 endif
 ifeq ($(COMPILER),openarc)
 CXX=g++
-CSRCS = ./cetus_output/propagate-toz-test_OpenACC.cpp
+CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
 CLIBS1 += -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper
