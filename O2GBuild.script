@@ -11,8 +11,8 @@ else
 	inputFile="propagate-toz-test_OpenACC.c"
 fi
 
-if [ ! -f "$inputFile" ]; then
-	echo "input file, $inputFile does not exits; exit"
+if [ ! -f "./src/$inputFile" ]; then
+	echo "input file, ./src/$inputFile does not exits; exit"
 	exit
 fi
 
@@ -40,7 +40,7 @@ if [ "$openarcrt" != "" ]; then
     rm "openarcConf.txt_tmp"
 fi
 
-java -classpath $openarclib/cetus.jar:$openarclib/antlr.jar openacc.exec.ACC2GPUDriver -verbosity=${verLevel} -ompaccInter=${ompaccInter} -gpuConfFile=openarcConf.txt $inputFile
+java -classpath $openarclib/cetus.jar:$openarclib/antlr.jar openacc.exec.ACC2GPUDriver -verbosity=${verLevel} -ompaccInter=${ompaccInter} -gpuConfFile=openarcConf.txt ./src/$inputFile
 
 echo ""
 echo "====> To compile the translated output file:"
