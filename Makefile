@@ -11,7 +11,7 @@
 #               omp4                                     #
 ##########################################################
 COMPILER ?= nvcc
-MODE ?= cuda
+MODE ?= alpaka
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
@@ -200,7 +200,7 @@ endif
 #  ALPAKA Setting #
 ###################
 ifeq ($(MODE),alpaka)
-CSRCS = propagate-toz-test_alpaka.cpp
+CSRCS = propagate-toz-test_alpaka_v2.cpp
 #CSRCS = alpaka_test.cpp
 CLIBS1 = -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include 
 ifeq ($(COMPILER),gcc)
@@ -213,9 +213,10 @@ CLIBS1 += -lm -lgomp
 endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CSRCS = propagate-toz-test_alpaka.cu
+CSRCS = propagate-toz-test_alpaka_v2.cu
 CFLAGS1+= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda 
 CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+#CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 CLIBS1 += -L${CUDALIBDIR} -lcudart -g
 endif
 endif
