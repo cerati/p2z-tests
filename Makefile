@@ -11,11 +11,12 @@
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
 #               omp4                                     #
 ##########################################################
-COMPILER ?= nvcc
+COMPILER ?= gcc
 MODE ?= alpaka
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
+TUNEEVT ?= 0
 STREAMS ?= 0
 NTHREADS ?= 0
 ifneq ($(TUNEB),0)
@@ -23,6 +24,9 @@ TUNE += -Dbsize=$(TUNEB)
 endif
 ifneq ($(TUNETRK),0)
 TUNE += -Dntrks=$(TUNETRK)
+endif
+ifneq ($(TUNEEVT),0)
+TUNE += -Dnevts=$(TUNEEVT)
 endif
 ifneq ($(STREAMS),0)
 TUNE += -Dnum_streams=$(STREAMS)
@@ -201,20 +205,24 @@ endif
 #  ALPAKA Setting #
 ###################
 ifeq ($(MODE),alpaka)
-CSRCS = propagate-toz-test_alpaka_v2.cpp
+CSRCS = propagate-toz-test_alpaka.cpp
 #CSRCS = alpaka_test.cpp
 CLIBS1 = -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include 
 ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
-#TBB_PREIX := /opt/intel
-#CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
 CFLAGS1+= -fopenmp -O3 -I.
 CLIBS1 += -lm -lgomp
 endif
+ifeq ($(COMPILER),icc)
+CXX=icc
+TBB_PREIX := /opt/intel
+CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
+TUNE += -Dnum_streams=1
+endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CSRCS = propagate-toz-test_alpaka_v2.cu
+CSRCS = propagate-toz-test_alpaka.cu
 CFLAGS1+= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda 
 CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 #CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED

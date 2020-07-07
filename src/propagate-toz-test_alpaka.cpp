@@ -19,11 +19,18 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #define nb    ntrks/bsize
+#ifndef nevts
 #define nevts 100
+#endif
 #define smear 0.1
 
 #ifndef NITER
 #define NITER 100
+#endif
+
+//num_steams = accelerator type| 0: omp2threads, 1: tbb
+#ifndef num_streams 
+#define num_streams 0
 #endif
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
@@ -493,10 +500,14 @@ int main (int argc, char* argv[]) {
   //using Acc = alpaka::acc::AccCpuSerial<Dim, Idx>;
   //using Acc = alpaka::acc::AccCpuOmp4<Dim, Idx>;
   //using Acc = alpaka::acc::AccCpuThreads<Dim, Idx>;
-  using Acc = alpaka::acc::AccCpuOmp2Threads<Dim, Idx>;
+  #if num_streams == 0 
+  using Acc = alpaka::acc::AccCpuOmp2Threads<Dim, Idx>; //BEST TYPE
+  #endif
   //using Acc = alpaka::acc::AccCpuOmp2Blocks<Dim, Idx>;
   /////////////
-  //using Acc = alpaka::acc::AccCpuTbbBlocks<Dim, Idx>;
+  #if num_streams == 1 
+  using Acc = alpaka::acc::AccCpuTbbBlocks<Dim, Idx>;
+  #endif
   //using Acc = alpaka::acc::AccGpuCudaRt<Dim, Idx>;
 
   using DevAcc = alpaka::dev::Dev<Acc>;
@@ -519,13 +530,16 @@ int main (int argc, char* argv[]) {
   //static constexpr uint64_t blockSize = alpaka::dim::DimInt<2>::value; 
   //Idx blockCount = static_cast<Idx>(alpaka::acc::getAccDevProps<Acc,DevAcc>(devAcc).m_multiProcessorCount*8);
 
+  #if num_streams == 0
   Vec const elementsPerThread(Vec::all(static_cast<Idx>(1)));
-  //Vec const threadsPerBlock(Vec::all(static_cast<Idx>(8)));
   Vec const threadsPerBlock(static_cast<Idx>(1),static_cast<Idx>(16),static_cast<Idx>(8));
-  //Vec const threadsPerBlock(Vec::all(static_cast<Idx>(1)));
   Vec const blocksPerGrid(static_cast<Idx>(1),static_cast<Idx>(1),static_cast<Idx>(1));
-  //Vec const blocksPerGrid(static_cast<Idx>(4),static_cast<Idx>(4),static_cast<Idx>(4));
-
+  #endif
+  #if num_streams == 1
+  Vec const elementsPerThread(Vec::all(static_cast<Idx>(1)));
+  Vec const threadsPerBlock(Vec::all(static_cast<Idx>(1)));
+  Vec const blocksPerGrid(static_cast<Idx>(1),static_cast<Idx>(1),static_cast<Idx>(1));
+  #endif
   using WorkDiv = alpaka::workdiv::WorkDivMembers<Dim, Idx>;
   //WorkDiv const workDiv( static_cast<Idx>(blockCount), static_cast<Idx>(blockSize),block);
   //WorkDiv workDiv{ static_cast<Idx>(blockCount), static_cast<Idx>(blockSize),static_cast<Idx>(1)};
@@ -657,11 +671,11 @@ int main (int argc, char* argv[]) {
    //   }
    // }
    
-   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
+   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
    printf("data region time=%f (s)\n", (end2-start2)*0.001);
    printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
    printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
-   printf("formatted %i %f %e %f %f %f 0\n",nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks), (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
+   printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER), nevts,ntrks,bsize,nb, (end-start)*0.001, (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001, num_streams);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;

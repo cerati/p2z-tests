@@ -10,64 +10,38 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <alpaka/alpaka.hpp>
 #include <functional>
 #include <iostream>
+#include <cstdint>
 
 #ifndef bsize
-#define bsize 1
+#define bsize 128
 #endif
 #ifndef ntrks
 #define ntrks 9600
 #endif
 
 #define nb    ntrks/bsize
+#ifndef nevts
 #define nevts 100
+#endif
 #define smear 0.1
 
 #ifndef NITER
 #define NITER 100
 #endif
 
-struct HelloWorldKernel
-{
-    //-----------------------------------------------------------------------------
-        template<
-    typename TAcc>
-    ALPAKA_FN_ACC auto operator()(
-        TAcc const & acc) const
-    -> void
-    {
-        using Dim = alpaka::dim::Dim<TAcc>;
-        using Idx = alpaka::idx::Idx<TAcc>;
-        using Vec = alpaka::vec::Vec<Dim, Idx>;
-        using Vec1 = alpaka::vec::Vec<alpaka::dim::DimInt<1u>, Idx>;
-
-Vec const globalThreadIdx = alpaka::idx::getIdx<alpaka::Grid, alpaka::Threads>(acc);
-        Vec const globalThreadExtent = alpaka::workdiv::getWorkDiv<alpaka::Grid, alpaka::Threads>(acc);
-
-        Vec1 const linearizedGlobalThreadIdx = alpaka::idx::mapIdx<1u>(
-            globalThreadIdx,
-            globalThreadExtent);
-
- printf(
-            "[z:%u, y:%u, x:%u][linear:%u] Hello World\n",
-            static_cast<unsigned>(globalThreadIdx[0u]),
-            static_cast<unsigned>(globalThreadIdx[1u]),
-            static_cast<unsigned>(globalThreadIdx[2u]),
-            static_cast<unsigned>(linearizedGlobalThreadIdx[0u]));
-    }
-};
+#define HOSTDEV __host__ __device__
 
 
-
-size_t PosInMtrx(size_t i, size_t j, size_t D) {
+HOSTDEV size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
 }
 
-size_t SymOffsets33(size_t i) {
+HOSTDEV size_t SymOffsets33(size_t i) {
   const size_t offs[9] = {0, 1, 3, 1, 2, 4, 3, 4, 5};
   return offs[i];
 }
 
-size_t SymOffsets66(size_t i) {
+HOSTDEV size_t SymOffsets66(size_t i) {
   const size_t offs[36] = {0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
   return offs[i];
 }
@@ -144,123 +118,110 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-MPTRK* bTk(MPTRK* tracks, size_t ev, size_t ib) {
-  return &(tracks[ib + nb*ev]);
+HOSTDEV MPTRK* bTk(MPTRK* tracks, size_t ev, size_t ib) {
+   return &(tracks[ib + nb*ev]);
 }
-
-const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
-  return &(tracks[ib + nb*ev]);
+ 
+HOSTDEV const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
+   return &(tracks[ib + nb*ev]);
 }
-
-float q(const MP1I* bq, size_t it){
+ 
+HOSTDEV float q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 //
-float par(const MP6F* bpars, size_t it, size_t ipar){
+HOSTDEV float par(const MP6F* bpars, size_t it, size_t ipar){
   return (*bpars).data[it + ipar*bsize];
 }
-float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
-float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
-float z    (const MP6F* bpars, size_t it){ return par(bpars, it, 2); }
-float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
-float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
-float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
+HOSTDEV float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
+HOSTDEV float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
+HOSTDEV float z    (const MP6F* bpars, size_t it){ return par(bpars, it, 2); }
+HOSTDEV float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
+HOSTDEV float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
+HOSTDEV float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
 //
-float par(const MPTRK* btracks, size_t it, size_t ipar){
+HOSTDEV float par(const MPTRK* btracks, size_t it, size_t ipar){
   return par(&(*btracks).par,it,ipar);
 }
-float x    (const MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
-float y    (const MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
-float z    (const MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
-float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
-float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
-float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
+HOSTDEV float x    (const MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
+HOSTDEV float y    (const MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
+HOSTDEV float z    (const MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
+HOSTDEV float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
+HOSTDEV float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
+HOSTDEV float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
 //
-float par(const MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
+HOSTDEV float par(const MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
   const MPTRK* btracks = bTk(tracks, ev, ib);
   size_t it = tk % bsize;
   return par(btracks, it, ipar);
 }
-float x    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
-float y    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
-float z    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
-float ipt  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
-float phi  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
-float theta(const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
+HOSTDEV float x    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
+HOSTDEV float y    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
+HOSTDEV float z    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
+HOSTDEV float ipt  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
+HOSTDEV float phi  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
+HOSTDEV float theta(const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
 //
-void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
+HOSTDEV void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
   (*bpars).data[it + ipar*bsize] = val;
 }
-void setx    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 0, val); }
-void sety    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 1, val); }
-void setz    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 2, val); }
-void setipt  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 3, val); }
-void setphi  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 4, val); }
-void settheta(MP6F* bpars, size_t it, float val){ setpar(bpars, it, 5, val); }
+HOSTDEV void setx    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 0, val); }
+HOSTDEV void sety    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 1, val); }
+HOSTDEV void setz    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 2, val); }
+HOSTDEV void setipt  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 3, val); }
+HOSTDEV void setphi  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 4, val); }
+HOSTDEV void settheta(MP6F* bpars, size_t it, float val){ setpar(bpars, it, 5, val); }
 //
-void setpar(MPTRK* btracks, size_t it, size_t ipar, float val){
+HOSTDEV void setpar(MPTRK* btracks, size_t it, size_t ipar, float val){
   setpar(&(*btracks).par,it,ipar,val);
 }
-void setx    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 0, val); }
-void sety    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 1, val); }
-void setz    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 2, val); }
-void setipt  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 3, val); }
-void setphi  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 4, val); }
-void settheta(MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val); }
-
-const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
+HOSTDEV void setx    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 0, val); }
+HOSTDEV void sety    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 1, val); }
+HOSTDEV void setz    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 2, val); }
+HOSTDEV void setipt  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 3, val); }
+HOSTDEV void setphi  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 4, val); }
+HOSTDEV void settheta(MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val); }
+ 
+HOSTDEV const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
 //
-float pos(const MP3F* hpos, size_t it, size_t ipar){
+HOSTDEV float pos(const MP3F* hpos, size_t it, size_t ipar){
   return (*hpos).data[it + ipar*bsize];
 }
-float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
-float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
-float z(const MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
+HOSTDEV float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
+HOSTDEV float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
+HOSTDEV float z(const MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
 //
-float pos(const MPHIT* hits, size_t it, size_t ipar){
+HOSTDEV float pos(const MPHIT* hits, size_t it, size_t ipar){
   return pos(&(*hits).pos,it,ipar);
 }
-float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
-float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
-float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
+HOSTDEV float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
+HOSTDEV float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
+HOSTDEV float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
 //
-float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
+HOSTDEV float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
   const MPHIT* bhits = bHit(hits, ev, ib);
   size_t it = tk % bsize;
   return pos(bhits,it,ipar);
 }
-float x(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
-float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
-float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
+HOSTDEV float x(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
+HOSTDEV float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
+HOSTDEV float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
 MPTRK* prepareTracks(ATRK inputtrk) {
-  //MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
-//  using DevHost = alpaka::dev::DevCpu;
-//  using PltfHost = alpaka::pltf::Pltf<DevHost>;
-//  DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
-//  using Data = MPTRK;
-//  using Dim = alpaka::dim::DimInt<1u>;
-//  using Idx = std::size_t;
-//  using BufHost = alpaka::mem::buf::Buf<DevHost,Data,Dim,Idx>;
-//  BufHost bufhostA(alpaka::mem::buf::alloc<Data, Idx>(devHost, nevts*nb*sizeof(MPTRK)));
-//  Data * result(alpaka::mem::view::getPtrNative(bufhostA));
-  using Dim = alpaka::dim::DimInt<1u>;
-  using Idx = std::size_t;
-  using Host = alpaka::acc::AccCpuSerial<Dim,Idx>;
-  using HostQueueProperty = alpaka::queue::Blocking;
-  using HostQueue = alpaka::queue::Queue<Host,HostQueueProperty>;
-  using DevHost = alpaka::dev::Dev<Host>;
-  using PltfHost = alpaka::pltf::Pltf<DevHost>;
-  DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
-  HostQueue hostQueue(devHost);
-
-  using BufHost = alpaka::mem::buf::Buf<DevHost, MPTRK, Dim,Idx>;
-  BufHost hostBuffer(alpaka::mem::buf::alloc<MPTRK, Idx>(devHost, nevts*nb*sizeof(MPTRK)));
-  MPTRK * const result = (MPTRK*) alpaka::mem::view::getPtrNative(hostBuffer);
+  MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
+  //using DevHost = alpaka::dev::DevCpu;
+  //using PltfHost = alpaka::pltf::Pltf<DevHost>;
+  //DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
+  //using Data = MPTRK;
+  //using Dim = alpaka::dim::DimInt<1u>;
+  //using Idx = std::size_t;
+  //using BufHost = alpaka::mem::buf::Buf<DevHost,Data,Dim,Idx>;
+  //BufHost bufhostA(alpaka::mem::buf::alloc<Data, Idx>(devHost, nevts*nb*sizeof(MPTRK)));
+  //Data * result(alpaka::mem::view::getPtrNative(bufhostA));
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -278,34 +239,20 @@ MPTRK* prepareTracks(ATRK inputtrk) {
       }
     }
   }
-  printf("result: %f\n",result[0].par.data[0]);
   return result;
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  //MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));  //fixme, align?
-//  using DevHost = alpaka::dev::DevCpu;
-//  using PltfHost = alpaka::pltf::Pltf<DevHost>;
-//  DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
-//  using Data = MPHIT;
-//  using Dim = alpaka::dim::DimInt<1u>;
-//  using Idx = std::size_t;
-//  using BufHost = alpaka::mem::buf::Buf<DevHost,Data,Dim,Idx>;
-//  BufHost bufhostA(alpaka::mem::buf::alloc<Data, Idx>(devHost, nevts*nb*sizeof(MPHIT)));
-//  Data * result(alpaka::mem::view::getPtrNative(bufhostA));
-  using Dim = alpaka::dim::DimInt<1u>;
-  using Idx = std::size_t;
-  using Host = alpaka::acc::AccCpuSerial<Dim,Idx>;
-  using HostQueueProperty = alpaka::queue::Blocking;
-  using HostQueue = alpaka::queue::Queue<Host,HostQueueProperty>;
-  using DevHost = alpaka::dev::Dev<Host>;
-  using PltfHost = alpaka::pltf::Pltf<DevHost>;
-  DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
-  HostQueue hostQueue(devHost);
-
-  using BufHost = alpaka::mem::buf::Buf<DevHost, MPHIT, Dim,Idx>;
-  BufHost hostBuffer(alpaka::mem::buf::alloc<MPHIT, Idx>(devHost, nevts*nb*sizeof(MPHIT)));
-  MPHIT * result = alpaka::mem::view::getPtrNative(hostBuffer);
+  MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));  //fixme, align?
+  //using DevHost = alpaka::dev::DevCpu;
+  //using PltfHost = alpaka::pltf::Pltf<DevHost>;
+  //DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
+  //using Data = MPHIT;
+  //using Dim = alpaka::dim::DimInt<1u>;
+  //using Idx = std::size_t;
+  //using BufHost = alpaka::mem::buf::Buf<DevHost,Data,Dim,Idx>;
+  //BufHost bufhostA(alpaka::mem::buf::alloc<Data, Idx>(devHost, nevts*nb*sizeof(MPHIT)));
+  //Data * result(alpaka::mem::view::getPtrNative(bufhostA));
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -321,15 +268,13 @@ MPHIT* prepareHits(AHIT inputhit) {
       }
     }
   }
-  printf("result: %f\n",result[0].pos.data[0]);
-  std::cout<<result<<":"<<&(result[0].pos.data[0])<<std::endl;
   return result;
 }
 
 #define N bsize
 //#pragma acc routine vector nohost
 template< typename TAcc>
-void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, TAcc const & acc) {
+__host__ __device__ inline void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, TAcc const & acc) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
@@ -341,7 +286,7 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, TAcc cons
     Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
     Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 //#pragma omp simd
-  for (int n = threadIdx[1]; n < N; n+=threadExtent[1])
+  for (int n = threadIdx[0]; n < N; n+=threadExtent[0])
   //for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -385,7 +330,7 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, TAcc cons
 
 //#pragma acc routine vector nohost
 template< typename TAcc>
-void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, TAcc const & acc) {
+__host__ __device__ inline void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, TAcc const & acc) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
@@ -397,7 +342,7 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, TAc
     Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
     Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 //#pragma omp simd
-  for (int n = threadIdx[1]; n < N; n+=threadExtent[1])
+  for (int n = threadIdx[0]; n < N; n+=threadExtent[0])
   //for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -426,7 +371,7 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, TAc
 
 //#pragma acc routine vector nohost
 template< typename TAcc>
-void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
+__host__ __device__ inline void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 //void ALPAKA_FN_ACC propagateToZ(TAcc const & acc, const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar,
@@ -446,7 +391,7 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 //    Vec const globalThreadIdx    = alpaka::idx::getIdx<alpaka::Grid, alpaka::Threads>(acc);
 //    Vec const globalThreadExtent = alpaka::workdiv::getWorkDiv<alpaka::Grid, alpaka::Threads>(acc);
 // #pragma acc loop vector
-  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1]) {	
+  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) {	
   //for (size_t it=0;it<bsize;it++) {	
     const float zout = z(msP,it);
     //printf ("running prop: %f\n",zout);
@@ -488,8 +433,6 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
   //
   MultHelixPropEndcap(errorProp, inErr, temp,acc);
   MultHelixPropTranspEndcap(errorProp, temp, outErr,acc);
-  //MultHelixPropEndcap(errorProp, inErr, temp);
-  //MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }
 
 
@@ -514,8 +457,9 @@ void ALPAKA_FN_ACC alpaka_kernel(TAcc const & acc, MPTRK* trk, MPHIT* hit, MPTRK
     Vec const blockExtent = alpaka::workdiv::getWorkDiv<alpaka::Grid, alpaka::Blocks>(acc);
 
    for (size_t ie=blockIdx[0];ie<nevts;ie+=blockExtent[0]) { // loop over events
-     for (size_t ib=threadIdx[0];ib<nb;ib+=threadExtent[0]) { // loop over bunches of tracks
-     //for (size_t ib=blockIdx[0];ib<nb;ib+=blockExtent[0]) { // loop over bunches of tracks
+   //for (size_t ie=threadIdx[0];ie<nevts;ie+=threadExtent[0]) { // loop over bunches of tracks
+     for (size_t ib=threadIdx[1];ib<nb;ib+=threadExtent[1]) { // loop over bunches of tracks
+     //for (size_t ib=blockIdx[1];ib<nb;ib+=blockExtent[1]) { // loop over bunches of tracks
    //for (size_t ie=0;ie<nevts;++ie) { // loop over events
      //for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
@@ -534,11 +478,36 @@ void ALPAKA_FN_ACC alpaka_kernel(TAcc const & acc, MPTRK* trk, MPHIT* hit, MPTRK
 
 
 
+void transfer(MPTRK* trk, MPHIT* hit, MPTRK* trk_dev, MPHIT* hit_dev){
 
+  cudaMemcpy(trk_dev, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->par, &trk->par, sizeof(MP6F), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->par).data), &((trk->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->cov, &trk->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->q, &trk->q, sizeof(MP1I), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice);
 
+  cudaMemcpy(hit_dev,hit,nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
+  cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
+  cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice);
+  cudaMemcpy(&(hit_dev->cov).data,&(hit->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice);
+}
 
-
-
+void transfer_back(MPTRK* trk, MPTRK* trk_host){
+  cudaMemcpy(trk_host, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&trk_host->par, &trk->par, sizeof(MP6F), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&((trk_host->par).data), &((trk->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&trk_host->cov, &trk->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&((trk_host->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&trk_host->q, &trk->q, sizeof(MP1I), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&((trk_host->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&trk_host->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&((trk_host->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyDeviceToHost);
+}
 
 
 
@@ -549,8 +518,9 @@ void ALPAKA_FN_ACC alpaka_kernel(TAcc const & acc, MPTRK* trk, MPHIT* hit, MPTRK
 
 int main (int argc, char* argv[]) {
 
-  using Dim = alpaka::dim::DimInt<3>;
+  using Dim = alpaka::dim::DimInt<2u>;
   using Idx = std::size_t;
+  //using Idx = float;
   // set type of accelerator
   //using Acc = alpaka::acc::AccCpuSerial<Dim, Idx>;
   //using Acc = alpaka::acc::AccCpuOmp4<Dim, Idx>;
@@ -567,12 +537,20 @@ int main (int argc, char* argv[]) {
   using QueueProperty = alpaka::queue::Blocking;
   using QueueAcc = alpaka::queue::Queue<Acc,QueueProperty>;
 
+
+  using Host = alpaka::acc::AccCpuSerial<Dim, Idx>;
+  using HostQueueProperty = alpaka::queue::Blocking;
+  using QueueHost = alpaka::queue::Queue<Host, HostQueueProperty>;
+  using DevHost = alpaka::dev::Dev<Host>;
+  using PltfHost = alpaka::pltf::Pltf<DevHost>;
+  
   // select device
   DevAcc const devAcc(alpaka::pltf::getDevByIdx<PltfAcc>(0u));
+  DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
 
   //make queue on device
-  QueueAcc queue(devAcc);
-
+  QueueAcc accQueue(devAcc);
+  QueueHost hostQueue(devHost);
 
   using Vec = alpaka::vec::Vec<Dim,Idx>;
   //Vec const elementsPerThread(Vec::all(static_cast<Idx>(4)));
@@ -581,10 +559,14 @@ int main (int argc, char* argv[]) {
   //static constexpr uint64_t blockSize = alpaka::dim::DimInt<2>::value; 
   //Idx blockCount = static_cast<Idx>(alpaka::acc::getAccDevProps<Acc,DevAcc>(devAcc).m_multiProcessorCount*8);
 
-  Vec const elementsPerThread(Vec::all(static_cast<Idx>(1)));
-  Vec const threadsPerBlock(Vec::all(static_cast<Idx>(1)));
+  Vec const elementsPerThread(Vec::all(static_cast<Idx>(32)));
   //Vec const threadsPerBlock(Vec::all(static_cast<Idx>(8)));
-  Vec const blocksPerGrid(static_cast<Idx>(4),static_cast<Idx>(8),static_cast<Idx>(16));
+  Vec const threadsPerBlock(static_cast<Idx>(16),static_cast<Idx>(16));//,static_cast<Idx>(1));
+  //Vec const threadsPerBlock(Vec::all(static_cast<Idx>(1)));
+  Vec const blocksPerGrid(static_cast<Idx>(20),static_cast<Idx>(1));//,static_cast<Idx>(1));
+  //Vec const blocksPerGrid(Vec::all(static_cast<Idx>(1)));
+  //Vec const blocksPerGrid(static_cast<Idx>(4),static_cast<Idx>(4),static_cast<Idx>(4));
+  //Vec const extent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(Host);
 
   using WorkDiv = alpaka::workdiv::WorkDivMembers<Dim, Idx>;
   //WorkDiv const workDiv( static_cast<Idx>(blockCount), static_cast<Idx>(blockSize),block);
@@ -622,174 +604,235 @@ int main (int argc, char* argv[]) {
    long start2, end2;
    struct timeval timecheck;
 
-  using Dim2 = alpaka::dim::DimInt<1u>;
-  using Idx = std::size_t;
-  using Host = alpaka::acc::AccCpuSerial<Dim2,Idx>;
-  using HostQueueProperty = alpaka::queue::Blocking;
-  using HostQueue = alpaka::queue::Queue<Host,HostQueueProperty>;
-  using DevHost = alpaka::dev::Dev<Host>;
-  using PltfHost = alpaka::pltf::Pltf<DevHost>;
-  DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
-  HostQueue hostQueue(devHost);
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    MPTRK* trk = prepareTracks(inputtrk);
-    //MPTRK* trk;
-   //MPHIT* hit = prepareHits(inputhit);
-    MPHIT* hit;
-  //alpaka::mem::view::copy(hostQueue,hit,prepareTracks(inputtrk),nevts*nb*sizeof(MPTRK));
-  alpaka::mem::view::copy(hostQueue,hit,prepareHits(inputhit),nevts*nb*sizeof(MPHIT));
-   //printf("host: %f\n",hit->pos.data[0]);
-   //std::cout<<hit<<":"<<(hit->pos.data[0])<<std::endl;
-   printf("host: %f\n",hit[0].pos.data[0]);
+   MPHIT* hit = prepareHits(inputhit);
+   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+   MPTRK* trk_dev;
+   MPHIT* hit_dev;
+   cudaMalloc((MPTRK**)&trk_dev,nevts*nb*sizeof(MPTRK));
+   cudaMalloc((MPHIT**)&hit_dev,nevts*nb*sizeof(MPHIT));
+   MPTRK* outtrk_dev;
+   cudaMalloc((MPTRK**)&outtrk_dev,nevts*nb*sizeof(MPTRK));
+   //MPTRK* outtrkx = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+
+   
+
+//    constexpr Idx nElementsPerDim = 4;///*nevts*nb*/sizeof(MPTRK);
+//    //const Vec extents(Vec::all(static_cast<Idx>(nElementsPerDim)));
+//    const Vec extents(Vec::all(static_cast<std::uint32_t>(nElementsPerDim)));
+//   using ViewHosttrk = alpaka::mem::view::ViewPlainPtr<DevHost, MPTRK, Dim, Idx>;
+//   ViewHosttrk hostViewPlainPtr_trk(trk, devHost,extents);
+//   MPTRK* const trk_host = alpaka::mem::view::getPtrNative(hostViewPlainPtr_trk);
+//   ViewHosttrk hostViewPlainPtr_outtrk(outtrkx, devHost,extents);
+//   MPTRK* const outtrk_host = alpaka::mem::view::getPtrNative(hostViewPlainPtr_outtrk);
+//   ViewHosttrk hostViewPlainPtr_outtrk_fin(outtrk, devHost,extents);
+//   MPTRK* const outtrk_hostfin = alpaka::mem::view::getPtrNative(hostViewPlainPtr_outtrk_fin);
+//   using ViewHosthit = alpaka::mem::view::ViewPlainPtr<DevHost, MPHIT, Dim, Idx>;
+//   ViewHosthit hostViewPlainPtr_hit(hit, devHost,extents);
+//   MPHIT* const hit_host = alpaka::mem::view::getPtrNative(hostViewPlainPtr_hit);
+//
+//
+//
+//
+//   using BufAcctrk = alpaka::mem::buf::Buf<DevAcc,MPTRK,Dim,Idx>;
+//   using BufAcchit = alpaka::mem::buf::Buf<DevAcc,MPHIT,Dim,Idx>;
+//   BufAcctrk trkbuf(alpaka::mem::buf::alloc<MPTRK,Idx>(devAcc,extents));
+//   BufAcctrk outtrkbuf(alpaka::mem::buf::alloc<MPTRK,Idx>(devAcc,extents));
+//   //BufAcctrk trkbuf(alpaka::mem::buf::alloc<MPTRK,Idx>(devAcc,nevts*nb*sizeof(MPTRK)));
+//   //BufAcchit hitbuf(alpaka::mem::buf::alloc<MPHIT,Idx>(devAcc,nevts*nb*sizeof(MPHIT)));
+//   BufAcchit hitbuf(alpaka::mem::buf::alloc<MPHIT,Idx>(devAcc,extents));
+//
+//   MPTRK* outtrk_devx;
+//   cudaMalloc((MPTRK**)&outtrk_devx,nevts*nb*sizeof(MPTRK));
+//   using ViewDevouttrk = alpaka::mem::view::ViewPlainPtr<DevAcc, MPTRK, Dim, Idx>;
+//   ViewDevouttrk hostViewPlainPtr_outtrkdev(outtrk_devx, devAcc,extents);
+//   //MPTRK* const trk_host = alpaka::mem::view::getPtrNative(hostViewPlainPtr_trk);
+//   //MPHIT* hit_dev;
+//   //cudaMalloc((MPHIT**)&hit_dev,nevts*nb*sizeof(MPHIT));
+//   //using ViewDevtrk = alpaka::mem::view::ViewPlainPtr<DevAcc, MPHIT, Dim, Idx>;
+//   //ViewDevtrk hitbuf(hit_dev, devAcc,extents);
+//   //MPTRK* const trkbuf = alpaka::mem::view::getPtrNative(trkbufx);
+//   //MPTRK* trkbuf = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
+//   alpaka::mem::view::copy(accQueue, hitbuf, hostViewPlainPtr_hit,extents);
+//   alpaka::mem::view::copy(accQueue, trkbuf, hostViewPlainPtr_trk,extents);
+//   //alpaka::mem::view::copy(devQueue, trkbuf, hostViewPlainPtr_trk,nevts*nb*sizeof(MPTRK));
+//   //alpaka::mem::view::copy(devQueue, hitbuf, hostViewPlainPtr_hit,nevts*nb*sizeof(MPHIT));
+//
+//   MPTRK * const trk_dev = alpaka::mem::view::getPtrNative(trkbuf);
+//   MPTRK * const outtrk_dev = alpaka::mem::view::getPtrNative(hostViewPlainPtr_outtrkdev);
+//   //MPTRK * const outtrk_dev = alpaka::mem::view::getPtrNative(outtrkbuf);
+//   MPHIT * const hit_dev = alpaka::mem::view::getPtrNative(hitbuf);
+
    gettimeofday(&timecheck, NULL);
    setup_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
-//   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
-//  
-//  //using Data_hit = MPHIT;
-//  //using Data_trk = MPTRK;
-//  //using Dim = alpaka::dim::DimInt<1>;
-//  //using Idx = std::size_t;
-//  //using BufHost_hit = alpaka::mem::buf::Buf<DevAcc,Data_hit,Dim,Idx>;
-//  //using BufHost_trk = alpaka::mem::buf::Buf<DevAcc,Data_trk,Dim,Idx>;
-//  //BufHost_hit bufhit_dev(alpaka::mem::buf::alloc<Data_hit, Idx>(devAcc, nevts*nb*sizeof(MPHIT)));
-//  //BufHost_trk buftrk_dev(alpaka::mem::buf::alloc<Data_trk, Idx>(devAcc, nevts*nb*sizeof(MPTRK)));
-//  //BufHost_trk bufouttrk_dev(alpaka::mem::buf::alloc<Data_trk, Idx>(devAcc, nevts*nb*sizeof(MPTRK)));
-//  //using DevHost = alpaka::dev::DevCpu;
-//  //using PltfHost = alpaka::pltf::Pltf<DevHost>;
-//  //DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
-//  //BufHost_trk bufouttrk(alpaka::mem::buf::alloc<Data_trk, Idx>(devHost, nevts*nb*sizeof(MPTRK)));
-//  //Data_trk * outtrk_dev(alpaka::mem::view::getPtrNative(bufouttrk_dev));
-//  //Data_trk * outtrk(alpaka::mem::view::getPtrNative(bufouttrk));
-//  //Data_trk * trk_dev(alpaka::mem::view::getPtrNative(buftrk_dev));
-//  //Data_hit * hit_dev(alpaka::mem::view::getPtrNative(bufhit_dev));
-//
-//
-//
-//   // for (size_t ie=0;ie<nevts;++ie) {
-//   //   for (size_t it=0;it<ntrks;++it) {
-//   //     printf("ie=%lu it=%lu\n",ie,it);
-//   //     printf("hx=%f\n",x(&hit,ie,it));
-//   //     printf("hy=%f\n",y(&hit,ie,it));
-//   //     printf("hz=%f\n",z(&hit,ie,it));
-//   //     printf("tx=%f\n",x(&trk,ie,it));
-//   //     printf("ty=%f\n",y(&trk,ie,it));
-//   //     printf("tz=%f\n",z(&trk,ie,it));
-//   //   }
-//   // }
-//  
-//
-//   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
-//   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
-//   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
-//
-//   gettimeofday(&timecheck, NULL);
-//   start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-//
-//  //copy host to acc
-//  printf("test 1\n");
-//  //alpaka::mem::view::copy(queue,trk_dev,trk,nevts*nb*sizeof(MPTRK));
-//  printf("test 2\n");
-//  //alpaka::mem::view::copy(queue,trk_dev->par,trk->par,sizeof(MP6F));
-//  printf("test 3\n");
-//  
-//
-//HelloWorldKernel helloWorldKernel;
-//alpaka::kernel::exec<Acc>(queue,workDiv,helloWorldKernel);
-//alpaka::wait::wait(queue);
-//
-//  //alpaka::mem::view::copy(queue,hit_dev,hit,nevts*nb*sizeof(MPHIT));
-//
-//
-//
-//   gettimeofday(&timecheck, NULL);
-//   start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-//   for(itr=0; itr<NITER; itr++) {
-//     alpaka::kernel::exec<Acc>( queue,workDiv,
-//     [] ALPAKA_FN_ACC (Acc const & acc, MPTRK* trk, MPHIT* hit, MPTRK* outtrk){
-//     alpaka_kernel(acc, trk,hit,outtrk);
-//     }, trk, hit, outtrk);
-//
-//     alpaka::wait::wait(queue);
-//  } //end of itr loop
-//   gettimeofday(&timecheck, NULL);
-//   end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-//
-//
-//   gettimeofday(&timecheck, NULL);
-//   end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-//
-//   
-//   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-//   printf("data region time=%f (s)\n", (end2-start2)*0.001);
-//   printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
-//   printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
-//   printf("formatted %i %f %e %f %f %f 0\n",nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks), (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
-//
-//   float avgx = 0, avgy = 0, avgz = 0;
-//   float avgdx = 0, avgdy = 0, avgdz = 0;
-//   for (size_t ie=0;ie<nevts;++ie) {
-//     for (size_t it=0;it<ntrks;++it) {
-//       float x_ = x(outtrk,ie,it);
-//       float y_ = y(outtrk,ie,it);
-//       float z_ = z(outtrk,ie,it);
-//       avgx += x_;
-//       avgy += y_;
-//       avgz += z_;
-//       float hx_ = x(hit,ie,it);
-//       float hy_ = y(hit,ie,it);
-//       float hz_ = z(hit,ie,it);
-//       avgdx += (x_-hx_)/x_;
-//       avgdy += (y_-hy_)/y_;
-//       avgdz += (z_-hz_)/z_;
-//     }
-//   }
-//   avgx = avgx/float(nevts*ntrks);
-//   avgy = avgy/float(nevts*ntrks);
-//   avgz = avgz/float(nevts*ntrks);
-//   avgdx = avgdx/float(nevts*ntrks);
-//   avgdy = avgdy/float(nevts*ntrks);
-//   avgdz = avgdz/float(nevts*ntrks);
-//
-//   float stdx = 0, stdy = 0, stdz = 0;
-//   float stddx = 0, stddy = 0, stddz = 0;
-//   for (size_t ie=0;ie<nevts;++ie) {
-//     for (size_t it=0;it<ntrks;++it) {
-//       float x_ = x(outtrk,ie,it);
-//       float y_ = y(outtrk,ie,it);
-//       float z_ = z(outtrk,ie,it);
-//       stdx += (x_-avgx)*(x_-avgx);
-//       stdy += (y_-avgy)*(y_-avgy);
-//       stdz += (z_-avgz)*(z_-avgz);
-//       float hx_ = x(hit,ie,it);
-//       float hy_ = y(hit,ie,it);
-//       float hz_ = z(hit,ie,it);
-//       stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
-//       stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
-//       stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
-//     }
-//   }
-//
-//   stdx = sqrtf(stdx/float(nevts*ntrks));
-//   stdy = sqrtf(stdy/float(nevts*ntrks));
-//   stdz = sqrtf(stdz/float(nevts*ntrks));
-//   stddx = sqrtf(stddx/float(nevts*ntrks));
-//   stddy = sqrtf(stddy/float(nevts*ntrks));
-//   stddz = sqrtf(stddz/float(nevts*ntrks));
-//
-//   printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
-//   printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
-//   printf("track z avg=%f std/avg=%f\n", avgz, fabs(stdz/avgz));
-//   printf("track dx/x avg=%f std=%f\n", avgdx, stddx);
-//   printf("track dy/y avg=%f std=%f\n", avgdy, stddy);
-//   printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
-//
-////   free(trk);
-////   free(hit);
-////   free(outtrk);
-//
+  
+  //using Data_hit = MPHIT;
+  //using Data_trk = MPTRK;
+  //using Dim = alpaka::dim::DimInt<1>;
+  //using Idx = std::size_t;
+  //using BufHost_hit = alpaka::mem::buf::Buf<DevAcc,Data_hit,Dim,Idx>;
+  //using BufHost_trk = alpaka::mem::buf::Buf<DevAcc,Data_trk,Dim,Idx>;
+  //BufHost_hit bufhit_dev(alpaka::mem::buf::alloc<Data_hit, Idx>(devAcc, nevts*nb*sizeof(MPHIT)));
+  //BufHost_trk buftrk_dev(alpaka::mem::buf::alloc<Data_trk, Idx>(devAcc, nevts*nb*sizeof(MPTRK)));
+  //BufHost_trk bufouttrk_dev(alpaka::mem::buf::alloc<Data_trk, Idx>(devAcc, nevts*nb*sizeof(MPTRK)));
+  //using DevHost = alpaka::dev::DevCpu;
+  //using PltfHost = alpaka::pltf::Pltf<DevHost>;
+  //DevHost const devHost(alpaka::pltf::getDevByIdx<PltfHost>(0u));
+  //BufHost_trk bufouttrk(alpaka::mem::buf::alloc<Data_trk, Idx>(devHost, nevts*nb*sizeof(MPTRK)));
+  //Data_trk * outtrk_dev(alpaka::mem::view::getPtrNative(bufouttrk_dev));
+  //Data_trk * outtrk(alpaka::mem::view::getPtrNative(bufouttrk));
+  //Data_trk * trk_dev(alpaka::mem::view::getPtrNative(buftrk_dev));
+  //Data_hit * hit_dev(alpaka::mem::view::getPtrNative(bufhit_dev));
+
+
+
+   // for (size_t ie=0;ie<nevts;++ie) {
+   //   for (size_t it=0;it<ntrks;++it) {
+   //     printf("ie=%lu it=%lu\n",ie,it);
+   //     printf("hx=%f\n",x(&hit,ie,it));
+   //     printf("hy=%f\n",y(&hit,ie,it));
+   //     printf("hz=%f\n",z(&hit,ie,it));
+   //     printf("tx=%f\n",x(&trk,ie,it));
+   //     printf("ty=%f\n",y(&trk,ie,it));
+   //     printf("tz=%f\n",z(&trk,ie,it));
+   //   }
+   // }
+  
+
+   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
+   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
+   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
+
+   gettimeofday(&timecheck, NULL);
+   start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
+  //copy host to acc
+  //alpaka::mem::view::copy(queue,trk_dev,trk,nevts*nb*sizeof(MPTRK));
+  //alpaka::mem::view::copy(queue,trk_dev->par,trk->par,sizeof(MP6F));
+  //alpaka::mem::view::copy(queue,hit_dev,hit,nevts*nb*sizeof(MPHIT));
+
+   transfer(trk,hit, trk_dev,hit_dev);
+
+   gettimeofday(&timecheck, NULL);
+   start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   for(itr=0; itr<NITER; itr++) {
+     //alpaka::kernel::exec<Host>( hostQueue,workDiv,
+     //[] ALPAKA_FN_ACC (Host const & host, MPTRK* trk_host, MPHIT* hit_host, MPTRK* outtrk_host){
+     //alpaka_kernel(host, trk_host,hit_host,outtrk_host);
+     //}, trk_host, hit_host, outtrk_host);
+     //alpaka::wait::wait(hostQueue);
+     
+    alpaka::kernel::exec<Acc>( accQueue,workDiv,
+     [] ALPAKA_FN_ACC (Acc const & acc, MPTRK* trk_dev, MPHIT* hit_dev, MPTRK* outtrk_dev){
+     alpaka_kernel(acc, trk_dev,hit_dev,outtrk_dev);
+     }, trk_dev, hit_dev, outtrk_dev);
+
+     alpaka::wait::wait(accQueue);
+//   for (size_t ie=0;ie<nevts;++ie) { // loop over events
+//     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+//       //
+//       const MPTRK* btracks = bTk(trk, ie, ib);
+//       const MPHIT* bhits = bHit(hit, ie, ib);
+//       MPTRK* obtracks = bTk(outtrk, ie, ib);
+// 	     struct MP6x6F errorProp, temp;
+//       //
+//       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+//	   &errorProp, &temp); // vectorized function
+//    }
+//  }
+  } //end of itr loop
+   gettimeofday(&timecheck, NULL);
+   end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+//}
+   //alpaka::mem::view::copy(accQueue, hostViewPlainPtr_outtrk_fin,hostViewPlainPtr_outtrkdev,extents);
+   //alpaka::wait::wait(accQueue);
+   //alpaka::mem::view::copy(hostQueue, hostViewPlainPtr_outtrk_fin,hostViewPlainPtr_outtrk,extents);
+   //alpaka::wait::wait(hostQueue);
+   transfer_back(outtrk_dev,outtrk);
+   gettimeofday(&timecheck, NULL);
+   end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
+   // for (size_t ie=0;ie<nevts;++ie) {
+   //   for (size_t it=0;it<ntrks;++it) {
+   //     printf("ie=%lu it=%lu\n",ie,it);
+   //     printf("tx=%f\n",x(&outtrk,ie,it));
+   //     printf("ty=%f\n",y(&outtrk,ie,it));
+   //     printf("tz=%f\n",z(&outtrk,ie,it));
+   //   }
+   // }
+   
+   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
+   printf("data region time=%f (s)\n", (end2-start2)*0.001);
+   printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
+   printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
+   printf("formatted %i %i %i %i %i %f %f %f %f 0\n",int(NITER),nevts,ntrks,bsize,nb, (end-start)*0.001, (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
+
+   float avgx = 0, avgy = 0, avgz = 0;
+   float avgdx = 0, avgdy = 0, avgdz = 0;
+   for (size_t ie=0;ie<nevts;++ie) {
+     for (size_t it=0;it<ntrks;++it) {
+       float x_ = x(outtrk,ie,it);
+       float y_ = y(outtrk,ie,it);
+       float z_ = z(outtrk,ie,it);
+       avgx += x_;
+       avgy += y_;
+       avgz += z_;
+       float hx_ = x(hit,ie,it);
+       float hy_ = y(hit,ie,it);
+       float hz_ = z(hit,ie,it);
+       avgdx += (x_-hx_)/x_;
+       avgdy += (y_-hy_)/y_;
+       avgdz += (z_-hz_)/z_;
+     }
+   }
+   avgx = avgx/float(nevts*ntrks);
+   avgy = avgy/float(nevts*ntrks);
+   avgz = avgz/float(nevts*ntrks);
+   avgdx = avgdx/float(nevts*ntrks);
+   avgdy = avgdy/float(nevts*ntrks);
+   avgdz = avgdz/float(nevts*ntrks);
+
+   float stdx = 0, stdy = 0, stdz = 0;
+   float stddx = 0, stddy = 0, stddz = 0;
+   for (size_t ie=0;ie<nevts;++ie) {
+     for (size_t it=0;it<ntrks;++it) {
+       float x_ = x(outtrk,ie,it);
+       float y_ = y(outtrk,ie,it);
+       float z_ = z(outtrk,ie,it);
+       stdx += (x_-avgx)*(x_-avgx);
+       stdy += (y_-avgy)*(y_-avgy);
+       stdz += (z_-avgz)*(z_-avgz);
+       float hx_ = x(hit,ie,it);
+       float hy_ = y(hit,ie,it);
+       float hz_ = z(hit,ie,it);
+       stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
+       stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
+       stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
+     }
+   }
+
+   stdx = sqrtf(stdx/float(nevts*ntrks));
+   stdy = sqrtf(stdy/float(nevts*ntrks));
+   stdz = sqrtf(stdz/float(nevts*ntrks));
+   stddx = sqrtf(stddx/float(nevts*ntrks));
+   stddy = sqrtf(stddy/float(nevts*ntrks));
+   stddz = sqrtf(stddz/float(nevts*ntrks));
+
+   printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
+   printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
+   printf("track z avg=%f std/avg=%f\n", avgz, fabs(stdz/avgz));
+   printf("track dx/x avg=%f std=%f\n", avgdx, stddx);
+   printf("track dy/y avg=%f std=%f\n", avgdy, stddy);
+   printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
+
+//   free(trk);
+//   free(hit);
+//   free(outtrk);
+
    return 0;
 }
