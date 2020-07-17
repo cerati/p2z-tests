@@ -2,16 +2,12 @@
 icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 */
 
-#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
-
-#ifndef nevts
-#define nevts 100
-#endif
+#include <tbb/tbb.h>
 
 #ifndef bsize
 #define bsize 128
@@ -21,7 +17,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #define nb    ntrks/bsize
-//#define ntrks nb*bsize
+
+#ifndef nevts
+#define nevts 100
+#endif
 #define smear 0.1
 
 #ifndef NITER
@@ -31,6 +30,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef nthreads
 #define nthreads 64
 #endif
+
+using namespace tbb;
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -80,6 +81,7 @@ struct MP3x3 {
 struct MP3x6 {
   float data[18*bsize];
 };
+
 struct MP3x3SF {
   float data[6*bsize];
 };
@@ -264,8 +266,9 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp simd
-  for (int n = 0; n < N; ++n)
+//parallel_for(0,N,[&](int n){
+#pragma omp simd 
+ for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
@@ -303,13 +306,14 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
     c[33*N+n] = b[18*N+n];
     c[34*N+n] = b[19*N+n];
     c[35*N+n] = b[20*N+n];
-  }
+  }//);
 }
 
 void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+//parallel_for(0,N,[&](int n){
 #pragma omp simd
   for (int n = 0; n < N; ++n)
   {
@@ -334,25 +338,22 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
     c[18*N+n] = b[33*N+n];
     c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
     c[20*N+n] = b[35*N+n];
-  }
+  }//);
 }
 
+
 void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
-  // k = P Ht(HPHt + R)^-1
-  // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
-  // This calculates the inverse of HpHt +R
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
 #pragma omp simd
   for (int n = 0; n < N; ++n)
   {
-    double det = 
+    double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
       ((a[2*N+n]+b[2*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n]))));
     double invdet = 1.0/det;
-    //printf("inv_det %f",invdet);
 
     c[ 0*N+n] =  invdet*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
     c[ 1*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
@@ -366,9 +367,6 @@ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
   }
 }
 void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
-  // k = P Ht(HPHt + R)^-1
-  // A = P, B= R
-  // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
@@ -404,7 +402,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
   KalmanGain(trkErr,&inverse_temp,&kGain);
 
 #pragma omp simd
-  for (size_t it=0;it<bsize;++it) {	
+  for (size_t it=0;it<bsize;++it) {
   const float xin = x(inPar,it);
   const float yin = y(inPar,it);
   const float zin = z(inPar,it);
@@ -434,7 +432,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
   newErr.data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[12*bsize+it]);
   newErr.data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[13*bsize+it]);
   newErr.data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[14*bsize+it]);
-  
+
   newErr.data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[11*bsize+it]);
   newErr.data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[12*bsize+it]);
   newErr.data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[13*bsize+it]);
@@ -456,10 +454,6 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
-
-  //printf("updating");
-
-
 }
 
 
@@ -468,6 +462,7 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 	                MP6x6SF* outErr, MP6F* outPar) {
   //
   MP6x6F errorProp, temp;
+//parallel_for(0,bsize,[&](size_t it){
 #pragma omp simd
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z(msP,it);
@@ -505,16 +500,14 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
     errorProp.data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
     errorProp.data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
     errorProp.data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
-  }
+  }//);
   //
   MultHelixPropEndcap(&errorProp, inErr, &temp);
   MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
 }
 
 int main (int argc, char* argv[]) {
-printf("bsize: %d, nb:%d, omp threads:%d\n",(int)bsize,(int)nb,(int)nthreads);
-omp_set_dynamic(0);
-omp_set_num_threads(nthreads);
+
    int itr;
    ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
@@ -565,22 +558,29 @@ omp_set_num_threads(nthreads);
    // }
   
 
+   task_scheduler_init init(nthreads);
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-#pragma omp parallel for
-    for (size_t ie=0;ie<nevts;++ie) { // loop over events
-#pragma omp simd
-     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+//#pragma omp parallel for
+//parallel_for(0,nevts,[&](size_t ie){  
+parallel_for(blocked_range<size_t>(0,nevts,4),[&](blocked_range<size_t> iex){
+      for(size_t ie =iex.begin(); ie<iex.end();++ie){
+      //for (size_t ie=0;ie<nevts;++ie) { // loop over events
+//#pragma omp simd
+//     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+//parallel_for((0,nb),[&](size_t ib){
+parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){
+      for(size_t ib =ibx.begin(); ib<ibx.end();++ib){
        //
        const MPTRK* btracks = bTk(trk, ie, ib);
        const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
        //
        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-       KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
-     }
-    }
+        KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+     }});
+    }});
    } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -595,7 +595,7 @@ omp_set_num_threads(nthreads);
    // }
    
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-   printf("formatted %i %i %i %i %i %f %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, (end-start)*0.001, (end-start)*0.001, (end_setup-start_setup)*0.001, nthreads);
+   printf("formatted %i %i %i %i %i %f %f 0 %f %i\n",int(NITER),nevts,ntrks, bsize, nb, (end-start)*0.001, (end-start)*0.001, (end_setup-start_setup)*0.001, nthreads);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;

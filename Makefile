@@ -11,8 +11,8 @@
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
 #               omp4                                     #
 ##########################################################
-COMPILER ?= gcc
-MODE ?= omp
+COMPILER ?= nvcc
+MODE ?= eigen
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
