@@ -8,16 +8,28 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <unistd.h>
 #include <sys/time.h>
 
+#ifndef nevts
 #define nevts 100
-#define nb    300
+#endif
+#ifndef bsize
 #define bsize 32
-#define ntrks nb*bsize
+#endif
+#ifndef ntrks
+#define ntrks 9600
+#endif
+#define nb    ntrks/bsize
 #define smear 0.1
 #ifdef _OPENARC_
+#pragma openarc #ifndef nevts
 #pragma openarc #define nevts 100
-#pragma openarc #define nb    300
+#pragma openarc #endif
+#pragma openarc #ifndef bsize
 #pragma openarc #define bsize 32
-#pragma openarc #define ntrks nb*bsize
+#pragma openarc #endif
+#pragma openarc #ifndef ntrks
+#pragma openarc #define ntrks 9600
+#pragma openarc #endif
+#pragma openarc #define nb    ntrks/bsize
 #pragma openarc #define N bsize
 #endif
 
@@ -480,11 +492,11 @@ int main (int argc, char* argv[]) {
    //   }
    // }
    
-   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
+   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
    printf("data region time=%f (s)\n", (end2-start2)*0.001);
    printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
    printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
-   printf("formatted %i %f %e %f %f %f 0 (s)\n",nevts*ntrks, (end-start)*0.001, (end-start)*0.001/(nevts*ntrks), (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
+   printf("formatted %i %i %i %i %i %f %f %f %f 0\n",int(NITER),nevts,ntrks, bsize, nb, (end-start)*0.001, (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;

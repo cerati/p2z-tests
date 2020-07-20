@@ -13,7 +13,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <Eigen/Core>
 
 #ifndef bsize
-#define bsize 16
+#define bsize 1
 #endif
 #ifndef ntrks
 #define ntrks 9600
@@ -29,7 +29,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NITER 100
 #endif
 #ifndef num_streams
-#define num_streams 10
+#define num_streams 1
 #endif
 
 #ifndef threadsperblockx
@@ -374,7 +374,7 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
 
 
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
-  printf("test 1\n");
+  //printf("test 1\n");
   for (size_t ie = blockIdx.x; ie<nevts/num_streams; ie+=gridDim.x){
   //printf("test 2\n");
     for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
@@ -406,15 +406,15 @@ void transfer(MPTRK* trk, MPHIT* hit, MPTRK* trk_dev, MPHIT* hit_dev){
   cudaMemcpy(&((trk_dev->q).data), &((trk->q).data), bsize*sizeof(Matrix<int,1,1>), cudaMemcpyHostToDevice);
   cudaMemcpy(&trk_dev->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice);
   cudaMemcpy(&((trk_dev->hitidx).data), &((trk->hitidx).data), bsize*sizeof(Matrix<int,22,1>), cudaMemcpyHostToDevice);
-  for(int i =0; i<bsize;i++){
-  printf("host: %f %d %d\n",trk->par.data[i](0),sizeof(trk->par.data), sizeof(Matrix<float,6,1>));
-  cudaMemcpy(&((trk_dev->par).data[i]), &((trk->par).data[i]), sizeof(Matrix<float,6,1>), cudaMemcpyHostToDevice);
-  printf("dev: %f\n",trk_dev->par.data[i](0));
-  }
+  //for(int i =0; i<bsize;i++){
+  ////printf("host: %f %d %d\n",trk->par.data[i](0),sizeof(trk->par.data), sizeof(Matrix<float,6,1>));
+  //cudaMemcpy(&((trk_dev->par).data[i]), &((trk->par).data[i]), sizeof(Matrix<float,6,1>), cudaMemcpyHostToDevice);
+  ////printf("dev: %f\n",trk_dev->par.data[i](0));
+  //}
     
 
-  //printf("host: %f\n",trk->par.data[0](0));
-  //printf("dev: %f\n",trk_dev->par.data[0](0));
+  printf("host: %f\n",trk->par.data[0](0));
+  printf("dev: %f\n",trk_dev->par.data[0](0));
   cudaMemcpy(hit_dev,hit,nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
   cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
   cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,bsize*sizeof(Matrix<float,3,1>), cudaMemcpyHostToDevice);

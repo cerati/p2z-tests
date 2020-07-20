@@ -12,10 +12,11 @@
 #               omp4                                     #
 ##########################################################
 COMPILER ?= nvcc
-MODE ?= cuda
+MODE ?= eigen
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
+TUNEEVT ?= 0
 STREAMS ?= 0
 NTHREADS ?= 0
 ifneq ($(TUNEB),0)
@@ -23,6 +24,9 @@ TUNE += -Dbsize=$(TUNEB)
 endif
 ifneq ($(TUNETRK),0)
 TUNE += -Dntrks=$(TUNETRK)
+endif
+ifneq ($(TUNEEVT),0)
+TUNE += -Dnevts=$(TUNEEVT)
 endif
 ifneq ($(STREAMS),0)
 TUNE += -Dnum_streams=$(STREAMS)
@@ -207,16 +211,21 @@ CLIBS1 = -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include
 ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
-#TBB_PREIX := /opt/intel
-#CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
 CFLAGS1+= -fopenmp -O3 -I.
 CLIBS1 += -lm -lgomp
+endif
+ifeq ($(COMPILER),icc)
+CXX=icc
+TBB_PREIX := /opt/intel
+CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
+TUNE += -Dnum_streams=1
 endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_alpaka.cu
 CFLAGS1+= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda 
 CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+#CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 CLIBS1 += -L${CUDALIBDIR} -lcudart -g
 endif
 endif
@@ -229,9 +238,9 @@ TARGET = ./bin
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
 
 
-$(TARGET)/$(BENCHMARK): src/$(CSRCS)
+$(TARGET)/$(BENCHMARK): src_complete/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi
-	$(CXX) $(CFLAGS1) src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK)
+	$(CXX) $(CFLAGS1) src_complete/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK)
 	if [ -f $(TARGET)/*.ptx ]; then rm $(TARGET)/*.ptx; fi
 	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
