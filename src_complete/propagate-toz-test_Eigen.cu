@@ -26,7 +26,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 100
+#define NITER 1
 #endif
 #ifndef num_streams
 #define num_streams 1
@@ -300,33 +300,84 @@ HOSTDEV float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, e
 
 #define N bsize
 //HOSTDEV void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
-__forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
+__forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6SF* C) {
   const Matrix<float,6,6> *a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const Matrix<float,6,6> *b = (*B).data; //ASSUME_ALIGNED(b, 64);
   Matrix<float,6,6> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  //printf("a test %f\n", A->data(1,1));
+  //printf("c test %f\n", c[0](0));
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
-    c[it].noalias() = a[it]*b[it];
+    const Matrix<float,6,6> at = A->data[it].transpose();
+    const Matrix<float,6,6> c2 = A->data[it]*(B->data[it]);
+    const Matrix<float,6,6> c3 = c2*at;
+    //for( int ix=0; ix<35;ix++){
+    //printf("c3 test %f\n", c3(0));
+    C->data[it](0) = c3(0);
+    C->data[it](1) = c3(1);
+    C->data[it](2) = c3(2);
+    //C->data[it](3) = c3(3);
+    C->data[it](4) = c3(4);
+    //C->data[it](5) = c3(5);
+    //C->data[it](6) = c3(6);
+    //C->data[it](7) = c3(7);
+    //C->data[it](8) = c3(8);
+    //C->data[it](9) = c3(9);
+    //C->data[it](10) = c3(10);
+    //C->data[it](11) = c3(11);
+    //C->data[it](12) = c3(12);
+    //C->data[it](13) = c3(13);
+    //C->data[it](14) = c3(14);
+    //C->data[it](15) = c3(15);
+    //C->data[it](16) = c3(16);
+    //C->data[it](17) = c3(17);
+    //C->data[it](18) = c3(18);
+    //C->data[it](19) = c3(19);
+    //C->data[it](20) = c3(20);
+    //C->data[it](21) = c3(21);
+    //C->data[it](22) = c3(22);
+    //C->data[it](23) = c3(23);
+    //C->data[it](24) = c3(24);
+    //C->data[it](25) = c3(25);
+    //C->data[it](26) = c3(26);
+    //C->data[it](27) = c3(27);
+    //C->data[it](28) = c3(28);
+    //C->data[it](29) = c3(29);
+    //C->data[it](30) = c3(30);
+    //C->data[it](31) = c3(31);
+    //C->data[it](32) = c3(32);
+    //C->data[it](33) = c3(33);
+    //C->data[it](34) = c3(34);
+    //C->data[it](35) = c3(35);
+    //}
+    
+    //c[it].noalias() = c2*at;
+    //c[it].noalias() = a[it]*b[it];
+    //c[it].noalias() = c[it]*at;
+    //printf("at test %f\n", at(0));
+    //printf("c test %f\n", c2(0));
+    //printf("c3 test %f\n", c3(0));
+    
   }
+  //printf("cx test %f\n", c[0](0));
+    //printf("c test %f\n", c[0](0));
 }
 
-//HOSTDEV void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
-__forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
-  const Matrix<float,6,6> *a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const Matrix<float,6,6> *b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  Matrix<float,6,6> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
-    c[it].noalias()= a[it]*b[it].transpose();
-  }
-}
+////HOSTDEV void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
+//__forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
+//  const Matrix<float,6,6> *a = (*A).data; //ASSUME_ALIGNED(a, 64);
+//  const Matrix<float,6,6> *b = (*B).data; //ASSUME_ALIGNED(b, 64);
+//  Matrix<float,6,6> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+//  for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
+//    c[it]/*.noalias()*/= a[it]*b[it]/*.transpose()*/;
+//  }
+//}
 
-//HOSTDEV void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
+//HOSTDEV void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar
 __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 			  const MP1I* inChg,const MP3F* msP, 
-			  MP6x6SF* outErr, MP6F* outPar
-			){//struct MP6x6F* errorProp, struct MP6x6F* temp) {
+			  MP6x6SF* outErr, MP6F* outPar,
+			/*){*/struct MP6x6F* errorProp/*, struct MP6x6F* temp*/) {
   //printf("testx\n");
-  MP6x6F errorProp, temp;
+  //MP6x6F errorProp, temp;
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     const float zout = z(msP,it);
     //printf("testx %f\n",zout);
@@ -352,42 +403,46 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp.data[it](i,i) = 1.;
-    errorProp.data[it](0,2) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp.data[it](0,3) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp.data[it](0,4) = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp.data[it](0,5) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    errorProp.data[it](1,2) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp.data[it](1,3) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp.data[it](1,4) = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp.data[it](1,5) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp.data[it](4,2) = -ipt(inPar,it)*sinT/(cosT*k);
-    errorProp.data[it](4,3) = sinT*deltaZ/(cosT*k);
-    errorProp.data[it](4,5) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+    for (size_t i=0;i<6;++i) errorProp->data[it](i,i) = 1.;
+    errorProp->data[it](0,2) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+    errorProp->data[it](0,3) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    errorProp->data[it](0,4) = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp->data[it](0,5) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    errorProp->data[it](1,2) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+    errorProp->data[it](1,3) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    errorProp->data[it](1,4) = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp->data[it](1,5) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+    errorProp->data[it](4,2) = -ipt(inPar,it)*sinT/(cosT*k);
+    errorProp->data[it](4,3) = sinT*deltaZ/(cosT*k);
+    errorProp->data[it](4,5) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+
+    //outErr->data[it] = errorProp->data[it] * inErr->data[it];
   }
-  __syncthreads();
-  MultHelixPropEndcap(&errorProp, inErr, &temp);
-  __syncthreads();
-  MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
+ // __syncthreads();
+  //MultHelixPropEndcap(errorProp, inErr, outErr);
+  //MultHelixPropEndcap(&errorProp, inErr, &temp);
+ // __syncthreads();
+ // MultHelixPropTranspEndcap(errorProp, temp, outErr);
+  //MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
 }
 
 
 
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
-  //printf("test 1\n");
+printf("dev2: %f\n",trk->par.data[0](0));
   for (size_t ie = blockIdx.x; ie<nevts/num_streams; ie+=gridDim.x){
-  //printf("test 2\n");
+  printf("test 2\n");
     for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
       const MPTRK* btracks = bTk(trk,ie+stream*nevts/num_streams,ib);
       const MPHIT* bhits = bHit(hit,ie+stream*nevts/num_streams,ib);
       //printf("show: %f\n", (bhits->pos).data[0](0));
       MPTRK* obtracks = bTk(outtrk,ie+stream*nevts/num_streams,ib);
-   //   ///*__shared__*/ struct MP6x6F errorProp, temp;
+      /*__shared__*/ struct MP6x6F errorProp/*, temp*/; //dynamic initialization is not supported for a function-scope static __shared__ variable within a __device__/__global__ function
  // printf("test 3\n");
 	
       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
-                   &(*obtracks).cov, &(*obtracks).par);
-                   //&(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
+                   //&(*obtracks).cov, &(*obtracks).par);
+                   &(*obtracks).cov, &(*obtracks).par, &errorProp/*, &temp*/);
     }
   }
 }
@@ -413,8 +468,8 @@ void transfer(MPTRK* trk, MPHIT* hit, MPTRK* trk_dev, MPHIT* hit_dev){
   //}
     
 
-  printf("host: %f\n",trk->par.data[0](0));
-  printf("dev: %f\n",trk_dev->par.data[0](0));
+  //printf("host: %f\n",trk->par.data[0]);
+  //printf("dev: %f\n",trk_dev->par.data[0]);
   cudaMemcpy(hit_dev,hit,nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
   cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
   cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,bsize*sizeof(Matrix<float,3,1>), cudaMemcpyHostToDevice);
@@ -431,6 +486,7 @@ void transfer_back(MPTRK* trk, MPTRK* trk_host){
   cudaMemcpy(&((trk_host->q).data), &((trk->q).data), bsize*sizeof(Matrix<int,1,1>), cudaMemcpyDeviceToHost);
   cudaMemcpy(&trk_host->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyDeviceToHost);
   cudaMemcpy(&((trk_host->hitidx).data), &((trk->hitidx).data), bsize*sizeof(Matrix<int,22,1>), cudaMemcpyDeviceToHost);
+  //printf("test2");
 }
 
 /////////////////////test functions/////////////////////////////////
@@ -498,6 +554,8 @@ int main (int argc, char* argv[]) {
   start_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
   MPTRK* trk = prepareTracks(inputtrk);
   MPHIT* hit = prepareHits(inputhit);
+  //MPTRK* outtrk;
+  //cudaMallocManaged((void**)&outtrk,nevts*nb*sizeof(MPTRK));
   MPTRK* trk_dev;
   MPHIT* hit_dev;
   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
@@ -505,7 +563,7 @@ int main (int argc, char* argv[]) {
   cudaMalloc((MPTRK**)&trk_dev,nevts*nb*sizeof(MPTRK));  
   cudaMalloc((MPTRK**)&hit_dev,nevts*nb*sizeof(MPHIT));
   cudaMalloc((MPTRK**)&outtrk_dev,nevts*nb*sizeof(MPTRK));  
-  //cudaMallocManaged((void**)&outtrk,nevts*nb*sizeof(MPTRK));
+
   dim3 grid(blockspergrid,1,1);
   dim3 block(threadsperblockx,threadsperblocky,1); 
   int device = -1;
@@ -524,6 +582,7 @@ int main (int argc, char* argv[]) {
  
 
   printf("done preparing!\n");
+printf("dev: %f\n",trk->par.data[0](0));
   //long start, end;
   //long start2, end2;
   //struct timeval timecheck;
@@ -601,7 +660,7 @@ int main (int argc, char* argv[]) {
   transfer_back(outtrk_dev,outtrk);
   //for (int s = 0; s<num_streams;s++){
   //  cudaMemPrefetchAsync(outtrk,nevts*nb*sizeof(MPTRK), cudaCpuDeviceId,streams[s]);
-  //}
+ // }
   cudaDeviceSynchronize(); // shaves a few seconds
   gettimeofday(&timecheck, NULL);
   end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;

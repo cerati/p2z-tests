@@ -449,6 +449,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
+trkErr = &newErr;
 }
 
 
@@ -565,12 +566,13 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
+   for(itr=0; itr<NITER; itr++) {
 #pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb])
 
 {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-   for(itr=0; itr<NITER; itr++) {
+   //for(itr=0; itr<NITER; itr++) {
 #pragma acc parallel loop gang collapse(2) present(trk, hit, outtrk)
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
@@ -585,12 +587,13 @@ int main (int argc, char* argv[]) {
        //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
     }
   }
-  } //end of itr loop
+ // } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 }
 
 #pragma acc update host(outtrk[0:nevts*nb])
+  } //end of itr loop
 
    gettimeofday(&timecheck, NULL);
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;

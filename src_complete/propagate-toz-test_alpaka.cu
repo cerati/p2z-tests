@@ -508,6 +508,7 @@ __host__ __device__ inline void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
     settheta(inPar,it, thetanew);
   }
 
+trkErr = &newErr;
  }
 
 
@@ -859,11 +860,12 @@ int main (int argc, char* argv[]) {
   //alpaka::mem::view::copy(queue,trk_dev->par,trk->par,sizeof(MP6F));
   //alpaka::mem::view::copy(queue,hit_dev,hit,nevts*nb*sizeof(MPHIT));
 
-   transfer(trk,hit, trk_dev,hit_dev);
+   //transfer(trk,hit, trk_dev,hit_dev);
 
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
+   transfer(trk,hit, trk_dev,hit_dev);
      //alpaka::kernel::exec<Host>( hostQueue,workDiv,
      //[] ALPAKA_FN_ACC (Host const & host, MPTRK* trk_host, MPHIT* hit_host, MPTRK* outtrk_host){
      //alpaka_kernel(host, trk_host,hit_host,outtrk_host);
@@ -888,6 +890,7 @@ int main (int argc, char* argv[]) {
 //	   &errorProp, &temp); // vectorized function
 //    }
 //  }
+   transfer_back(outtrk_dev,outtrk);
   } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -896,7 +899,7 @@ int main (int argc, char* argv[]) {
    //alpaka::wait::wait(accQueue);
    //alpaka::mem::view::copy(hostQueue, hostViewPlainPtr_outtrk_fin,hostViewPlainPtr_outtrk,extents);
    //alpaka::wait::wait(hostQueue);
-   transfer_back(outtrk_dev,outtrk);
+  // transfer_back(outtrk_dev,outtrk);
    gettimeofday(&timecheck, NULL);
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 

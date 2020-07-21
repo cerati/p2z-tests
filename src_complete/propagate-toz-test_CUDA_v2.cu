@@ -8,6 +8,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <iostream>
 
 #ifndef nevts
 #define nevts 100
@@ -486,6 +487,7 @@ for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
+ trkErr = &newErr;
 }
 
 //HOSTDEV void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
@@ -539,6 +541,7 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
 
 
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
+//printf("dev: %f\n",trk->par.data[1]);
   for (size_t ie = blockIdx.x; ie<nevts/num_streams; ie+=gridDim.x){
     for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
       const MPTRK* btracks = bTk(trk,ie+stream*nevts/num_streams,ib);
@@ -653,11 +656,11 @@ int main (int argc, char* argv[]) {
   MPHIT* hit = prepareHits(inputhit);
   MPTRK* trk_dev;
   MPHIT* hit_dev;
+  MPTRK* outtrk= (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); 
+  MPTRK* outtrk_dev;
   cudaMalloc((MPTRK**)&trk_dev,nevts*nb*sizeof(MPTRK));
   cudaMalloc((MPHIT**)&hit_dev,nevts*nb*sizeof(MPHIT));
-  MPTRK* outtrk_dev;
   cudaMalloc((MPTRK**)&outtrk_dev,nevts*nb*sizeof(MPTRK));
-  MPTRK* outtrk= (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); 
   //cudaMallocManaged((void**)&outtrk,nevts*nb*sizeof(MPTRK));
   dim3 grid(blockspergrid,1,1);
   dim3 block(threadsperblockx,threadsperblocky,1); 
@@ -704,7 +707,7 @@ int main (int argc, char* argv[]) {
 
 //  cudaEventRecord(copy);	
 //  cudaEventSynchronize(copy);
-//  for(itr=0; itr<NITER; itr++){
+  for(itr=0; itr<NITER; itr++){
     //  transfer(trk,hit, trk_dev,hit_dev);
     for (int s = 0; s<num_streams;s++){
       //transferAsync(trk,hit, trk_dev,hit_dev,streams[s]);
@@ -724,14 +727,15 @@ int main (int argc, char* argv[]) {
   cudaMemcpyAsync(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice, streams[s]);
   cudaMemcpyAsync(&(hit_dev->cov).data,&(hit->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
     }  
-  for(itr=0; itr<NITER; itr++){
+
+//  for(itr=0; itr<NITER; itr++){
     for (int s = 0; s<num_streams;s++){
       //transferAsync(trk,hit, trk_dev,hit_dev,streams[s]);
   	  GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev,hit_dev,outtrk_dev,s);
       //transfer_backAsync(outtrk_dev,outtrk,streams[s]); 
   	  //GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev+(s*stream_chunk),hit_dev+(s*stream_chunk),outtrk_dev+(s*stream_chunk),s);
     }  
-}
+//}
     for (int s = 0; s<num_streams;s++){
      //transfer_backAsync(outtrk_dev,outtrk,streams[s]); 
   cudaMemcpyAsync(outtrk, outtrk_dev, nevts*nb*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
@@ -750,7 +754,7 @@ int main (int argc, char* argv[]) {
     //}
 	  //cudaDeviceSynchronize(); // Normal sync
 
-  //} //end itr loop
+  } //end itr loop
   //cudaDeviceSynchronize(); // shaves a few seconds
   
   //cudaEventRecord(copyback);

@@ -491,6 +491,7 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
+ trkErr = &newErr;
 
   //printf("updating");
 
@@ -683,7 +684,7 @@ int main (int argc, char* argv[]) {
     }  
 	  //cudaDeviceSynchronize(); // Normal sync
 
-  //} //end itr loop
+//  } //end itr loop
   //cudaDeviceSynchronize(); // shaves a few seconds
   
 //  cudaEventRecord(copyback);

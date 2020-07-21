@@ -81,7 +81,7 @@ endif
 #  OMP4 Setting #
 #################
 ifeq ($(MODE),omp4)
-CSRCS = propagate-toz-test_OpenMP4.c
+CSRCS = propagate-toz-test_OpenMP4.cpp
 ifeq ($(COMPILER),gcc)
 CXX=gcc
 CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
@@ -181,7 +181,8 @@ endif
 ##################
 ifeq ($(MODE),eigen)
 CSRCS = propagate-toz-test_Eigen.cpp
-CLIBS1 += -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -L${CUDALIBDIR} -lcudart 
+#CLIBS1 += -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -L${CUDALIBDIR} -lcudart 
+CLIBS1 += -Ieigen -I/mnt/data1/dsr/cub -L${CUDALIBDIR} -lcudart 
 ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1 += -fopenmp -O3 -fopenmp-simd -lm -lgomp -march=native 
@@ -197,7 +198,8 @@ endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_Eigen.cu
-CFLAGS1 += -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
+#CFLAGS1 += -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
+CFLAGS1 += -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -Ieigen -I/mnt/data1/dsr/cub
 endif
 endif
 

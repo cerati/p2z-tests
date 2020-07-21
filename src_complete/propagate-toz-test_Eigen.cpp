@@ -357,6 +357,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
   for (size_t it=0;it<bsize;++it) {
     //inPar->data[it] = inPar->data[it] + (kGain.data[it]*(msP->data[it]- (H*inPar->data[it]))); 
     inPar->data[it] = inPar->data[it] + (kGain.data[it]*(msP->data[it]- ((inPar->data[it]).block<3,1>(0,0)))); 
+    trkErr->data[it] = trkErr->data[it] - (kGain.data[it]*((trkErr->data[it]).block<3,6>(0,0))); 
   }
 
 }

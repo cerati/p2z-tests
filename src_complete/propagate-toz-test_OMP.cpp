@@ -456,7 +456,8 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
-
+  //Is this the correct way to assign the errors? Should I use memcpy instead?  
+  trkErr = &newErr;
   //printf("updating");
 
 
