@@ -26,12 +26,12 @@ void convertOutput(CBTRK &cb_in, MPTRK* &mp_out);
 
 void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks, 
                   ViewMatrixCB &errorProp, ViewMatrixCB &temp);
-void update(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks, 
-            ViewMatrixCB &errorProp, ViewMatrixCB &temp);
+void update(const CBTRK &inTrks, const CBHIT &inHits);
 void averageOutputs(MPTRK* &outtrk, MPHIT* &hit);
 
-void gemm(ViewMatrixOB A, ViewMatrixOB B, ViewMatrixOB &C, int rows_a, int cols_a, int cols_b);
-void gemm_T(ViewMatrixOB A, ViewMatrixOB B, ViewMatrixOB &C, int rows_a, int cols_a, int cols_b);
+void invert_33(const ViewMatrixCB &mat, int batch);
+void gemm(const ViewMatrixCB &A, const ViewMatrixCB &B, const ViewMatrixCB &C, int batch, int rows_a, int cols_a, int cols_b);
+void gemm_T(const ViewMatrixCB &A, const ViewMatrixCB &B, const ViewMatrixCB &C, int batch, int rows_a, int cols_a, int cols_b);
 
 double get_time();
 
@@ -111,6 +111,7 @@ int main( int argc, char* argv[] )
   for(itr=0; itr<NITER; itr++) {
   
       propagateToZ(all_tracks, all_hits, all_out, errorProp, temp);
+      update(all_tracks, all_hits);
 
   } // end of itr loop
 
@@ -534,39 +535,39 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks,
 } // P2Z
 
 
-void invert_33(ViewMatrixOB &mat) {
+void invert_33(const ViewMatrixCB &mat, int batch) {
 
   float det[bsize];
-  ViewMatrixOB temp_33("temp_33", 3, 3, bsize);
+  ViewMatrixCB temp_33("temp_33", 3, 3, bsize);
 
   for ( int it = 0; it < bsize; ++it ) {
 
-    det[it] = mat(0,0,it)*(mat(1,1,it)*mat(2,2,it)-mat(1,2,it)*mat(2,1,it))
-            - mat(0,1,it)*(mat(1,0,it)*mat(2,2,it)-mat(1,2,it)*mat(2,0,it))
-            + mat(0,2,it)*(mat(1,0,it)*mat(2,1,it)-mat(1,1,it)*mat(2,0,it));
+    det[it] = mat(batch,0,0,it)*(mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it))
+            - mat(batch,0,1,it)*(mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it))
+            + mat(batch,0,2,it)*(mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
 
-    temp_33(0,0,it) =      (mat(1,1,it)*mat(2,2,it)-mat(1,2,it)*mat(2,1,it));
-    temp_33(0,1,it) = -1 * (mat(0,1,it)*mat(2,2,it)-mat(0,2,it)*mat(2,1,it));
-    temp_33(0,2,it) =      (mat(0,1,it)*mat(1,2,it)-mat(0,2,it)*mat(1,1,it));
+    temp_33(batch,0,0,it) =      (mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it));
+    temp_33(batch,0,1,it) = -1 * (mat(batch,0,1,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,1,it));
+    temp_33(batch,0,2,it) =      (mat(batch,0,1,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,1,it));
 
-    temp_33(1,0,it) = -1 * (mat(1,0,it)*mat(2,2,it)-mat(1,2,it)*mat(2,0,it));
-    temp_33(1,1,it) =      (mat(0,0,it)*mat(2,2,it)-mat(0,2,it)*mat(2,0,it));
-    temp_33(1,2,it) = -1 * (mat(0,0,it)*mat(1,2,it)-mat(0,2,it)*mat(1,0,it));
+    temp_33(batch,1,0,it) = -1 * (mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it));
+    temp_33(batch,1,1,it) =      (mat(batch,0,0,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,0,it));
+    temp_33(batch,1,2,it) = -1 * (mat(batch,0,0,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,0,it));
     
-    temp_33(2,0,it) =      (mat(1,0,it)*mat(2,1,it)-mat(1,1,it)*mat(2,0,it));
-    temp_33(2,1,it) = -1 * (mat(0,0,it)*mat(2,1,it)-mat(0,1,it)*mat(2,0,it));
-    temp_33(2,2,it) =      (mat(0,0,it)*mat(1,1,it)-mat(0,1,it)*mat(1,0,it));
+    temp_33(batch,2,0,it) =      (mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
+    temp_33(batch,2,1,it) = -1 * (mat(batch,0,0,it)*mat(batch,2,1,it)-mat(batch,0,1,it)*mat(batch,2,0,it));
+    temp_33(batch,2,2,it) =      (mat(batch,0,0,it)*mat(batch,1,1,it)-mat(batch,0,1,it)*mat(batch,1,0,it));
 
     for (int i = 0; i < 3; i++)
       for (int j = 0; j < 3; j++)
-        mat(i,j,it) = temp_33(i,j,it);
+        mat(batch,i,j,it) = temp_33(batch,i,j,it);
 
   }
 
 }
 
 
-void update(CBTRK &trk, CBHIT &hit) {
+void update(const CBTRK &trk, const CBHIT &hit) {
 // newTrk.par = trk.par+Kgain(hit.pos-H*trk.par)
 // newTrk.cov = trk.cov-Kgain*H*trk.cov
 // Kgain =  trk.cov*Ht(H*trk.cov*Ht+hit.cov)^-1 ---- 6x3?
@@ -579,47 +580,86 @@ void update(CBTRK &trk, CBHIT &hit) {
   // ViewMatrixCB errorProp("ep", nevts*nb, 6, 6, bsize),
   //              temp("temp", nevts*nb, 6, 6, bsize);
 
+
+    ViewMatrixCB Ht("Ht", nb*nevts, 6, 3, bsize);
+    ViewMatrixCB H_trk_cov("H_trk_par", nb*nevts, 3, 6, bsize);
+    ViewMatrixCB K("H", nb*nevts, 6, 3, bsize);
+    ViewMatrixCB mat("mat", nb*nevts, 3, 3, bsize);
+    ViewMatrixCB temp_33("temp_33", nb*nevts, 3, 3, bsize);
+    ViewMatrixCB temp_63("temp_63", nb*nevts, 6, 3, bsize);
+    ViewMatrixCB temp_31("temp_31", nb*nevts, 3, 1, bsize);
+    ViewMatrixCB temp_61("temp_61", nb*nevts, 6, 1, bsize);
+    ViewMatrixCB temp_66("temp_66", nb*nevts, 6, 6, bsize);
+
   Kokkos::parallel_for( "update_batch_loop", range_policy(0,nb*nevts), KOKKOS_LAMBDA ( int batch ) {
 
 
-    ViewMatrixOB Ht("Ht", 6, 3, bsize);
-    ViewMatrixOB H_trk_cov("H_trk_par", 3, 6, bsize);
-    ViewMatrixOB K("H", 6, 3, bsize);
-    ViewMatrixOB temp_33("temp_33", 3, 3, bsize);
-    ViewMatrixOB temp_63("temp_63", 6, 3, bsize);
-    ViewMatrixOB temp_31("temp_31", 3, 1, bsize);
-    ViewMatrixOB temp_61("temp_61", 6, 1, bsize);
-    ViewMatrixOB temp_66("temp_66", 6, 6, bsize);
+    // ViewMatrixOB Ht("Ht", 6, 3, bsize);
+    // ViewMatrixOB H_trk_cov("H_trk_par", 3, 6, bsize);
+    // ViewMatrixOB K("H", 6, 3, bsize);
+    // ViewMatrixOB temp_33("temp_33", 3, 3, bsize);
+    // ViewMatrixOB temp_63("temp_63", 6, 3, bsize);
+    // ViewMatrixOB temp_31("temp_31", 3, 1, bsize);
+    // ViewMatrixOB temp_61("temp_61", 6, 1, bsize);
+    // ViewMatrixOB temp_66("temp_66", 6, 6, bsize);
 
 
     for ( int i = 0; i < 3; ++i ) {
       for ( int j = 0; j < 6; ++j ) {
         for ( int it = 0; it < bsize; ++it ) {
-          H_trk_cov(i,j,it) = trk.cov(batch,i,j,it);
+          H_trk_cov(batch,i,j,it) = trk.cov(batch,i,j,it);
           if(i == j)
-            Ht(j,i,it) = 1.0;
+            Ht(batch,j,i,it) = 1.0;
           else
-            Ht(j,i,it) = 0.0;
+            Ht(batch,j,i,it) = 0.0;
         }
       }
     }
 
 // Kgain =  trk.cov*Ht(H*trk.cov*Ht+hit.cov)^-1 ---- 6x3?
-    gemm(H_trk_cov, Ht, temp_33, 3, 6, 3);
+    gemm(H_trk_cov, Ht, temp_33, batch, 3, 6, 3);
     for ( int i = 0; i < 3; ++i ) {
       for ( int j = 0; j < 6; ++j ) {
         for ( int it = 0; it < bsize; ++it )
-          temp_33(i,j,it) += hit.cov(batch,i,j,it);
+          mat(batch,i,j,it) += hit.cov(batch,i,j,it);
       }
     }
-    invert_33(temp_33);
-    gemm(Ht, temp_33, temp_63, 6, 3, 3);
+    
+  float det[bsize];
+
+  for ( int it = 0; it < bsize; ++it ) {
+
+    det[it] = mat(batch,0,0,it)*(mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it))
+            - mat(batch,0,1,it)*(mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it))
+            + mat(batch,0,2,it)*(mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
+
+    temp_33(batch,0,0,it) =      (mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it));
+    temp_33(batch,0,1,it) = -1 * (mat(batch,0,1,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,1,it));
+    temp_33(batch,0,2,it) =      (mat(batch,0,1,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,1,it));
+
+    temp_33(batch,1,0,it) = -1 * (mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it));
+    temp_33(batch,1,1,it) =      (mat(batch,0,0,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,0,it));
+    temp_33(batch,1,2,it) = -1 * (mat(batch,0,0,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,0,it));
+    
+    temp_33(batch,2,0,it) =      (mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
+    temp_33(batch,2,1,it) = -1 * (mat(batch,0,0,it)*mat(batch,2,1,it)-mat(batch,0,1,it)*mat(batch,2,0,it));
+    temp_33(batch,2,2,it) =      (mat(batch,0,0,it)*mat(batch,1,1,it)-mat(batch,0,1,it)*mat(batch,1,0,it));
+
+    // for (int i = 0; i < 3; i++)
+    //   for (int j = 0; j < 3; j++)
+    //     mat(batch,i,j,it) = temp_33(batch,i,j,it);
+
+  }
+
+
+
+    gemm(Ht, temp_33, temp_63, batch, 6, 3, 3);
     for ( int i = 0; i < 6; ++i ) {
       for ( int j = 0; j < 3; ++j ) {
-        for ( int it = 0; it < bsize; ++it ) K(i,j,it) = 0.0;
+        for ( int it = 0; it < bsize; ++it ) K(batch,i,j,it) = 0.0;
         for ( int k = 0; k < 6; ++k ) {
           for ( int it = 0; it < bsize; ++it ) {
-            K(i,j,it) += trk.cov(batch,i,k,it) * temp_63(k,j,it);
+            K(batch,i,j,it) += trk.cov(batch,i,k,it) * temp_63(batch,k,j,it);
           }
         }
       }
@@ -629,21 +669,21 @@ void update(CBTRK &trk, CBHIT &hit) {
 // newTrk.par = trk.par+Kgain(hit.pos-H*trk.par)
     for ( int i = 0; i < 3; ++i ) {
       for ( int it = 0; it < bsize; ++it )
-        temp_31(i,0,it) = hit.pos(batch,i,it) - trk.par(batch,i,it);
+        temp_31(batch,i,0,it) = hit.pos(batch,i,it) - trk.par(batch,i,it);
     }
-    gemm(K, temp_31, temp_61, 6, 3, 1);
+    gemm(K, temp_31, temp_61, batch, 6, 3, 1);
     for ( int i = 0; i < 6; ++i ) {
       for ( int it = 0; it < bsize; ++it )
-        trk.par(batch,i,it) += temp_61(i,0,it);
+        trk.par(batch,i,it) += temp_61(batch,i,0,it);
     }
 
 
 // newTrk.cov = trk.cov-Kgain*H*trk.cov
-    gemm(K, H_trk_cov, temp_66, 6, 3, 6);
+    gemm(K, H_trk_cov, temp_66, batch, 6, 3, 6);
     for ( int i = 0; i < 6; ++i ) {
       for ( int j = 0; j < 6; ++j ) {
         for ( int it = 0; it < bsize; ++it )
-          trk.cov(batch,i,j,it) -= temp_66(i,j,it);
+          trk.cov(batch,i,j,it) -= temp_66(batch,i,j,it);
       }
     }
 
@@ -721,17 +761,17 @@ void averageOutputs(MPTRK* &outtrk, MPHIT* &hit) {
 
 // TODO make these use kokkos?
 // TODO make them actually fit the gemm standard?
-void gemm(ViewMatrixOB A, ViewMatrixOB B, ViewMatrixOB &C, int rows_a, int cols_a, int cols_b) {
+void gemm(const ViewMatrixCB &A, const ViewMatrixCB &B, const ViewMatrixCB &C, int batch, int rows_a, int cols_a, int cols_b) {
 
   for ( int i = 0; i < rows_a; ++i ) {
     for ( int j = 0; j < cols_b; ++j ) {
 
       for ( int b = 0; b < bsize; ++b ) 
-        C(i,j,b) = 0.0;
+        C(batch,i,j,b) = 0.0;
 
       for ( int k = 0; k < cols_a; ++k ) {
         for ( int b = 0; b < bsize; ++b ) {
-          C(i,j,b) += A(i,k,b) * B(k,j,b);
+          C(batch,i,j,b) += A(batch,i,k,b) * B(batch,k,j,b);
         }
       }
       
@@ -741,17 +781,17 @@ void gemm(ViewMatrixOB A, ViewMatrixOB B, ViewMatrixOB &C, int rows_a, int cols_
 }
 
 
-void gemm_T(ViewMatrixOB A, ViewMatrixOB B, ViewMatrixOB &C, int rows_a, int cols_a, int cols_b) {
+void gemm_T(const ViewMatrixCB &A, const ViewMatrixCB &B, const ViewMatrixCB &C, int batch, int rows_a, int cols_a, int cols_b) {
 
   for ( int i = 0; i < rows_a; ++i ) {
     for ( int j = 0; j < cols_b; ++j ) {
 
       for ( int b = 0; b < bsize; ++b ) 
-        C(i,j,b) = 0.0;
+        C(batch,i,j,b) = 0.0;
 
       for ( int k = 0; k < cols_a; ++k ) {
         for ( int b = 0; b < bsize; ++b ) {
-          C(i,j,b) += A(i,k,b) * B(j,k,b);
+          C(batch,i,j,b) += A(batch,i,k,b) * B(batch,j,k,b);
         }
       }
       
