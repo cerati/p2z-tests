@@ -12,9 +12,6 @@
 #include <Kokkos_Core.hpp>
 // our typedefs curtisy of the examples
 #include "kokkos_config.h"
-#include "kokkos_gemm.h"
-
-
 
 #define nevts 100      // number of events
 #define nb    600     // number of batches? 600
