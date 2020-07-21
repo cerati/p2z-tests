@@ -60,7 +60,7 @@ struct MPTRK {
 
 struct MPHIT {
   ViewVectorMP pos;     // batch of len 3 vectors
-  ViewMatrixMP cov;     // 6x6 symmetric batch matrix
+  ViewMatrixMP cov;     // 3x3 symmetric batch matrix
 };
 
 // for the par vectors
@@ -77,6 +77,7 @@ typedef Kokkos::OpenMP MemSpace_CB;
 typedef Kokkos::View<int**,     Layout,  MemSpace_CB> ViewIntCB;    // collated batch of ints
 typedef Kokkos::View<float***,  Layout,  MemSpace_CB> ViewVectorCB; // collated batch of vecs
 typedef Kokkos::View<float****, Layout,  MemSpace_CB> ViewMatrixCB; // collated batch of mats
+typedef Kokkos::View<float***,  Layout,  MemSpace_CB> ViewMatrixOB; // One batch of mats
 
 struct CBTRK {
   ViewVectorCB  par;    // batch of len 6 vectors
@@ -87,7 +88,7 @@ struct CBTRK {
 
 struct CBHIT {
   ViewVectorCB pos;     // batch of len 3 vectors
-  ViewMatrixCB cov;     // 6x6 symmetric batch matrix
+  ViewMatrixCB cov;     // 3x3 symmetric batch matrix
 };
 
 
