@@ -25,7 +25,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3 -I/mnt/data1/dsr
 #include <Eigen/Core>
 
 #ifndef NITER
-#define NITER 100
+#define NITER 5
+#endif
+#ifndef nlayer
+#define nlayer 20
 #endif
 
 #ifndef nthreads
@@ -329,13 +332,13 @@ void KalmanGain(MP6x6SF* A, const MP3x3SF* B, MP6x3* C) {
   //const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   //float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
 
-  Matrix<float,3,6> H;
+  //Matrix<float,3,6> H;
   //Matrix<float,6,3> K;
-  H << 1,0,0,
-       0,1,0,
-       0,0,1,
-       0,0,0,0,0,0,0,0,0;
-  Matrix<float,6,3> HT = H.transpose();
+  //H << 1,0,0,
+  //     0,1,0,
+  //     0,0,1,
+  //     0,0,0,0,0,0,0,0,0;
+  //Matrix<float,6,3> HT = H.transpose();
     //std::cout<< H<<std::endl;
   #pragma omp simd
   for (int n = 0; n < N; ++n)
@@ -349,8 +352,8 @@ void KalmanGain(MP6x6SF* A, const MP3x3SF* B, MP6x3* C) {
 }
 
 void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
-  Matrix<float,3,6> H;
-  H << 1,0,0, 0,1,0,0,0,1,0,0,0,0,0,0,0,0,0;
+  //Matrix<float,3,6> H;
+  //H << 1,0,0, 0,1,0,0,0,1,0,0,0,0,0,0,0,0,0;
     MP6x3 kGain;
     KalmanGain(trkErr,hitErr,&kGain);
 #pragma omp simd
@@ -481,6 +484,7 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(int itr=0;itr<NITER;itr++){
+          for(size_t layer=0;layer<nlayer;++layer){
 #pragma omp parallel for
       for (size_t ie=0;ie<nevts;++ie) { // loop over events
 #pragma omp simd
@@ -488,8 +492,10 @@ int main (int argc, char* argv[]) {
           const MPTRK* btracks = bTk(trk, ie, ib);
           const MPHIT* bhits = bHit(hit, ie, ib);
           MPTRK* obtracks = bTk(outtrk, ie, ib);
-          propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-          KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+          //for(size_t layer=0;layer<nlayer;++layer){
+            propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+          }
         }
       }
     }

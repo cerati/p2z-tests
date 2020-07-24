@@ -25,7 +25,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 100
+#define NITER 1
+#endif
+#ifndef nlayer
+#define nlayer 20
 #endif
 
 //num_steams = accelerator type| 0: omp2threads, 1: tbb
@@ -599,9 +602,11 @@ void ALPAKA_FN_ACC alpaka_kernel(TAcc const & acc, MPTRK* trk, MPHIT* hit, MPTRK
  	     struct MP6x6F errorProp, temp;
        //printf ("running kernel: %f\n",(btracks->par).data[0]);
        //
-       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-	   &errorProp, &temp, acc); // vectorized function
-      KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,acc);
+       //for(size_t layer=0; layer<nlayer; ++layer) {
+          propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+	        &errorProp, &temp, acc); // vectorized function
+          KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,acc);
+       //}
     }
   }
 }
@@ -765,6 +770,7 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
+       for(size_t layer=0; layer<nlayer; ++layer) {
      alpaka::kernel::exec<Acc>( queue,workDiv,
      [] ALPAKA_FN_ACC (Acc const & acc, MPTRK* trk, MPHIT* hit, MPTRK* outtrk){
      alpaka_kernel(acc, trk,hit,outtrk);
@@ -782,7 +788,7 @@ int main (int argc, char* argv[]) {
 //       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
 //	   &errorProp, &temp); // vectorized function
 //    }
-//  }
+  }// end of layer loop
   } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;

@@ -34,7 +34,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef NITER
-#define NITER 10
+#define NITER 1
+#endif
+#ifndef nlayer
+#define nlayer 20
 #endif
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
@@ -599,9 +602,11 @@ int main (int argc, char* argv[]) {
        struct MPTRK* obtracks = bTk(outtrk, ie, ib);
 	   struct MP6x6F errorPro, temp;
        //
-       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-       &errorPro, &temp); // vectorized function
-       KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+       for(size_t layer=0; layer<nlayer; ++layer) {
+          propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+          &errorPro, &temp); // vectorized function
+          KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+       }
     }
    }
    } //end of itr loop

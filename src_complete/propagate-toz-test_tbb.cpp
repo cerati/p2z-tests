@@ -24,7 +24,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 100
+#define NITER 5
+#endif
+#ifndef nlayer
+#define nlayer 20
 #endif
 
 #ifndef nthreads
@@ -563,14 +566,9 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-//#pragma omp parallel for
-//parallel_for(0,nevts,[&](size_t ie){  
+       for(size_t layer=0; layer<nlayer; ++layer) {
 parallel_for(blocked_range<size_t>(0,nevts,4),[&](blocked_range<size_t> iex){
       for(size_t ie =iex.begin(); ie<iex.end();++ie){
-      //for (size_t ie=0;ie<nevts;++ie) { // loop over events
-//#pragma omp simd
-//     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-//parallel_for((0,nb),[&](size_t ib){
 parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){
       for(size_t ib =ibx.begin(); ib<ibx.end();++ib){
        //
@@ -578,10 +576,13 @@ parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){
        const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
        //
-       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-        KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+       //for(size_t layer=0; layer<nlayer; ++layer) {
+          propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+          KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+        //}
      }});
     }});
+    }
    } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;

@@ -22,7 +22,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 100
+#define NITER 5
+#endif
+#ifndef nlayer
+#define nlayer 20
 #endif
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
@@ -568,8 +571,11 @@ int main (int argc, char* argv[]) {
 
    for(itr=0; itr<NITER; itr++) {
 #pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb])
+//#pragma acc update device(trk[0:nevts*nb])
 
 {
+       //for(size_t layer=0; layer<nlayer; ++layer) {
+//#pragma acc update device(hit[0:nevts*nb])
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    //for(itr=0; itr<NITER; itr++) {
@@ -582,9 +588,11 @@ int main (int argc, char* argv[]) {
        MPTRK* obtracks = bTk(outtrk, ie, ib);
  	   struct MP6x6F errorProp, temp;
        //
-       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-	   &errorProp, &temp,&(*bhits).cov); // vectorized function
-       //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+       for(size_t layer=0; layer<nlayer; ++layer) {
+          propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+	        &errorProp, &temp,&(*bhits).cov); // vectorized function
+          KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+      }
     }
   }
  // } //end of itr loop

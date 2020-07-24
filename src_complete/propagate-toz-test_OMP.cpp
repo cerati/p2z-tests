@@ -25,7 +25,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 100
+#define NITER 5
+#endif
+#ifndef nlayers
+#define nlayers 20
 #endif
 
 #ifndef nthreads
@@ -569,6 +572,7 @@ omp_set_num_threads(nthreads);
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
+       for (size_t layer=0;layer<nlayers;++layer) { // loop over bunches of tracks
 #pragma omp parallel for
     for (size_t ie=0;ie<nevts;++ie) { // loop over events
 #pragma omp simd
@@ -578,8 +582,11 @@ omp_set_num_threads(nthreads);
        const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
        //
-       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-       KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+//#pragma omp simd
+     //  for (size_t layer=0;layer<nlayers;++layer) { // loop over bunches of tracks
+          propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+          KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+       }
      }
     }
    } //end of itr loop

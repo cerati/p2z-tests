@@ -12,7 +12,7 @@
 #               omp4                                     #
 ##########################################################
 COMPILER ?= nvcc
-MODE ?= eigen
+MODE ?= cuda
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
@@ -249,6 +249,8 @@ $(TARGET)/$(BENCHMARK): src_complete/$(CSRCS)
 
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
+cleanall:
+	rm -f $(TARGET)/* 
 
 purge: clean
 	rm -rf bin cetus_output openarcConf.txt 

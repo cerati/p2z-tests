@@ -23,7 +23,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 100
+#define NITER 5 
+#endif
+#ifndef nlayer
+#define nlayer 20
 #endif
 #ifndef num_streams
 #define num_streams 7
@@ -217,6 +220,13 @@ HOSTDEV float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
 HOSTDEV float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
 HOSTDEV float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
 
+HOSTDEV float x    (MP6F* bpars, size_t it){ return par(bpars, it, 0); }
+HOSTDEV float y    (MP6F* bpars, size_t it){ return par(bpars, it, 1); }
+HOSTDEV float z    (MP6F* bpars, size_t it){ return par(bpars, it, 2); }
+HOSTDEV float ipt  (MP6F* bpars, size_t it){ return par(bpars, it, 3); }
+HOSTDEV float phi  (MP6F* bpars, size_t it){ return par(bpars, it, 4); }
+HOSTDEV float theta(MP6F* bpars, size_t it){ return par(bpars, it, 5); }
+
 HOSTDEV float par(const MPTRK* btracks, size_t it, size_t ipar){
   return par(&(*btracks).par,it,ipar);
 }
@@ -400,6 +410,7 @@ __forceinline__ __device__ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B
     c[ 7*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
     c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
   }
+  __syncthreads();
 }
 
 __forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
@@ -430,32 +441,85 @@ __forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3
     c[ 16*N+n] = a[5*N+n]*b[1*N+n] + a[10*N+n]*b[4*N+n] + a[14*N+n]*b[7*N+n];
     c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
   }
+  __syncthreads();
 }
 
-__forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
+__forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){//, MP3x3* inverse_temp, MP3x6* kGain, MP6x6SF* newErr){
   MP3x3 inverse_temp;
   MP3x6 kGain;
   MP6x6SF newErr;
+  MP6F newPar;
   KalmanGainInv(trkErr,hitErr,&inverse_temp);
+  __syncthreads(); 
   KalmanGain(trkErr,&inverse_temp,&kGain);
-
+  __syncthreads(); 
+//  KalmanGainInv(trkErr,hitErr,inverse_temp);
+//  __syncthreads(); 
+//  KalmanGain(trkErr,inverse_temp,kGain);
+//  __syncthreads(); 
+  //const float lay = layx+2;
+//size_t it = 0;
+//float t = 5.0;
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
-  const float xin = x(inPar,it);
-  const float yin = y(inPar,it);
-  const float zin = z(inPar,it);
-  const float ptin = 1./ipt(inPar,it);
-  const float phiin = phi(inPar,it);
-  const float thetain = theta(inPar,it);
-  const float xout = x(msP,it);
-  const float yout = y(msP,it);
-  const float zout = z(msP,it);
-
+  //if(threadIdx.x == 0 && threadIdx.y ==0){ printf("x %f\n",t);}
+  float xin = x(inPar,it);
+  //float xin = inPar->data[it+0*bsize];
+  //float yin = inPar->data[it+1*bsize];
+  //float zin = inPar->data[it+2*bsize];
+  float yin = y(inPar,it);
+  float zin = z(inPar,it);
+  float ptin = 1./ipt(inPar,it);
+  float phiin = phi(inPar,it);
+  float thetain = theta(inPar,it);
+  float xout = x(msP,it);
+  //float xout = msP->data[it+0*bsize];
+  //float yout = msP->data[it+1*bsize];
+  //float zout = msP->data[it+2*bsize];
+  float yout = y(msP,it);
+  float zout = z(msP,it);
+  float ydiff = y(msP,it) - y(inPar,it);
+//  //printf("x: %f\n",it);
+//
   float xnew = xin + (kGain.data[0*bsize+it]*(xout-xin)) +(kGain.data[1*bsize+it]*(yout-yin)) +(kGain.data[2*bsize+it]*(zout-zin));
   float ynew = yin + (kGain.data[3*bsize+it]*(xout-xin)) +(kGain.data[4*bsize+it]*(yout-yin)) +(kGain.data[5*bsize+it]*(zout-zin));
   float znew = zin + (kGain.data[6*bsize+it]*(xout-xin)) +(kGain.data[7*bsize+it]*(yout-yin)) +(kGain.data[8*bsize+it]*(zout-zin));
   float ptnew = ptin + (kGain.data[9*bsize+it]*(xout-xin)) +(kGain.data[10*bsize+it]*(yout-yin)) +(kGain.data[11*bsize+it]*(zout-zin));
   float phinew = phiin + (kGain.data[12*bsize+it]*(xout-xin)) +(kGain.data[13*bsize+it]*(yout-yin)) +(kGain.data[14*bsize+it]*(zout-zin));
   float thetanew = thetain + (kGain.data[15*bsize+it]*(xout-xin)) +(kGain.data[16*bsize+it]*(yout-yin)) +(kGain.data[17*bsize+it]*(zout-zin));
+  //float xnew = (kGain->data[1*bsize+it]);//*(ydiff) ; // removed "zout-zin" term since zin is set to zout thus the term is 0 anyway. 
+  //float xnew = xin + ((kGain->data[0*bsize+it])*(xout-xin))+ ((kGain->data[1*bsize+it])*(yout-yin)) ; // removed "zout-zin" term since zin is set to zout thus the term is 0 anyway. 
+  //float xnew = xin + ((kGain->data[0*bsize+it])*(xout-xin)) + ((kGain->data[1*bsize+it])*(yout-yin)) ; // removed "zout-zin" term since zin is set to zout thus the term is 0 anyway. 
+  //float ynew = yin + (kGain->data[3*bsize+it]*(xout-xin)) +(kGain->data[4*bsize+it]*(yout-yin)) ;
+  //float znew = zin + (kGain->data[6*bsize+it]*(xout-xin)) +(kGain->data[7*bsize+it]*(yout-yin)) ;
+  //float ptnew = ptin + (kGain->data[9*bsize+it]*(xout-xin)) +(kGain->data[10*bsize+it]*(yout-yin)) ;
+  //float phinew = phiin + (kGain->data[12*bsize+it]*(xout-xin)) +(kGain->data[13*bsize+it]*(yout-yin)) ;
+  //float thetanew = thetain + (kGain->data[15*bsize+it]*(xout-xin)) +(kGain->data[16*bsize+it]*(yout-yin));
+  //newErr->data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[2*bsize+it]);
+  //newErr->data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[7*bsize+it]);
+  //newErr->data[2*bsize+it] = trkErr->data[2*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[11*bsize+it]);
+  //newErr->data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[12*bsize+it]);
+  //newErr->data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[13*bsize+it]);
+  //newErr->data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[14*bsize+it]);
+
+  //newErr->data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[7*bsize+it]);
+  //newErr->data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[11*bsize+it]);
+  //newErr->data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[12*bsize+it]);
+  //newErr->data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[13*bsize+it]);
+  //newErr->data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[14*bsize+it]);
+
+  //newErr->data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[11*bsize+it]);
+  //newErr->data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[12*bsize+it]);
+  //newErr->data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[13*bsize+it]);
+  //newErr->data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[14*bsize+it]);
+
+  //newErr->data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[12*bsize+it]);
+  //newErr->data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[13*bsize+it]);
+  //newErr->data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[14*bsize+it]);
+
+  //newErr->data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[13*bsize+it]);
+  //newErr->data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[14*bsize+it]);
+
+  //newErr->data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain->data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[17*bsize+it]*trkErr->data[14*bsize+it]);
 
   newErr.data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[2*bsize+it]);
   newErr.data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[7*bsize+it]);
@@ -484,15 +548,25 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
 
   newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain.data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[17*bsize+it]*trkErr->data[14*bsize+it]);
 
+    //setx(inPar,it,5.0 );
     setx(inPar,it,xnew );
+    //setx(inPar,it,lay );
     sety(inPar,it,ynew );
     setz(inPar,it,znew);
     setipt(inPar,it, ptnew);
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
+    //setx(outPar,it,xnew );
+    //sety(outPar,it,ynew );
+    //setz(outPar,it,znew);
+    //setipt(outPar,it, ptnew);
+    //setphi(outPar,it, phinew);
+    //settheta(outPar,it, thetanew);
   }
+  __syncthreads(); 
+ // inPar = &newPar;
  trkErr = &newErr;
-
+//
   //printf("updating");
 
 
@@ -504,7 +578,7 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
 __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 			  const MP1I* inChg,const MP3F* msP, 
 			  MP6x6SF* outErr, MP6F* outPar, 
-			struct MP6x6F* errorProp, struct MP6x6F* temp) {
+			struct MP6x6F* errorProp, struct MP6x6F* temp,const MP3x3SF* hitErr) {
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     const float zout = z(msP,it);
     const float k = q(inChg,it)*100/3.8;
@@ -525,6 +599,12 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     setipt(outPar,it, ipt(inPar,it));
     setphi(outPar,it, phi(inPar,it)+alpha );
     settheta(outPar,it, theta(inPar,it) );
+    //setx(tempPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
+    //sety(tempPar,it, y(inPar,it) + k*(pyin*sina + pxin*(1.-cosa)) );
+    //setz(tempPar,it,zout);
+    //setipt(tempPar,it, ipt(inPar,it));
+    //setphi(tempPar,it, phi(inPar,it)+alpha );
+    //settheta(tempPar,it, theta(inPar,it) );
     
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
@@ -546,11 +626,17 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
   MultHelixPropEndcap(errorProp, inErr, temp);
   __syncthreads(); 
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
+  __syncthreads(); 
+  //KalmanUpdate(outErr,outPar,hitErr,msP);
+  //KalmanUpdate(outErr,outPar,hitErr,msP);
+  //cudaMemcpy(outPar->data, tempPar->data, nevts*nb*sizeof(MP6F),cudaMemcpyDeviceToDevice);
+  //KalmanUpdate(outErr,outPar,hitErr,msP);
 }
 
 
 
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
+      //for(size_t layer=0;layer<2;++layer){	
   int ie_range;
   if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
   else{ie_range = (int)(nevts/num_streams);}
@@ -560,14 +646,28 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
       const MPTRK* btracks = bTk(trk,ie,ib);
       const MPHIT* bhits = bHit(hit,ie,ib);
       MPTRK* obtracks = bTk(outtrk,ie,ib);
-      //const MPTRK* btracks = bTk(trk,ie+stream*nevts/num_streams,ib);
-      //const MPHIT* bhits = bHit(hit,ie+stream*nevts/num_streams,ib);
-      //MPTRK* obtracks = bTk(outtrk,ie+stream*nevts/num_streams,ib);
       __shared__ struct MP6x6F errorProp, temp;
-	
-      propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
-                   &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
-      KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+      //__shared__ struct MP6F tempPar;
+      //for(size_t layer=0;layer<2;++layer){	
+//  /*__shared__*/ struct MP3x3 inverse_temp;
+//  /*__shared__*/ struct MP3x6 kGain;
+//  /*__shared__*/ struct MP6x6SF newErr;
+        //for (int ix=0;ix<18;ix++){ kGain.data[ix] = 1;}
+        //for (int ix=0;ix<sizeof((obtracks->par).data)/sizeof((obtracks->par).data[0]);ix++){ (obtracks->par).data[ix] = 1;}
+        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
+                     &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp,&(*bhits).cov);
+        __syncthreads(); 
+//        KalmanGainInv(&(*obtracks).cov,&(*bhits).cov,&inverse_temp);
+//        //__syncthreads(); 
+//        KalmanGain(&(*obtracks).cov,&inverse_temp,&kGain);
+//        //__syncthreads(); 
+        //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp,&kGain,&newErr);
+        KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+        //obtracks->par = opar->par;       
+        //__syncthreads(); 
+        //printf("out %f\n",(obtracks->par).data[0]);
+      //}
+      //__syncthreads(); 
     }
   }
 }
@@ -647,14 +747,14 @@ int main (int argc, char* argv[]) {
   start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
   for(int itr=0; itr<NITER; itr++){
   for (int s = 0; s<num_streams;s++){
-    //cudaMemPrefetchAsync(trk,nevts*nb*sizeof(MPTRK), device,streams[s]);
-    //cudaMemPrefetchAsync(hit,nevts*nb*sizeof(MPHIT), device,streams[s]);
     cudaMemPrefetchAsync(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), device,streams[s]);
-    cudaMemPrefetchAsync(hit+(s*stream_chunk),stream_chunk*sizeof(MPHIT), device,streams[s]);
+    cudaMemAdvise(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
+    for (size_t layer = 0; layer<nlayer;++layer){ //attempt to redo hit transfer 1 for each layer. idk if that really works. Maybe increase hit size?
+      cudaMemPrefetchAsync(hit+(s*stream_chunk),stream_chunk*sizeof(MPHIT), device,streams[s]);
+      cudaMemAdvise(hit+(s*stream_chunk),stream_chunk*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
+    }
     //cudaStreamAttachMemAsync(streams[s],trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK),cudaMemAttachHost);
     //cudaStreamAttachMemAsync(streams[s],hit+(s*stream_chunk),stream_chunk*sizeof(MPHIT),cudaMemAttachHost);
-    cudaMemAdvise(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
-    cudaMemAdvise(hit+(s*stream_chunk),stream_chunk*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
     //cudaMemAdvise(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK),cudaMemAdviseSetReadMostly,device);
     //cudaMemAdvise(hit+(s*stream_chunk),stream_chunk*sizeof(MPHIT),cudaMemAdviseSetReadMostly,device);
     //cudaMemAdvise(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK),cudaMemAdviseSetAccessedBy,device);
@@ -662,9 +762,11 @@ int main (int argc, char* argv[]) {
   }
   if(stream_remainder != 0){
     cudaMemPrefetchAsync(trk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), device,streams[num_streams]);
-    cudaMemPrefetchAsync(hit+(num_streams*stream_chunk),stream_remainder*sizeof(MPHIT), device,streams[num_streams]);
     cudaMemAdvise(trk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
-    cudaMemAdvise(hit+(num_streams*stream_chunk),stream_remainder*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
+    for (size_t layer = 0; layer<nlayer;++layer){
+      cudaMemPrefetchAsync(hit+(num_streams*stream_chunk),stream_remainder*sizeof(MPHIT), device,streams[num_streams]);
+      cudaMemAdvise(hit+(num_streams*stream_chunk),stream_remainder*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
+    }
   }
 //  cudaMemAdvise(trk,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
 //  cudaMemAdvise(hit,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
@@ -674,7 +776,7 @@ int main (int argc, char* argv[]) {
 
 //  cudaEventRecord(copy);	
 //  cudaEventSynchronize(copy);
-//  for(int itr=0; itr<NITER; itr++){
+  for(int layer=0; layer<nlayer; layer++){
     for (int s = 0; s<num_streams;s++){
   	  //GPUsequence<<<grid,block,0,streams[s]>>>(trk,hit,outtrk,s);
   	  GPUsequence<<<grid,block,0,streams[s]>>>(trk+(s*stream_chunk),hit+(s*stream_chunk),outtrk+(s*stream_chunk),s);
@@ -684,8 +786,8 @@ int main (int argc, char* argv[]) {
     }  
 	  //cudaDeviceSynchronize(); // Normal sync
 
-//  } //end itr loop
-  //cudaDeviceSynchronize(); // shaves a few seconds
+  } //end layer loop
+  cudaDeviceSynchronize(); // shaves a few seconds
   
 //  cudaEventRecord(copyback);
 //  cudaEventSynchronize(copyback);

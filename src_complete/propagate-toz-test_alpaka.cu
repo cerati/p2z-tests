@@ -26,7 +26,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 100
+#define NITER 5 
+#endif
+#ifndef nlayer
+#define nlayer 20
 #endif
 
 #define HOSTDEV __host__ __device__
@@ -613,9 +616,11 @@ void ALPAKA_FN_ACC alpaka_kernel(TAcc const & acc, MPTRK* trk, MPHIT* hit, MPTRK
  	     struct MP6x6F errorProp, temp;
        //printf ("running kernel: %f\n",(btracks->par).data[0]);
        //
-       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-	   &errorProp, &temp, acc); // vectorized function
-       KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,acc);
+       //for( size_t layer=0; layer<nlayer;++layer){
+          propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+	        &errorProp, &temp, acc); // vectorized function
+          KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,acc);
+       //}
     }
   }
 }
@@ -652,7 +657,29 @@ void transfer_back(MPTRK* trk, MPTRK* trk_host){
   cudaMemcpy(&trk_host->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyDeviceToHost);
   cudaMemcpy(&((trk_host->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyDeviceToHost);
 }
+inline void transferTrk(MPTRK* trk, MPTRK* trk_dev){
 
+  cudaMemcpy(trk_dev, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->par, &trk->par, sizeof(MP6F), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->par).data), &((trk->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->cov, &trk->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->q, &trk->q, sizeof(MP1I), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice);
+  cudaMemcpy(&trk_dev->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice);
+  cudaMemcpy(&((trk_dev->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice);
+
+}
+inline void transferHit(MPHIT* hit, MPHIT* hit_dev){
+
+ // for(size_t layer=0; layer<nlayer;++layer){
+    cudaMemcpy(hit_dev,hit,nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
+    cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
+    cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice);
+    cudaMemcpy(&(hit_dev->cov).data,&(hit->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice);
+ // }
+}
 
 
 
@@ -865,7 +892,10 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-   transfer(trk,hit, trk_dev,hit_dev);
+   transferTrk(trk,trk_dev);
+   for(int layer=0; layer<nlayer; layer++) {
+   transferHit(hit,hit_dev);
+   //transfer(trk,hit, trk_dev,hit_dev);
      //alpaka::kernel::exec<Host>( hostQueue,workDiv,
      //[] ALPAKA_FN_ACC (Host const & host, MPTRK* trk_host, MPHIT* hit_host, MPTRK* outtrk_host){
      //alpaka_kernel(host, trk_host,hit_host,outtrk_host);
@@ -889,7 +919,7 @@ int main (int argc, char* argv[]) {
 //       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
 //	   &errorProp, &temp); // vectorized function
 //    }
-//  }
+  } // end layer loop
    transfer_back(outtrk_dev,outtrk);
   } //end of itr loop
    gettimeofday(&timecheck, NULL);
