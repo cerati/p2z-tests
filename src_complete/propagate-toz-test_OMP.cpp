@@ -21,7 +21,6 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #define nb    ntrks/bsize
-//#define ntrks nb*bsize
 #define smear 0.1
 
 #ifndef NITER
@@ -195,6 +194,9 @@ void settheta(MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val)
 const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
+const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,size_t lay) {
+  return &(hits[ib + nb*ev+lay*nevts]);
+}
 //
 float pos(const MP3F* hpos, size_t it, size_t ipar){
   return (*hpos).data[it + ipar*bsize];
@@ -243,22 +245,24 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));  //fixme, align?
+  MPHIT* result = (MPHIT*) malloc(nlayers*nevts*nb*sizeof(MPHIT));  //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
+      for (size_t lay=0;lay<nlayers;++lay) {
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
   	//pos
   	for (size_t ip=0;ip<3;++ip) {
-  	  result[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+  	  result[ib + nb*ie+lay*nevts].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
   	}
   	//cov
   	for (size_t ip=0;ip<6;++ip) {
-  	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+  	  result[ib + nb*ie+lay*nevts].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
   	}
       }
     }
   }
+}
   return result;
 }
 
@@ -461,16 +465,12 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
   }
   //Is this the correct way to assign the errors? Should I use memcpy instead?  
   trkErr = &newErr;
-  //printf("updating");
-
-
 }
 
 
 void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar) {
-  //
   MP6x6F errorProp, temp;
 #pragma omp simd
   for (size_t it=0;it<bsize;++it) {	
@@ -556,34 +556,22 @@ omp_set_num_threads(nthreads);
    printf("done preparing!\n");
    
 
-   // for (size_t ie=0;ie<nevts;++ie) {
-   //   for (size_t it=0;it<ntrks;++it) {
-   //     printf("ie=%lu it=%lu\n",ie,it);
-   //     printf("hx=%f\n",x(&hit,ie,it));
-   //     printf("hy=%f\n",y(&hit,ie,it));
-   //     printf("hz=%f\n",z(&hit,ie,it));
-   //     printf("tx=%f\n",x(&trk,ie,it));
-   //     printf("ty=%f\n",y(&trk,ie,it));
-   //     printf("tz=%f\n",z(&trk,ie,it));
-   //   }
-   // }
   
 
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-       for (size_t layer=0;layer<nlayers;++layer) { // loop over bunches of tracks
 #pragma omp parallel for
     for (size_t ie=0;ie<nevts;++ie) { // loop over events
 #pragma omp simd
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
        const MPTRK* btracks = bTk(trk, ie, ib);
-       const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
+       for (size_t layer=0;layer<nlayers;++layer) { // loop over bunches of tracks
+       const MPHIT* bhits = bHit(hit, ie, ib,layer);
        //
 //#pragma omp simd
-     //  for (size_t layer=0;layer<nlayers;++layer) { // loop over bunches of tracks
           propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
           KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
        }
@@ -593,14 +581,6 @@ omp_set_num_threads(nthreads);
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-   // for (size_t ie=0;ie<nevts;++ie) {
-   //   for (size_t it=0;it<ntrks;++it) {
-   //     printf("ie=%lu it=%lu\n",ie,it);
-   //     printf("tx=%f\n",x(&outtrk,ie,it));
-   //     printf("ty=%f\n",y(&outtrk,ie,it));
-   //     printf("tz=%f\n",z(&outtrk,ie,it));
-   //   }
-   // }
    
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
    printf("formatted %i %i %i %i %i %f %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, (end-start)*0.001, (end-start)*0.001, (end_setup-start_setup)*0.001, nthreads);

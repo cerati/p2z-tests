@@ -201,6 +201,9 @@ void settheta(struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 
 const struct MPHIT* bHit(const struct MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
+const struct MPHIT* bHit(const struct MPHIT* hits, size_t ev, size_t ib,size_t lay) {
+  return &(hits[ib + nb*ev+lay*nevts]);
+}
 //
 float pos(const struct MP3F* hpos, size_t it, size_t ipar){
   return (*hpos).data[it + ipar*bsize];
@@ -249,22 +252,27 @@ struct MPTRK* prepareTracks(struct ATRK inputtrk) {
 }
 
 struct MPHIT* prepareHits(struct AHIT inputhit) {
-  struct MPHIT* result = (struct MPHIT*) malloc(nevts*nb*sizeof(struct MPHIT));  //fixme, align?
+  struct MPHIT* result = (struct MPHIT*) malloc(nlayer*nevts*nb*sizeof(struct MPHIT));  //fixme, align?
+  //struct MPHIT* result = (struct MPHIT*) malloc(nevts*nb*sizeof(struct MPHIT));  //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t lay=0;lay<nlayer;++lay) {
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
   	//pos
   	for (size_t ip=0;ip<3;++ip) {
-  	  result[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+  	  //result[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+  	  result[ib + nb*ie+lay*nevts].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
   	}
   	//cov
   	for (size_t ip=0;ip<6;++ip) {
-  	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+  	  //result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+  	  result[ib + nb*ie+lay*nevts].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
   	}
       }
     }
   }
+}
   return result;
 }
 
@@ -558,7 +566,8 @@ int main (int argc, char* argv[]) {
    struct MPHIT* hit = prepareHits(inputhit);
    struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
 
-#pragma omp target enter data map(alloc: trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
+//#pragma omp target enter data map(alloc: trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
+#pragma omp target enter data map(alloc: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
 
    gettimeofday(&timecheck, NULL);
    setup_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -586,23 +595,25 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-#pragma omp target update to(trk[0:nevts*nb], hit[0:nevts*nb])
+//#pragma omp target update to(trk[0:nevts*nb], hit[0:nevts*nb])
+#pragma omp target update to(trk[0:nevts*nb], hit[0:nevts*nb*nlayer])
 
 {
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
    printf("iter %i/%i\n",itr,(int)NITER);
-#pragma omp target teams distribute collapse(2) map(to: trk[0:nevts*nb], hit[0:nevts*nb]) map(from: outtrk[0:nevts*nb])
+//#pragma omp target teams distribute collapse(2) map(to: trk[0:nevts*nb], hit[0:nevts*nb]) map(from: outtrk[0:nevts*nb])
+#pragma omp target teams distribute collapse(2) map(to: trk[0:nevts*nb], hit[0:nevts*nb*nlayer]) map(from: outtrk[0:nevts*nb])
    for (size_t ie=0;ie<nevts;++ie) { // loop over events
      for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
        //
        const struct MPTRK* btracks = bTkC(trk, ie, ib);
-       const struct MPHIT* bhits = bHit(hit, ie, ib);
        struct MPTRK* obtracks = bTk(outtrk, ie, ib);
+       for(size_t layer=0; layer<nlayer; ++layer) {
+       const struct MPHIT* bhits = bHit(hit, ie, ib);
 	   struct MP6x6F errorPro, temp;
        //
-       for(size_t layer=0; layer<nlayer; ++layer) {
           propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
           &errorPro, &temp); // vectorized function
           KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);

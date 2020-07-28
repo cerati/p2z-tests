@@ -197,6 +197,9 @@ void settheta(MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val)
 const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
+const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,size_t lay) {
+  return &(hits[ib + nb*ev+lay*nevts]);
+}
 //
 float pos(const MP3F* hpos, size_t it, size_t ipar){
   return (*hpos).data[it + ipar*bsize];
@@ -245,22 +248,24 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));  //fixme, align?
+  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t lay=0;lay<nlayer;++lay) {
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
   	//pos
   	for (size_t ip=0;ip<3;++ip) {
-  	  result[ib + nb*ie].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+  	  result[ib + nb*ie+lay*nevts].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
   	}
   	//cov
   	for (size_t ip=0;ip<6;++ip) {
-  	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+  	  result[ib + nb*ie+lay*nevts].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
   	}
       }
     }
   }
+}
   return result;
 }
 
@@ -549,52 +554,27 @@ int main (int argc, char* argv[]) {
    printf("done preparing!\n");
    
 
-   // for (size_t ie=0;ie<nevts;++ie) {
-   //   for (size_t it=0;it<ntrks;++it) {
-   //     printf("ie=%lu it=%lu\n",ie,it);
-   //     printf("hx=%f\n",x(&hit,ie,it));
-   //     printf("hy=%f\n",y(&hit,ie,it));
-   //     printf("hz=%f\n",z(&hit,ie,it));
-   //     printf("tx=%f\n",x(&trk,ie,it));
-   //     printf("ty=%f\n",y(&trk,ie,it));
-   //     printf("tz=%f\n",z(&trk,ie,it));
-   //   }
-   // }
-  
-
    task_scheduler_init init(nthreads);
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-       for(size_t layer=0; layer<nlayer; ++layer) {
 parallel_for(blocked_range<size_t>(0,nevts,4),[&](blocked_range<size_t> iex){
       for(size_t ie =iex.begin(); ie<iex.end();++ie){
 parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){
       for(size_t ib =ibx.begin(); ib<ibx.end();++ib){
        //
        const MPTRK* btracks = bTk(trk, ie, ib);
-       const MPHIT* bhits = bHit(hit, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
-       //
-       //for(size_t layer=0; layer<nlayer; ++layer) {
+       for(size_t layer=0; layer<nlayer; ++layer) {
+       const MPHIT* bhits = bHit(hit, ie, ib,layer);
           propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
           KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
-        //}
+        }
      }});
     }});
-    }
    } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-
-   // for (size_t ie=0;ie<nevts;++ie) {
-   //   for (size_t it=0;it<ntrks;++it) {
-   //     printf("ie=%lu it=%lu\n",ie,it);
-   //     printf("tx=%f\n",x(&outtrk,ie,it));
-   //     printf("ty=%f\n",y(&outtrk,ie,it));
-   //     printf("tz=%f\n",z(&outtrk,ie,it));
-   //   }
-   // }
    
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
    printf("formatted %i %i %i %i %i %f %f 0 %f %i\n",int(NITER),nevts,ntrks, bsize, nb, (end-start)*0.001, (end-start)*0.001, (end_setup-start_setup)*0.001, nthreads);

@@ -249,6 +249,7 @@ $(TARGET)/$(BENCHMARK): src_complete/$(CSRCS)
 
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
+
 cleanall:
 	rm -f $(TARGET)/* 
 
