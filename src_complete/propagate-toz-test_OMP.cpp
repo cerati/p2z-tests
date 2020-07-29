@@ -26,8 +26,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef NITER
 #define NITER 5
 #endif
-#ifndef nlayers
-#define nlayers 20
+#ifndef nlayer
+#define nlayer 20
 #endif
 
 #ifndef nthreads
@@ -195,7 +195,8 @@ const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
 const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,size_t lay) {
-  return &(hits[ib + nb*ev+lay*nevts]);
+//  return &(hits[ib + nb*ev+lay*nevts]);
+return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
 }
 //
 float pos(const MP3F* hpos, size_t it, size_t ipar){
@@ -214,7 +215,7 @@ float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
 //
 float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const MPHIT* bhits = bHit(hits, ev, ib);
+  const MPHIT* bhits = bHit(hits, ev, ib,nlayer-1);
   size_t it = tk % bsize;
   return pos(bhits,it,ipar);
 }
@@ -245,19 +246,21 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  MPHIT* result = (MPHIT*) malloc(nlayers*nevts*nb*sizeof(MPHIT));  //fixme, align?
+  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
-      for (size_t lay=0;lay<nlayers;++lay) {
+      for (size_t lay=0;lay<nlayer;++lay) {
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
   	//pos
   	for (size_t ip=0;ip<3;++ip) {
-  	  result[ib + nb*ie+lay*nevts].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+  	  //result[ib + nb*ie+lay*nevts].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+  	  result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
   	}
   	//cov
   	for (size_t ip=0;ip<6;++ip) {
-  	  result[ib + nb*ie+lay*nevts].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+  	  //result[ib + nb*ie+lay*nevts].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+  	  result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
   	}
       }
     }
@@ -568,7 +571,7 @@ omp_set_num_threads(nthreads);
        //
        const MPTRK* btracks = bTk(trk, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
-       for (size_t layer=0;layer<nlayers;++layer) { // loop over bunches of tracks
+       for (size_t layer=0;layer<nlayer;++layer) { // loop over bunches of tracks
        const MPHIT* bhits = bHit(hit, ie, ib,layer);
        //
 //#pragma omp simd

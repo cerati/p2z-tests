@@ -23,13 +23,13 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 5 
+#define NITER 100 
 #endif
 #ifndef nlayer
 #define nlayer 20
 #endif
 #ifndef num_streams
-#define num_streams 1 //streams changes answers
+#define num_streams 7 //streams changes answers
 #endif
 
 #ifndef threadsperblockx
@@ -174,11 +174,13 @@ MPHIT* prepareHits(AHIT inputhit) {
       for (size_t it=0;it<bsize;++it) {
         //pos
         for (size_t ip=0;ip<3;++ip) {
-          result[ib + nb*ie+lay*nevts].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+          result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+          //result[ib + nb*ie+lay*nevts].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
         }
         //cov
         for (size_t ip=0;ip<6;++ip) {
-          result[ib + nb*ie+lay*nevts].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+          result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+          //result[ib + nb*ie+lay*nevts].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
         }
       }
     }
@@ -275,7 +277,8 @@ HOSTDEV const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
 HOSTDEV const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,int lay) {
-  return &(hits[ib + nb*ev+lay*nevts]);
+  return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
+  //return &(hits[ib + nb*ev+lay*nevts]);
 }
 
 HOSTDEV float pos(const MP3F* hpos, size_t it, size_t ipar){
@@ -405,7 +408,7 @@ __forceinline__ __device__ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B
     c[ 7*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
     c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
   }
-  __syncthreads();
+ // __syncthreads();
 }
 
 __forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
@@ -436,7 +439,7 @@ __forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3
     c[ 16*N+n] = a[5*N+n]*b[1*N+n] + a[10*N+n]*b[4*N+n] + a[14*N+n]*b[7*N+n];
     c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
   }
-  __syncthreads();
+  //__syncthreads();
 }
 
 __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){//, MP3x3* inverse_temp, MP3x6* kGain, MP6x6SF* newErr){
@@ -445,9 +448,9 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
   MP6x6SF newErr;
   MP6F newPar;
   KalmanGainInv(trkErr,hitErr,&inverse_temp);
-  __syncthreads(); 
+  //__syncthreads(); 
   KalmanGain(trkErr,&inverse_temp,&kGain);
-  __syncthreads(); 
+  //__syncthreads(); 
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
   float xin = x(inPar,it);
   float yin = y(inPar,it);
@@ -533,7 +536,7 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
-  __syncthreads(); 
+  //__syncthreads(); 
  trkErr = &newErr;
 
 
@@ -582,11 +585,11 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
     errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
-  __syncthreads(); 
+  //__syncthreads(); 
   MultHelixPropEndcap(errorProp, inErr, temp);
-  __syncthreads(); 
+  //__syncthreads(); 
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
-  __syncthreads(); 
+  //__syncthreads(); 
   //KalmanUpdate(outErr,outPar,hitErr,msP);
 }
 
