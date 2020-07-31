@@ -30,7 +30,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define nlayer 20
 #endif
 #ifndef num_streams
-#define num_streams 1
+#define num_streams 7
 #endif
 
 #ifndef threadsperblockx

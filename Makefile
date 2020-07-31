@@ -12,7 +12,7 @@
 #               omp4                                     #
 ##########################################################
 COMPILER ?= nvcc
-MODE ?= cuda
+MODE ?= alpaka
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0

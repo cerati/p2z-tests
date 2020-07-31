@@ -197,7 +197,7 @@ HOSTDEV const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
 HOSTDEV const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,size_t lay) {
-  i//return &(hits[ib + nb*ev+lay*nevts]);
+  //return &(hits[ib + nb*ev+lay*nevts]);
 return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
 }
 
@@ -600,7 +600,7 @@ void transfer(MPTRK* trk, MPHIT* hit, MPTRK* trk_dev, MPHIT* hit_dev){
   cudaMemcpy(&trk_dev->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice);
   cudaMemcpy(&((trk_dev->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice);
 
-  cudaMemcpy(hit_dev,hit,nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
+  cudaMemcpy(hit_dev,hit,nlayer*nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
   cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
   cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice);
@@ -633,7 +633,7 @@ inline void transferTrk(MPTRK* trk, MPTRK* trk_dev){
 }
 inline void transferHit(MPHIT* hit, MPHIT* hit_dev){
 
-    cudaMemcpy(hit_dev,hit,nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
+    cudaMemcpy(hit_dev,hit,nlayer*nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
     cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
     cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice);
