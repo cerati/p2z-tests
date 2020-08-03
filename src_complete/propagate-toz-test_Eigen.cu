@@ -28,8 +28,11 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef NITER
 #define NITER 1
 #endif
+#ifndef nlayer
+#define nlayer 1
+#endif
 #ifndef num_streams
-#define num_streams 1
+#define num_streams 20
 #endif
 
 #ifndef threadsperblockx
@@ -185,24 +188,26 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
+  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
   //MPHIT* result;
   //cudaMallocManaged((void**)&result,nevts*nb*sizeof(MPHIT));  //fixme, align?
   //cudaMemAdvise(result,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
+  for (size_t lay=0;lay<nlayer;++lay) {
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
         //pos
         for (size_t ip=0;ip<3;++ip) {
-          result[ib + nb*ie].pos.data[it](ip) = (1+smear*randn(0,1))*inputhit.pos[ip];
+          result[lay+nlayer*(ib + nb*ie)].pos.data[it](ip) = (1+smear*randn(0,1))*inputhit.pos[ip];
         }
         //cov
         for (size_t ip=0;ip<6;++ip) {
-          result[ib + nb*ie].cov.data[it](ip) = (1+smear*randn(0,1))*inputhit.cov[ip];
+          result[lay+nlayer*(ib + nb*ie)].cov.data[it](ip) = (1+smear*randn(0,1))*inputhit.cov[ip];
         }
       }
     }
   }
+}
   return result;
 }
 
@@ -274,6 +279,12 @@ HOSTDEV void setipt  (MPTRK* btracks, size_t it, float val){ return setpar(btrac
 HOSTDEV void setphi  (MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 4, val); }
 HOSTDEV void settheta(MPTRK* btracks, size_t it, float val){ return setpar(btracks, it, 5, val); }
 
+HOSTDEV MPHIT* bHit(MPHIT* hits, size_t ev, size_t ib, int lay) {
+  return &(hits[lay+nlayer*(ib + nb*ev)]);
+}
+HOSTDEV const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,int lay) {
+  return &(hits[lay+nlayer*(ib + nb*ev)]);
+}
 HOSTDEV MPHIT* bHit(MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
@@ -451,9 +462,9 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
   //printf("test 2n");
     for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
       const MPTRK* btracks = bTk(trk,ie+stream*nevts/num_streams,ib);
-      const MPHIT* bhits = bHit(hit,ie+stream*nevts/num_streams,ib);
-      //printf("show: %f\n", (bhits->pos).data[0](0));
       MPTRK* obtracks = bTk(outtrk,ie+stream*nevts/num_streams,ib);
+      for(int layer=0; layer<nlayer;++layer){
+      const MPHIT* bhits = bHit(hit,ie+stream*nevts/num_streams,ib,layer);
      // /*__shared__*/ struct MP6x6F errorProp/*, temp*/; //dynamic initialization is not supported for a function-scope static __shared__ variable within a __device__/__global__ function
  // printf("test 3\n");
 	
@@ -461,6 +472,7 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
                    //&(*obtracks).cov, &(*obtracks).par);
                    &(*obtracks).cov, &(*obtracks).par/*, &errorProp/*, &temp*/);
       KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+    }
     }
   }
 }
@@ -488,7 +500,7 @@ void transfer(MPTRK* trk, MPHIT* hit, MPTRK* trk_dev, MPHIT* hit_dev){
 
   //printf("host: %f\n",trk->par.data[0]);
   //printf("dev: %f\n",trk_dev->par.data[0]);
-  cudaMemcpy(hit_dev,hit,nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
+  cudaMemcpy(hit_dev,hit,nlayer*nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
   cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
   cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,bsize*sizeof(Matrix<float,3,1>), cudaMemcpyHostToDevice);
   cudaMemcpy(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice);
@@ -579,7 +591,7 @@ int main (int argc, char* argv[]) {
   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
   MPTRK* outtrk_dev;
   cudaMalloc((MPTRK**)&trk_dev,nevts*nb*sizeof(MPTRK));  
-  cudaMalloc((MPTRK**)&hit_dev,nevts*nb*sizeof(MPHIT));
+  cudaMalloc((MPTRK**)&hit_dev,nlayer*nevts*nb*sizeof(MPHIT));
   cudaMalloc((MPTRK**)&outtrk_dev,nevts*nb*sizeof(MPTRK));  
 
   dim3 grid(blockspergrid,1,1);
@@ -607,7 +619,7 @@ printf("dev: %f\n",trk->par.data[0](0));
 
   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
-  printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
+  printf("Size of struct struct MPHIT hit[] = %ld\n", nlayer*nevts*nb*sizeof(struct MPHIT));
 
 ///////////////////////////////////////TEST Functions///////////////////////////////////////////// 
 //std::vector<Matrix3d> m1(10, Matrix3d{{ 1.0, 1.0, 1.0},{1.0,1.0,1.0},{1.0,1.0,1.0 }});
