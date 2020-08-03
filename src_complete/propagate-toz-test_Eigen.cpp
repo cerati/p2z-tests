@@ -367,7 +367,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
 //#pragma omp simd
   for (size_t it=0;it<bsize;++it) {
     kGain.data[it] = trkErr->data[it].block<6,3>(0,0) * ((trkErr->data[it].block<3,3>(0,0)+hitErr->data[it]).inverse());
-    if(isnan(kGain.data[it].sum())) {continue;}
+    //if(isnan(kGain.data[it].sum())) {continue;}
     //inPar->data[it] = test;//inPar->data[it] + (kGain.data[it]*(msP->data[it]- ((inPar->data[it]).block<3,1>(0,0)))); 
    // if(it==0){
    // std::cout<<(kGain.data[it]*(msP->data[it]- ((inPar->data[it]).block<3,1>(0,0))))<<"done"<<std::endl;

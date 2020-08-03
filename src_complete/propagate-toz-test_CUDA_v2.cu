@@ -744,10 +744,12 @@ cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->cov).data,&((hit+
 //	  cudaDeviceSynchronize(); 
     for (int s = 0; s<num_streams;s++){
      // transferAsyncHit(hit,hit_dev,streams[s]);
-
   	  //GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev,hit_dev,outtrk_dev,s);
   	  GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev+(s*stream_chunk),hit_dev+(s*stream_chunk*nlayer),outtrk_dev+(s*stream_chunk),s);
     }  
+    if(stream_remainder != 0){
+  	  GPUsequence<<<grid,block,0,streams[num_streams]>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streamss*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
+    }
 //      transfer_back(outtrk_dev,outtrk); 
     for (int s = 0; s<num_streams;s++){
   cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);

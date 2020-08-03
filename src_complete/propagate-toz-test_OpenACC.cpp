@@ -25,7 +25,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NITER 5
 #endif
 #ifndef nlayer
-#define nlayer 20
+#define nlayer 1
 #endif
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
@@ -407,6 +407,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
   KalmanGainInv(trkErr,hitErr,&inverse_temp);
   KalmanGain(trkErr,&inverse_temp,&kGain);
 
+
  #pragma acc loop vector
   for (size_t it=0;it<bsize;++it) {
   const float xin = x(inPar,it);
@@ -511,7 +512,6 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
   //
   MultHelixPropEndcap(errorProp, inErr, temp);
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
-  //KalmanUpdate(outErr,outPar,hitErr,msP);
 }
 
 int main (int argc, char* argv[]) {
