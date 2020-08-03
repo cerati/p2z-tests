@@ -3,8 +3,8 @@
 source ../../mkFit/xeon_scripts/init-env.sh
 
 make -C .. cleanall
-compilers=("gcc" "icc" "pgi" "pgi" "gcc" "icc" "gcc"   "icc"   "gcc"    "icc"    "nvcc"   "nvcc" "nvcc")
-    modes=("omp" "omp" "omp" "acc" "tbb" "tbb" "eigen" "eigen" "alpaka" "alpaka" "alpaka" "cuda" "cudav2")
+compilers=("gcc" "icc" "pgi" "pgi" "gcc" "icc" "gcc"   "icc"   "nvcc"  "gcc"    "icc"    "nvcc"   "nvcc" "nvcc")
+    modes=("omp" "omp" "omp" "acc" "tbb" "tbb" "eigen" "eigen" "eigen" "alpaka" "alpaka" "alpaka" "cuda" "cudav2")
 
 
 for idx in "${!compilers[@]}";do

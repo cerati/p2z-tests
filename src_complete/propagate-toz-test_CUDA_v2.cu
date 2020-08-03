@@ -164,23 +164,21 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 MPHIT* prepareHits(AHIT inputhit) {
   MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
   for (size_t lay=0;lay<nlayer;++lay) {
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      for (size_t it=0;it<bsize;++it) {
-        //pos
-        for (size_t ip=0;ip<3;++ip) {
-          result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
-          //result[ib + nb*ie+lay*nevts].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
-        }
-        //cov
-        for (size_t ip=0;ip<6;++ip) {
-          result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
-          //result[ib + nb*ie+lay*nevts].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+    for (size_t ie=0;ie<nevts;++ie) {
+      for (size_t ib=0;ib<nb;++ib) {
+        for (size_t it=0;it<bsize;++it) {
+          //pos
+          for (size_t ip=0;ip<3;++ip) {
+            result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+          }
+          //cov
+          for (size_t ip=0;ip<6;++ip) {
+            result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+          }
         }
       }
     }
   }
-}
   return result;
 }
 
@@ -259,8 +257,7 @@ HOSTDEV const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
 HOSTDEV const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,int lay) {
-//  return &(hits[ib + nb*ev+lay*nevts]);
-return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
+  return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
 }
 
 HOSTDEV float pos(const MP3F* hpos, size_t it, size_t ipar){
@@ -372,13 +369,13 @@ __forceinline__ __device__ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-for(int n=threadIdx.x;n<N;n+=blockDim.x)
+  for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
-    float det =
+    double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
       ((a[2*N+n]+b[2*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n]))));
-    float invdet = 1.0/det;
+    double invdet = 1.0/det;
 
     c[ 0*N+n] =  invdet*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
     c[ 1*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
@@ -400,7 +397,7 @@ __forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-for(int n=threadIdx.x;n<N;n+=blockDim.x)
+  for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
@@ -434,51 +431,51 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
   KalmanGain(trkErr,&inverse_temp,&kGain);
  // __syncthreads(); 
 
-for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
-  const float xin = x(inPar,it);
-  const float yin = y(inPar,it);
-  const float zin = z(inPar,it);
-  const float ptin = 1./ipt(inPar,it);
-  const float phiin = phi(inPar,it);
-  const float thetain = theta(inPar,it);
-  const float xout = x(msP,it);
-  const float yout = y(msP,it);
-  const float zout = z(msP,it);
-
-  float xnew = xin + (kGain.data[0*bsize+it]*(xout-xin)) +(kGain.data[1*bsize+it]*(yout-yin));
-  float ynew = yin + (kGain.data[3*bsize+it]*(xout-xin)) +(kGain.data[4*bsize+it]*(yout-yin));
-  float znew = zin + (kGain.data[6*bsize+it]*(xout-xin)) +(kGain.data[7*bsize+it]*(yout-yin));
-  float ptnew = ptin + (kGain.data[9*bsize+it]*(xout-xin)) +(kGain.data[10*bsize+it]*(yout-yin));
-  float phinew = phiin + (kGain.data[12*bsize+it]*(xout-xin)) +(kGain.data[13*bsize+it]*(yout-yin));
-  float thetanew = thetain + (kGain.data[15*bsize+it]*(xout-xin)) +(kGain.data[16*bsize+it]*(yout-yin));
-
-  newErr.data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[2*bsize+it]);
-  newErr.data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[7*bsize+it]);
-  newErr.data[2*bsize+it] = trkErr->data[2*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[11*bsize+it]);
-  newErr.data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[12*bsize+it]);
-  newErr.data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[13*bsize+it]);
-  newErr.data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[14*bsize+it]);
-
-  newErr.data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[7*bsize+it]);
-  newErr.data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[11*bsize+it]);
-  newErr.data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[12*bsize+it]);
-  newErr.data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[13*bsize+it]);
-  newErr.data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[14*bsize+it]);
-
-  newErr.data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[11*bsize+it]);
-  newErr.data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[12*bsize+it]);
-  newErr.data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[13*bsize+it]);
-  newErr.data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[14*bsize+it]);
-
-  newErr.data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[12*bsize+it]);
-  newErr.data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[13*bsize+it]);
-  newErr.data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[14*bsize+it]);
-
-  newErr.data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain.data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[14*bsize+it]*trkErr->data[13*bsize+it]);
-  newErr.data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain.data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[14*bsize+it]*trkErr->data[14*bsize+it]);
-
-  newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain.data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[17*bsize+it]*trkErr->data[14*bsize+it]);
-
+  for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
+    const float xin = x(inPar,it);
+    const float yin = y(inPar,it);
+    const float zin = z(inPar,it);
+    const float ptin = 1./ipt(inPar,it);
+    const float phiin = phi(inPar,it);
+    const float thetain = theta(inPar,it);
+    const float xout = x(msP,it);
+    const float yout = y(msP,it);
+    const float zout = z(msP,it);
+  
+    float xnew = xin + (kGain.data[0*bsize+it]*(xout-xin)) +(kGain.data[1*bsize+it]*(yout-yin));
+    float ynew = yin + (kGain.data[3*bsize+it]*(xout-xin)) +(kGain.data[4*bsize+it]*(yout-yin));
+    float znew = zin + (kGain.data[6*bsize+it]*(xout-xin)) +(kGain.data[7*bsize+it]*(yout-yin));
+    float ptnew = ptin + (kGain.data[9*bsize+it]*(xout-xin)) +(kGain.data[10*bsize+it]*(yout-yin));
+    float phinew = phiin + (kGain.data[12*bsize+it]*(xout-xin)) +(kGain.data[13*bsize+it]*(yout-yin));
+    float thetanew = thetain + (kGain.data[15*bsize+it]*(xout-xin)) +(kGain.data[16*bsize+it]*(yout-yin));
+  
+    newErr.data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[2*bsize+it]);
+    newErr.data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[7*bsize+it]);
+    newErr.data[2*bsize+it] = trkErr->data[2*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[11*bsize+it]);
+    newErr.data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[12*bsize+it]);
+    newErr.data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr.data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[14*bsize+it]);
+  
+    newErr.data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[7*bsize+it]);
+    newErr.data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[11*bsize+it]);
+    newErr.data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[12*bsize+it]);
+    newErr.data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr.data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[14*bsize+it]);
+  
+    newErr.data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[11*bsize+it]);
+    newErr.data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[12*bsize+it]);
+    newErr.data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr.data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[14*bsize+it]);
+  
+    newErr.data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[12*bsize+it]);
+    newErr.data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr.data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[14*bsize+it]);
+  
+    newErr.data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain.data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[14*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr.data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain.data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[14*bsize+it]*trkErr->data[14*bsize+it]);
+  
+    newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain.data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[17*bsize+it]*trkErr->data[14*bsize+it]);
+  
     setx(inPar,it,xnew );
     sety(inPar,it,ynew );
     setz(inPar,it,znew);
@@ -487,13 +484,11 @@ for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     settheta(inPar,it, thetanew);
   }
   __syncthreads(); 
- trkErr = &newErr;
+  trkErr = &newErr;
 }
 
-__device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
-			  const MP1I* inChg,const MP3F* msP, 
-			  MP6x6SF* outErr, MP6F* outPar, 
-			struct MP6x6F* errorProp, struct MP6x6F* temp) {
+__device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg,const MP3F* msP, 
+			  MP6x6SF* outErr, MP6F* outPar, struct MP6x6F* errorProp, struct MP6x6F* temp) {
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     const float zout = z(msP,it);
     const float k = q(inChg,it)*100/3.8;
@@ -548,12 +543,12 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
       const MPTRK* btracks = bTk(trk,ie,ib);
       MPTRK* obtracks = bTk(outtrk,ie,ib);
       for (int layer=0;layer<nlayer;++layer){	
-      const MPHIT* bhits = bHit(hit,ie,ib,layer);
-      /*__shared__*/ struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
-      propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
-                   &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
-      __syncthreads();
-      KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+        const MPHIT* bhits = bHit(hit,ie,ib,layer);
+        /*__shared__*/ struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
+        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
+                     &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
+        __syncthreads();
+        KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
       }
     }
   }
@@ -573,13 +568,11 @@ inline void transferAsyncTrk(MPTRK* trk, MPTRK* trk_dev, cudaStream_t stream){
 }
 inline void transferAsyncHit(MPHIT* hit, MPHIT* hit_dev, cudaStream_t stream){
 
-//  for(size_t layer=0; layer<nlayer;++layer){ 
     cudaMemcpyAsync(hit_dev,hit,nlayer*nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(&(hit_dev->pos).data,&(hit->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(&(hit_dev->cov).data,&(hit->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, stream);
-//  }
 }
 inline void transfer_backAsync(MPTRK* trk, MPTRK* trk_host,cudaStream_t stream){
   cudaMemcpyAsync(trk_host, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyDeviceToHost, stream);
@@ -625,7 +618,7 @@ inline void transfer_back(MPTRK* trk, MPTRK* trk_host){
 int main (int argc, char* argv[]) {
 
   printf("RUNNING CUDA!!\n");
- printf("Streams: %d, blocks: %d, threads(x,y): (%d,%d)\n",num_streams,blockspergrid,threadsperblockx,threadsperblocky);
+  printf("Streams: %d, blocks: %d, threads(x,y): (%d,%d)\n",num_streams,blockspergrid,threadsperblockx,threadsperblocky);
   int itr;
   ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
@@ -707,71 +700,69 @@ int main (int argc, char* argv[]) {
     //  transfer(trk,hit, trk_dev,hit_dev);
     for (int s = 0; s<num_streams;s++){
 //      transferAsyncTrk(trk, trk_dev,streams[s]);
-  cudaMemcpyAsync(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->par, &(trk+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->par).data), &(((trk+(s*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->cov, &(trk+(s*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->cov).data), &(((trk+(s*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->q, &(trk+(s*stream_chunk))->q, sizeof(MP1I), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->q).data), &(((trk+(s*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->hitidx, &(trk+(s*stream_chunk))->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->hitidx).data), &(((trk+(s*stream_chunk))->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[s]);
-
-cudaMemcpyAsync(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(hit_dev+(s*stream_chunk*nlayer))->pos,&(hit+(s*stream_chunk*nlayer))->pos,sizeof(MP3F), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&((hit_dev+(s*stream_chunk*nlayer))->pos).data,&((hit+(s*stream_chunk*nlayer))->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&(hit_dev+(s*stream_chunk*nlayer))->cov,&(hit+(s*stream_chunk*nlayer))->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice, streams[s]);
-cudaMemcpyAsync(&((hit_dev+(s*stream_chunk*nlayer))->cov).data,&((hit+(s*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->par, &(trk+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->par).data), &(((trk+(s*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->cov, &(trk+(s*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->cov).data), &(((trk+(s*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->q, &(trk+(s*stream_chunk))->q, sizeof(MP1I), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->q).data), &(((trk+(s*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->hitidx, &(trk+(s*stream_chunk))->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->hitidx).data), &(((trk+(s*stream_chunk))->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[s]);
+      
+      cudaMemcpyAsync(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(hit_dev+(s*stream_chunk*nlayer))->pos,&(hit+(s*stream_chunk*nlayer))->pos,sizeof(MP3F), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&((hit_dev+(s*stream_chunk*nlayer))->pos).data,&((hit+(s*stream_chunk*nlayer))->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&(hit_dev+(s*stream_chunk*nlayer))->cov,&(hit+(s*stream_chunk*nlayer))->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(&((hit_dev+(s*stream_chunk*nlayer))->cov).data,&((hit+(s*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
     }  
-if(stream_remainder != 0){
-  cudaMemcpyAsync(trk_dev+(num_streams*stream_chunk), trk+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->par, &(trk+(num_streams*stream_chunk))->par, sizeof(MP6F), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->par).data), &(((trk+(num_streams*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->cov, &(trk+(num_streams*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->cov).data), &(((trk+(num_streams*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->q, &(trk+(num_streams*stream_chunk))->q, sizeof(MP1I), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->q).data), &(((trk+(num_streams*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->hitidx, &(trk+(num_streams*stream_chunk))->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->hitidx).data), &(((trk+(num_streams*stream_chunk))->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[num_streams]);
-
-cudaMemcpyAsync(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(hit_dev+(num_streams*stream_chunk*nlayer))->pos,&(hit+(num_streams*stream_chunk*nlayer))->pos,sizeof(MP3F), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->pos).data,&((hit+(num_streams*stream_chunk*nlayer))->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&(hit_dev+(num_streams*stream_chunk*nlayer))->cov,&(hit+(num_streams*stream_chunk*nlayer))->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice, streams[num_streams]);
-cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->cov).data,&((hit+(num_streams*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
-}
+    if(stream_remainder != 0){
+      cudaMemcpyAsync(trk_dev+(num_streams*stream_chunk), trk+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->par, &(trk+(num_streams*stream_chunk))->par, sizeof(MP6F), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->par).data), &(((trk+(num_streams*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->cov, &(trk+(num_streams*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->cov).data), &(((trk+(num_streams*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->q, &(trk+(num_streams*stream_chunk))->q, sizeof(MP1I), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->q).data), &(((trk+(num_streams*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->hitidx, &(trk+(num_streams*stream_chunk))->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->hitidx).data), &(((trk+(num_streams*stream_chunk))->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[num_streams]);
+      
+      cudaMemcpyAsync(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(hit_dev+(num_streams*stream_chunk*nlayer))->pos,&(hit+(num_streams*stream_chunk*nlayer))->pos,sizeof(MP3F), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->pos).data,&((hit+(num_streams*stream_chunk*nlayer))->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&(hit_dev+(num_streams*stream_chunk*nlayer))->cov,&(hit+(num_streams*stream_chunk*nlayer))->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice, streams[num_streams]);
+      cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->cov).data,&((hit+(num_streams*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
+    }
 
 //	  cudaDeviceSynchronize(); 
     for (int s = 0; s<num_streams;s++){
-     // transferAsyncHit(hit,hit_dev,streams[s]);
-  	  //GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev,hit_dev,outtrk_dev,s);
   	  GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev+(s*stream_chunk),hit_dev+(s*stream_chunk*nlayer),outtrk_dev+(s*stream_chunk),s);
     }  
     if(stream_remainder != 0){
-  	  GPUsequence<<<grid,block,0,streams[num_streams]>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streamss*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
+  	  GPUsequence<<<grid,block,0,streams[num_streams]>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streams*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
     }
 //      transfer_back(outtrk_dev,outtrk); 
     for (int s = 0; s<num_streams;s++){
-  cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
-cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->par, &(outtrk_dev+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[s]);
-cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->par).data), &(((outtrk_dev+(s*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[s]);
-cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->cov, &(outtrk_dev+(s*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost, streams[s]);
-cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->cov).data), &(((outtrk_dev+(s*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[s]);
-cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->q, &(outtrk_dev+(s*stream_chunk))->q, sizeof(MP1I), cudaMemcpyDeviceToHost, streams[s]);
-cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->q).data), &(((outtrk_dev+(s*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[s]);
-cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->hitidx, &(outtrk_dev+(s*stream_chunk))->hitidx, sizeof(MP22I), cudaMemcpyDeviceToHost, streams[s]);
-cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->hitidx).data), &(((outtrk_dev+(s*stream_chunk))->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[s]);
-}
+      cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
+      cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->par, &(outtrk_dev+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[s]);
+      cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->par).data), &(((outtrk_dev+(s*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[s]);
+      cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->cov, &(outtrk_dev+(s*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost, streams[s]);
+      cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->cov).data), &(((outtrk_dev+(s*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[s]);
+      cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->q, &(outtrk_dev+(s*stream_chunk))->q, sizeof(MP1I), cudaMemcpyDeviceToHost, streams[s]);
+      cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->q).data), &(((outtrk_dev+(s*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[s]);
+      cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->hitidx, &(outtrk_dev+(s*stream_chunk))->hitidx, sizeof(MP22I), cudaMemcpyDeviceToHost, streams[s]);
+      cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->hitidx).data), &(((outtrk_dev+(s*stream_chunk))->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[s]);
+    }
     if(stream_remainder != 0){
-  cudaMemcpyAsync(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[num_streams]);
-cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->par, &(outtrk_dev+(num_streams*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[num_streams]);
-cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->par).data), &(((outtrk_dev+(num_streams*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[num_streams]);
-cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->cov, &(outtrk_dev+(num_streams*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost, streams[num_streams]);
-cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->cov).data), &(((outtrk_dev+(num_streams*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[num_streams]);
-cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->q, &(outtrk_dev+(num_streams*stream_chunk))->q, sizeof(MP1I), cudaMemcpyDeviceToHost, streams[num_streams]);
-cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->q).data), &(((outtrk_dev+(num_streams*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[num_streams]);
-cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->hitidx, &(outtrk_dev+(num_streams*stream_chunk))->hitidx, sizeof(MP22I), cudaMemcpyDeviceToHost, streams[num_streams]);
-cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->hitidx).data), &(((outtrk_dev+(num_streams*stream_chunk))->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[num_streams]);
+      cudaMemcpyAsync(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[num_streams]);
+      cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->par, &(outtrk_dev+(num_streams*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[num_streams]);
+      cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->par).data), &(((outtrk_dev+(num_streams*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[num_streams]);
+      cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->cov, &(outtrk_dev+(num_streams*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost, streams[num_streams]);
+      cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->cov).data), &(((outtrk_dev+(num_streams*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[num_streams]);
+      cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->q, &(outtrk_dev+(num_streams*stream_chunk))->q, sizeof(MP1I), cudaMemcpyDeviceToHost, streams[num_streams]);
+      cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->q).data), &(((outtrk_dev+(num_streams*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[num_streams]);
+      cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->hitidx, &(outtrk_dev+(num_streams*stream_chunk))->hitidx, sizeof(MP22I), cudaMemcpyDeviceToHost, streams[num_streams]);
+      cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->hitidx).data), &(((outtrk_dev+(num_streams*stream_chunk))->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[num_streams]);
     }
 
 

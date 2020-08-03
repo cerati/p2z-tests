@@ -195,7 +195,6 @@ const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
 const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,size_t lay) {
-//  return &(hits[ib + nb*ev+lay*nevts]);
 return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
 }
 //
@@ -229,16 +228,16 @@ MPTRK* prepareTracks(ATRK inputtrk) {
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
-	//par
-	for (size_t ip=0;ip<6;++ip) {
-	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
-	}
-	//cov
-	for (size_t ip=0;ip<21;++ip) {
-	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
-	}
-	//q
-	result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+	      //par
+	      for (size_t ip=0;ip<6;++ip) {
+	        result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+	      }
+	      //cov
+	      for (size_t ip=0;ip<21;++ip) {
+	        result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+	      }
+	      //q
+	      result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
       }
     }
   }
@@ -248,29 +247,28 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 MPHIT* prepareHits(AHIT inputhit) {
   MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
-      for (size_t lay=0;lay<nlayer;++lay) {
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      for (size_t it=0;it<bsize;++it) {
-  	//pos
-  	for (size_t ip=0;ip<3;++ip) {
-  	  //result[ib + nb*ie+lay*nevts].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
-  	  result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
-  	}
-  	//cov
-  	for (size_t ip=0;ip<6;++ip) {
-  	  //result[ib + nb*ie+lay*nevts].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
-  	  result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
-  	}
+  for (size_t lay=0;lay<nlayer;++lay) {
+    for (size_t ie=0;ie<nevts;++ie) {
+      for (size_t ib=0;ib<nb;++ib) {
+        for (size_t it=0;it<bsize;++it) {
+  	      //pos
+  	      for (size_t ip=0;ip<3;++ip) {
+  	        result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+  	      }
+  	      //cov
+  	      for (size_t ip=0;ip<6;++ip) {
+  	        result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+         	}
+        }
       }
     }
   }
-}
   return result;
 }
 
 #define N bsize
 void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
+  // First setp of error propagation = A*B
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
@@ -317,6 +315,7 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
 }
 
 void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
+  // second step of error propagation= A*B transpose where B is A*B from the previous step. results in final error of A *(A*B)^T = A*B*(A^T) since B symetric
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
@@ -350,7 +349,7 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
 void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
   // k = P Ht(HPHt + R)^-1
   // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
-  // This calculates the inverse of HpHt +R
+  // This calculates the inverse of (HpHt +R)
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
@@ -362,7 +361,6 @@ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
       ((a[2*N+n]+b[2*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n]))));
     double invdet = 1.0/det;
-    //printf("inv_det %f",invdet);
 
     c[ 0*N+n] =  invdet*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
     c[ 1*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
@@ -378,7 +376,8 @@ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
 void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
   // k = P Ht(HPHt + R)^-1
   // A = P, B= R
-  // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
+  // HpHt -> cov of x,y,z. take upper 3x3 matrix of P. 
+  // this calculates the kalman gain using the inverse found in the previous step
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
@@ -407,11 +406,12 @@ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
 }
 
 void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
+  // This uses the kalman gain to calculate the new track and error parameters from the kalman prediction and hit information
   MP3x3 inverse_temp;
   MP3x6 kGain;
   MP6x6SF newErr;
-  KalmanGainInv(trkErr,hitErr,&inverse_temp);
-  KalmanGain(trkErr,&inverse_temp,&kGain);
+  KalmanGainInv(trkErr,hitErr,&inverse_temp);//get inverse in kalman gain
+  KalmanGain(trkErr,&inverse_temp,&kGain); // get kalman gain
 
 #pragma omp simd
   for (size_t it=0;it<bsize;++it) {	
@@ -425,13 +425,15 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
   const float yout = y(msP,it);
   const float zout = z(msP,it);
 
-  float xnew = xin + (kGain.data[0*bsize+it]*(xout-xin)) +(kGain.data[1*bsize+it]*(yout-yin)) +(kGain.data[2*bsize+it]*(zout-zin));
-  float ynew = yin + (kGain.data[3*bsize+it]*(xout-xin)) +(kGain.data[4*bsize+it]*(yout-yin)) +(kGain.data[5*bsize+it]*(zout-zin));
-  float znew = zin + (kGain.data[6*bsize+it]*(xout-xin)) +(kGain.data[7*bsize+it]*(yout-yin)) +(kGain.data[8*bsize+it]*(zout-zin));
-  float ptnew = ptin + (kGain.data[9*bsize+it]*(xout-xin)) +(kGain.data[10*bsize+it]*(yout-yin)) +(kGain.data[11*bsize+it]*(zout-zin));
-  float phinew = phiin + (kGain.data[12*bsize+it]*(xout-xin)) +(kGain.data[13*bsize+it]*(yout-yin)) +(kGain.data[14*bsize+it]*(zout-zin));
-  float thetanew = thetain + (kGain.data[15*bsize+it]*(xout-xin)) +(kGain.data[16*bsize+it]*(yout-yin)) +(kGain.data[17*bsize+it]*(zout-zin));
+  //get new track parameters using kalman gain. z term is ommited since zout-zin = 0 in all cases
+  float xnew = xin + (kGain.data[0*bsize+it]*(xout-xin)) +(kGain.data[1*bsize+it]*(yout-yin));
+  float ynew = yin + (kGain.data[3*bsize+it]*(xout-xin)) +(kGain.data[4*bsize+it]*(yout-yin));
+  float znew = zin + (kGain.data[6*bsize+it]*(xout-xin)) +(kGain.data[7*bsize+it]*(yout-yin));
+  float ptnew = ptin + (kGain.data[9*bsize+it]*(xout-xin)) +(kGain.data[10*bsize+it]*(yout-yin));
+  float phinew = phiin + (kGain.data[12*bsize+it]*(xout-xin)) +(kGain.data[13*bsize+it]*(yout-yin));
+  float thetanew = thetain + (kGain.data[15*bsize+it]*(xout-xin)) +(kGain.data[16*bsize+it]*(yout-yin));
 
+  //get new track errors using kalman gain
   newErr.data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[2*bsize+it]);
   newErr.data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[7*bsize+it]);
   newErr.data[2*bsize+it] = trkErr->data[2*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[11*bsize+it]);
@@ -459,21 +461,23 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
 
   newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain.data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[17*bsize+it]*trkErr->data[14*bsize+it]);
 
-    setx(inPar,it,xnew );
-    sety(inPar,it,ynew );
-    setz(inPar,it,znew);
-    setipt(inPar,it, ptnew);
-    setphi(inPar,it, phinew);
-    settheta(inPar,it, thetanew);
+  //sets new track information
+  setx(inPar,it,xnew );
+  sety(inPar,it,ynew );
+  setz(inPar,it,znew);
+  setipt(inPar,it, ptnew);
+  setphi(inPar,it, phinew);
+  settheta(inPar,it, thetanew);
   }
   //Is this the correct way to assign the errors? Should I use memcpy instead?  
+  //sets new track errors
   trkErr = &newErr;
 }
 
 
-void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
-		  const MP1I* inChg, const MP3F* msP,
-	                MP6x6SF* outErr, MP6F* outPar) {
+void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg, 
+                  const MP3F* msP, MP6x6SF* outErr, MP6F* outPar) {
+  // get predition of new track parameters using Helix predition
   MP6x6F errorProp, temp;
 #pragma omp simd
   for (size_t it=0;it<bsize;++it) {	
@@ -519,9 +523,9 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 }
 
 int main (int argc, char* argv[]) {
-printf("bsize: %d, nb:%d, omp threads:%d\n",(int)bsize,(int)nb,(int)nthreads);
-omp_set_dynamic(0);
-omp_set_num_threads(nthreads);
+  printf("bsize: %d, nb:%d, omp threads:%d\n",(int)bsize,(int)nb,(int)nthreads);
+  omp_set_dynamic(0);
+  omp_set_num_threads(nthreads);
    int itr;
    ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
@@ -564,22 +568,19 @@ omp_set_num_threads(nthreads);
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
-#pragma omp parallel for
-    for (size_t ie=0;ie<nevts;++ie) { // loop over events
-#pragma omp simd
-     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-       //
-       const MPTRK* btracks = bTk(trk, ie, ib);
-       MPTRK* obtracks = bTk(outtrk, ie, ib);
-       for (size_t layer=0;layer<nlayer;++layer) { // loop over bunches of tracks
-       const MPHIT* bhits = bHit(hit, ie, ib,layer);
-       //
-//#pragma omp simd
-          propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-          KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+     #pragma omp parallel for
+     for (size_t ie=0;ie<nevts;++ie) { // loop over events
+       #pragma omp simd
+       for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+         const MPTRK* btracks = bTk(trk, ie, ib);
+         MPTRK* obtracks = bTk(outtrk, ie, ib);
+         for (size_t layer=0;layer<nlayer;++layer) { // loop over bunches of tracks
+            const MPHIT* bhits = bHit(hit, ie, ib,layer);
+            propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+         }
        }
      }
-    }
    } //end of itr loop
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
