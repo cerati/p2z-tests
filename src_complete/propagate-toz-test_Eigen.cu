@@ -35,7 +35,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef threadsperblockx
 #define threadsperblockx 32
 #endif
-#define threadsperblocky 1024/threadsperblockx
+#define threadsperblocky 512/threadsperblockx
 #ifndef blockspergrid
 #define blockspergrid 10
 #endif
@@ -97,6 +97,15 @@ struct MP3F {
 struct MP6F {
   Matrix<float,6,1> data[bsize];
   //VectorXf data(6*bsize);
+};
+
+struct MP3x3 {
+  //float data[9*bsize];
+  Matrix<float,3,3> data[bsize];
+};
+struct MP6x3 {
+  //float data[18*bsize];
+  Matrix<float,6,3> data[bsize];
 };
 
 struct MP3x3SF {
@@ -300,84 +309,80 @@ HOSTDEV float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, e
 
 #define N bsize
 //HOSTDEV void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
-__forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6SF* C) {
+__forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   const Matrix<float,6,6> *a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const Matrix<float,6,6> *b = (*B).data; //ASSUME_ALIGNED(b, 64);
   Matrix<float,6,6> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
   //printf("c test %f\n", c[0](0));
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
-    const Matrix<float,6,6> at = A->data[it].transpose();
-    const Matrix<float,6,6> c2 = A->data[it]*(B->data[it]);
-    const Matrix<float,6,6> c3 = c2*at;
-    //for( int ix=0; ix<35;ix++){
-    //printf("c3 test %f\n", c3(0));
-    C->data[it](0) = c3(0);
-    C->data[it](1) = c3(1);
-    C->data[it](2) = c3(2);
-    //C->data[it](3) = c3(3);
-    C->data[it](4) = c3(4);
-    //C->data[it](5) = c3(5);
-    //C->data[it](6) = c3(6);
-    //C->data[it](7) = c3(7);
-    //C->data[it](8) = c3(8);
-    //C->data[it](9) = c3(9);
-    //C->data[it](10) = c3(10);
-    //C->data[it](11) = c3(11);
-    //C->data[it](12) = c3(12);
-    //C->data[it](13) = c3(13);
-    //C->data[it](14) = c3(14);
-    //C->data[it](15) = c3(15);
-    //C->data[it](16) = c3(16);
-    //C->data[it](17) = c3(17);
-    //C->data[it](18) = c3(18);
-    //C->data[it](19) = c3(19);
-    //C->data[it](20) = c3(20);
-    //C->data[it](21) = c3(21);
-    //C->data[it](22) = c3(22);
-    //C->data[it](23) = c3(23);
-    //C->data[it](24) = c3(24);
-    //C->data[it](25) = c3(25);
-    //C->data[it](26) = c3(26);
-    //C->data[it](27) = c3(27);
-    //C->data[it](28) = c3(28);
-    //C->data[it](29) = c3(29);
-    //C->data[it](30) = c3(30);
-    //C->data[it](31) = c3(31);
-    //C->data[it](32) = c3(32);
-    //C->data[it](33) = c3(33);
-    //C->data[it](34) = c3(34);
-    //C->data[it](35) = c3(35);
-    //}
-    
-    //c[it].noalias() = c2*at;
-    //c[it].noalias() = a[it]*b[it];
-    //c[it].noalias() = c[it]*at;
-    //printf("at test %f\n", at(0));
-    //printf("c test %f\n", c2(0));
-    //printf("c3 test %f\n", c3(0));
-    
+    c[it]/*.noalias()*/ = a[it]*b[it];
   }
-  //printf("cx test %f\n", c[0](0));
-    //printf("c test %f\n", c[0](0));
 }
 
 ////HOSTDEV void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
-//__forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
-//  const Matrix<float,6,6> *a = (*A).data; //ASSUME_ALIGNED(a, 64);
-//  const Matrix<float,6,6> *b = (*B).data; //ASSUME_ALIGNED(b, 64);
-//  Matrix<float,6,6> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-//  for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
-//    c[it]/*.noalias()*/= a[it]*b[it]/*.transpose()*/;
-//  }
-//}
+__forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
+  const Matrix<float,6,6> *a = (*A).data; //ASSUME_ALIGNED(a, 64);
+  const Matrix<float,6,6> *b = (*B).data; //ASSUME_ALIGNED(b, 64);
+  Matrix<float,6,6> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+  for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
+    c[it].noalias()= a[it]*b[it].transpose();
+    //printf("test %f\n",(c[it])(0));
+  }
+}
+
+__device__ __forceinline__ void KalmanGain(MP6x6SF* A, const MP3x3SF* B, MP6x3* C) {
+  // k = P Ht(HPHt + R)^-1
+  // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
+  // This calculates the inverse of HpHt +R
+  const Matrix<float,6,6> *a = (*A).data; //ASSUME_ALIGNED(a, 64);
+  const Matrix<float,3,3> *b = (*B).data; //ASSUME_ALIGNED(b, 64);
+  Matrix<float,6,3> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+  //const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
+  //const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
+  //float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+
+  //Matrix<float,3,6> H;
+  Matrix<float,3,3> inter;
+  //Matrix<float,6,3> K;
+  //H << 1,0,0,
+  //     0,1,0,
+  //     0,0,1,
+  //     0,0,0,0,0,0,0,0,0;
+  //Matrix<float,6,3> HT = H.transpose();
+    //std::cout<< H<<std::endl;
+  //#pragma omp simd
+  for (int n = 0; n < N; ++n)
+  {
+    //c[n] = a[n].block<6,3>(0,0) * ((a[n].block<3,3>(0,0)+b[n]).inverse()) ;
+    inter = ((a[n].block<3,3>(0,0)+b[n]).inverse()) ;
+    c[n] = a[n].block<6,3>(0,0) * inter;
+  }
+}
+
+__device__ __forceinline__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
+    MP6x3 kGain;
+    //KalmanGain(trkErr,hitErr,&kGain);
+//#pragma omp simd
+  for (size_t it=0;it<bsize;++it) {
+    kGain.data[it] = trkErr->data[it].block<6,3>(0,0) * ((trkErr->data[it].block<3,3>(0,0)+hitErr->data[it]).inverse());
+    if(isnan(kGain.data[it].sum())) {continue;}
+    //inPar->data[it] = test;//inPar->data[it] + (kGain.data[it]*(msP->data[it]- ((inPar->data[it]).block<3,1>(0,0))));
+   // if(it==0){
+   // std::cout<<(kGain.data[it]*(msP->data[it]- ((inPar->data[it]).block<3,1>(0,0))))<<"done"<<std::endl;
+   // }
+    inPar->data[it] = inPar->data[it] + (kGain.data[it]*(msP->data[it]- ((inPar->data[it]).block<3,1>(0,0))));
+    trkErr->data[it] = trkErr->data[it] - (kGain.data[it]*((trkErr->data[it]).block<3,6>(0,0)));
+  }
+
+}
 
 //HOSTDEV void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar
 __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 			  const MP1I* inChg,const MP3F* msP, 
-			  MP6x6SF* outErr, MP6F* outPar,
-			/*){*/struct MP6x6F* errorProp/*, struct MP6x6F* temp*/) {
+			  MP6x6SF* outErr, MP6F* outPar
+			/*){struct MP6x6F* errorProp, struct MP6x6F* temp*/) {
   //printf("testx\n");
-  //MP6x6F errorProp, temp;
+  MP6x6F errorProp, temp;
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     const float zout = z(msP,it);
     //printf("testx %f\n",zout);
@@ -403,46 +408,59 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp->data[it](i,i) = 1.;
-    errorProp->data[it](0,2) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp->data[it](0,3) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp->data[it](0,4) = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp->data[it](0,5) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    errorProp->data[it](1,2) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp->data[it](1,3) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp->data[it](1,4) = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp->data[it](1,5) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp->data[it](4,2) = -ipt(inPar,it)*sinT/(cosT*k);
-    errorProp->data[it](4,3) = sinT*deltaZ/(cosT*k);
-    errorProp->data[it](4,5) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+    //for (size_t i=0;i<6;++i) errorProp->data[it](i,i) = 1.;
+    //errorProp->data[it](0,2) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+    //errorProp->data[it](0,3) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    //errorProp->data[it](0,4) = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    //errorProp->data[it](0,5) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    //errorProp->data[it](1,2) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+    //errorProp->data[it](1,3) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    //errorProp->data[it](1,4) = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    //errorProp->data[it](1,5) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+    //errorProp->data[it](4,2) = -ipt(inPar,it)*sinT/(cosT*k);
+    //errorProp->data[it](4,3) = sinT*deltaZ/(cosT*k);
+    //errorProp->data[it](4,5) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+    for (size_t i=0;i<6;++i) errorProp.data[it](i,i) = 1.;
+    errorProp.data[it](0,2) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+    errorProp.data[it](0,3) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    errorProp.data[it](0,4) = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp.data[it](0,5) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    errorProp.data[it](1,2) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+    errorProp.data[it](1,3) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    errorProp.data[it](1,4) = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp.data[it](1,5) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+    errorProp.data[it](4,2) = -ipt(inPar,it)*sinT/(cosT*k);
+    errorProp.data[it](4,3) = sinT*deltaZ/(cosT*k);
+    errorProp.data[it](4,5) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
 
     //outErr->data[it] = errorProp->data[it] * inErr->data[it];
   }
- // __syncthreads();
+  __syncthreads();
   //MultHelixPropEndcap(errorProp, inErr, outErr);
-  //MultHelixPropEndcap(&errorProp, inErr, &temp);
- // __syncthreads();
+  MultHelixPropEndcap(&errorProp, inErr, &temp);
+  //__syncthreads();
  // MultHelixPropTranspEndcap(errorProp, temp, outErr);
-  //MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
+  MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
 }
 
 
 
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
-printf("dev2: %f\n",trk->par.data[0](0));
+//printf("dev2: %f\n",trk->par.data[0](0));
   for (size_t ie = blockIdx.x; ie<nevts/num_streams; ie+=gridDim.x){
-  printf("test 2\n");
+  //printf("test 2n");
     for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
       const MPTRK* btracks = bTk(trk,ie+stream*nevts/num_streams,ib);
       const MPHIT* bhits = bHit(hit,ie+stream*nevts/num_streams,ib);
       //printf("show: %f\n", (bhits->pos).data[0](0));
       MPTRK* obtracks = bTk(outtrk,ie+stream*nevts/num_streams,ib);
-      /*__shared__*/ struct MP6x6F errorProp/*, temp*/; //dynamic initialization is not supported for a function-scope static __shared__ variable within a __device__/__global__ function
+     // /*__shared__*/ struct MP6x6F errorProp/*, temp*/; //dynamic initialization is not supported for a function-scope static __shared__ variable within a __device__/__global__ function
  // printf("test 3\n");
 	
       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
                    //&(*obtracks).cov, &(*obtracks).par);
-                   &(*obtracks).cov, &(*obtracks).par, &errorProp/*, &temp*/);
+                   &(*obtracks).cov, &(*obtracks).par/*, &errorProp/*, &temp*/);
+      KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
     }
   }
 }
@@ -686,12 +704,19 @@ printf("dev: %f\n",trk->par.data[0](0));
 
    printf("wall region time=%f (s)\n", (end_wall-start_wall)*0.001);
    float avgx = 0, avgy = 0, avgz = 0;
+   float avgpt = 0, avgphi = 0, avgtheta = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
        float x_ = x(outtrk,ie,it);
        float y_ = y(outtrk,ie,it);
        float z_ = z(outtrk,ie,it);
+       float pt_ = 1./ipt(outtrk,ie,it);
+       float phi_ = phi(outtrk,ie,it);
+       float theta_ = theta(outtrk,ie,it);
+       avgpt += pt_;
+       avgphi += phi_;
+       avgtheta += theta_;
        avgx += x_;
        avgy += y_;
        avgz += z_;
@@ -703,6 +728,9 @@ printf("dev: %f\n",trk->par.data[0](0));
        avgdz += (z_-hz_)/z_;
      }
    }
+   avgpt = avgpt/float(nevts*ntrks);
+   avgphi = avgphi/float(nevts*ntrks);
+   avgtheta = avgtheta/float(nevts*ntrks);
    avgx = avgx/float(nevts*ntrks);
    avgy = avgy/float(nevts*ntrks);
    avgz = avgz/float(nevts*ntrks);
@@ -742,6 +770,9 @@ printf("dev: %f\n",trk->par.data[0](0));
    printf("track dx/x avg=%f std=%f\n", avgdx, stddx);
    printf("track dy/y avg=%f std=%f\n", avgdy, stddy);
    printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
+   printf("track pt avg=%f\n", avgpt);
+   printf("track phi avg=%f\n", avgphi);
+   printf("track theta avg=%f\n", avgtheta);
 	
    cudaFree(trk);
    cudaFree(hit);
