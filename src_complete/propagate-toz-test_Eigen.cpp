@@ -8,6 +8,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3 -I/mnt/data1/dsr
 #include <unistd.h>
 #include <sys/time.h>
 #include <iostream>
+#include <cmath>
 
 #ifndef bsize
 #define bsize 128
@@ -25,7 +26,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3 -I/mnt/data1/dsr
 #include <Eigen/Core>
 
 #ifndef NITER
-#define NITER 100
+#define NITER 5
+#endif
+#ifndef nlayer
+#define nlayer 20
 #endif
 
 #ifndef nthreads
@@ -43,7 +47,6 @@ size_t PosInMtrx(size_t i, size_t j, size_t D) {
 }
 
 size_t SymOffsets33(size_t i) {
-  //const size_t offs[9] = {0, 1, 3, 1, 2, 4, 3, 4, 5};
   VectorXt offs(9); 
   offs << 0, 1, 3, 1, 2, 4, 3, 4, 5;
   return offs(i);
@@ -57,7 +60,6 @@ size_t SymOffsets66(size_t i) {
 
 struct ATRK {
   Matrix<float,6,1> par;
-  //Matrix<float,6,6> cov;
   Matrix<float,21,1> cov;
   int q;
   Matrix<float,22,1> hitidx;
@@ -65,60 +67,42 @@ struct ATRK {
 
 struct AHIT {
   Matrix<float,3,1> pos;
-  //Matrix<float,3,3> cov;
   Matrix<float,6,1> cov;
 };
 
 struct MP1I {
-  //Matrix<int,1*bsize,1> data;
   Matrix<int,1,1> data[bsize];
- // Vector1I data;
 };
 
 struct MP22I {
-  //Matrix<int,22*bsize,1> data;
   Matrix<int,22,1> data[bsize];
 };
 
 struct MP3F {
-  //Matrix<float,3*bsize,1> data;
-  //Matrix<float,3,1> data;
   Vector3f data[bsize];
-  //Vector3d data[bsize];
 };
 
 struct MP6F {
-  //Matrix<float,6*bsize,1> data;
   Matrix<float,6,1> data[bsize];
-  //Vector6f data;
 };
 
 struct MP3x3 {
-  //float data[9*bsize];
   Matrix<float,3,3> data[bsize];
 };
 struct MP6x3 {
-  //float data[18*bsize];
   Matrix<float,6,3> data[bsize];
 };
 
 struct MP3x3SF {
-  //Matrix<float,3*bsize,3*bsize> data;
-  //Matrix<float,3,3> data;
   Matrix3f data[bsize];
-  //Matrix3d data[bsize];
 };
 
 struct MP6x6SF {
-  //Matrix<float,6*bsize,6*bsize> data;
   Matrix<float,6,6> data[bsize];
-  //Matrix6f data;
 };
 
 struct MP6x6F {
   Matrix<float,6,6> data[bsize];
-  //Matrix6f data;
-  //Matrix<float,6*bsize,6*bsize> data;
 };
 
 struct MPTRK {
@@ -128,18 +112,12 @@ struct MPTRK {
   MP22I   hitidx;
 };
 
-//struct ALLTRKS {
-//  MPTRK  btrks[nevts*ntrks];
-//};
 
 struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
 };
 
-//struct ALLHITS {
-//  MPHIT bhits[nevts*ntrks];
-//};
 
 float randn(float mu, float sigma) {
   float U1, U2, W, mult;
@@ -174,7 +152,7 @@ float q(const MP1I* bq, size_t it){
 }
 //
 float par(const MP6F* bpars, size_t it, size_t ipar){
-  return (*bpars).data[it](ipar/*bsize*/);
+  return (*bpars).data[it](ipar);
 }
 float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
 float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
@@ -207,31 +185,34 @@ float phi  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, t
 float theta(const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
 //
 void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
-  (*bpars).data[it](ipar/*bsize*/) = val;
+  (*bpars).data[it](ipar) = val;
 }
-void setx    (MP6F* bpars, size_t it, float val){ /*return*/ setpar(bpars, it, 0, val); }
-void sety    (MP6F* bpars, size_t it, float val){ /*return*/ setpar(bpars, it, 1, val); }
-void setz    (MP6F* bpars, size_t it, float val){ /*return*/ setpar(bpars, it, 2, val); }
-void setipt  (MP6F* bpars, size_t it, float val){ /*return*/ setpar(bpars, it, 3, val); }
-void setphi  (MP6F* bpars, size_t it, float val){ /*return*/ setpar(bpars, it, 4, val); }
-void settheta(MP6F* bpars, size_t it, float val){ /*return*/ setpar(bpars, it, 5, val); }
+void setx    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 0, val); }
+void sety    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 1, val); }
+void setz    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 2, val); }
+void setipt  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 3, val); }
+void setphi  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 4, val); }
+void settheta(MP6F* bpars, size_t it, float val){ setpar(bpars, it, 5, val); }
 //
 void setpar(MPTRK* btracks, size_t it, size_t ipar, float val){
-  /*return*/ setpar(&(*btracks).par,it,ipar,val);
+  setpar(&(*btracks).par,it,ipar,val);
 }
-void setx    (MPTRK* btracks, size_t it, float val){ /*return*/ setpar(btracks, it, 0, val); }
-void sety    (MPTRK* btracks, size_t it, float val){ /*return*/ setpar(btracks, it, 1, val); }
-void setz    (MPTRK* btracks, size_t it, float val){ /*return*/ setpar(btracks, it, 2, val); }
-void setipt  (MPTRK* btracks, size_t it, float val){ /*return*/ setpar(btracks, it, 3, val); }
-void setphi  (MPTRK* btracks, size_t it, float val){ /*return*/ setpar(btracks, it, 4, val); }
-void settheta(MPTRK* btracks, size_t it, float val){ /*return*/ setpar(btracks, it, 5, val); }
+void setx    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 0, val); }
+void sety    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 1, val); }
+void setz    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 2, val); }
+void setipt  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 3, val); }
+void setphi  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 4, val); }
+void settheta(MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val); }
 
 const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
+const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib, size_t lay) {
+  return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
+}
 //
 float pos(const MP3F* hpos, size_t it, size_t ipar){
-  return (*hpos).data[it](ipar/*bsize*/);
+  return (*hpos).data[it](ipar);
 }
 float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
 float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
@@ -260,16 +241,16 @@ MPTRK* prepareTracks(ATRK inputtrk) {
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
-	//par
-	for (size_t ip=0;ip<6;++ip) {
-	  result[ib + nb*ie].par.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputtrk.par[ip];
-	}
-	//cov
-	for (size_t ip=0;ip<21;++ip) {
-	  result[ib + nb*ie].cov.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputtrk.cov[ip];
-	}
-	//q
-	result[ib + nb*ie].q.data[it](0) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+	      //par
+	      for (size_t ip=0;ip<6;++ip) {
+	        result[ib + nb*ie].par.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputtrk.par[ip];
+	      }
+	      //cov
+	      for (size_t ip=0;ip<21;++ip) {
+	        result[ib + nb*ie].cov.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputtrk.cov[ip];
+	      }
+	      //q
+	      result[ib + nb*ie].q.data[it](0) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
       }
     }
   }
@@ -277,19 +258,21 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));  //fixme, align?
+  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      for (size_t it=0;it<bsize;++it) {
-  	//pos
-  	for (size_t ip=0;ip<3;++ip) {
-  	  result[ib + nb*ie].pos.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputhit.pos[ip];
-  	}
-  	//cov
-  	for (size_t ip=0;ip<6;++ip) {
-  	  result[ib + nb*ie].cov.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputhit.cov[ip];
-  	}
+  for (size_t lay=0;lay<nlayer;++lay) {
+    for (size_t ie=0;ie<nevts;++ie) {
+      for (size_t ib=0;ib<nb;++ib) {
+        for (size_t it=0;it<bsize;++it) {
+        	//pos
+        	for (size_t ip=0;ip<3;++ip) {
+        	  result[lay+nlayer*(ib + nb*ie)].pos.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputhit.pos[ip];
+        	}
+        	//cov
+        	for (size_t ip=0;ip<6;++ip) {
+        	  result[lay+nlayer*(ib + nb*ie)].cov.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputhit.cov[ip];
+        	}
+        }
       }
     }
   }
@@ -303,18 +286,17 @@ inline void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   Matrix<float,6,6> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
 #pragma omp simd
   for (int n =0; n< N; ++n){
-    c[n].noalias() = a[n]*b[n];
+    c[n]/*.noalias()*/ = a[n]*b[n];
   }
 }
 
 inline void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
-//inline void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6SF* C) {
   const Matrix<float,6,6> *a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const Matrix<float,6,6> *b = (*B).data; //ASSUME_ALIGNED(b, 64);
   Matrix<float,6,6> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
 #pragma omp simd
   for (int n =0; n< N; ++n){
-    c[n].noalias()= a[n]*b[n].transpose();
+    c[n]/*.noalias()*/= a[n]*b[n].transpose();
   }
 }
 
@@ -325,38 +307,24 @@ void KalmanGain(MP6x6SF* A, const MP3x3SF* B, MP6x3* C) {
   const Matrix<float,6,6> *a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const Matrix<float,3,3> *b = (*B).data; //ASSUME_ALIGNED(b, 64);
   Matrix<float,6,3> *c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  //const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  //const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  //float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
 
-  Matrix<float,3,6> H;
-  //Matrix<float,6,3> K;
-  H << 1,0,0,
-       0,1,0,
-       0,0,1,
-       0,0,0,0,0,0,0,0,0;
-  Matrix<float,6,3> HT = H.transpose();
-    //std::cout<< H<<std::endl;
-  #pragma omp simd
+  Matrix<float,3,3> inter;
+  //#pragma omp simd
   for (int n = 0; n < N; ++n)
   {
-    //c[n] = (H*a[n])*(HT*((H*(a[n]*HT)+b[n]).inverse()));
-    //c[n] = (a[n]*(HT*((H*(a[n]*HT)+b[n]).inverse())));
-    //K = a[n].block<6,3>(0,0) * ((a[n].block<3,3>(0,0)+b[n]).inverse()) ;
-    c[n] = a[n].block<6,3>(0,0) * ((a[n].block<3,3>(0,0)+b[n]).inverse()) ;
-    //std::cout<< K <<std::endl;
+    inter = ((a[n].block<3,3>(0,0)+b[n]).inverse()) ;
+    c[n] = a[n].block<6,3>(0,0) * inter; 
   }
 }
 
 void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
-  Matrix<float,3,6> H;
-  H << 1,0,0, 0,1,0,0,0,1,0,0,0,0,0,0,0,0,0;
     MP6x3 kGain;
-    KalmanGain(trkErr,hitErr,&kGain);
-#pragma omp simd
+    //KalmanGain(trkErr,hitErr,&kGain);
+//#pragma omp simd
   for (size_t it=0;it<bsize;++it) {
-    //inPar->data[it] = inPar->data[it] + (kGain.data[it]*(msP->data[it]- (H*inPar->data[it]))); 
+    kGain.data[it] = trkErr->data[it].block<6,3>(0,0) * ((trkErr->data[it].block<3,3>(0,0)+hitErr->data[it]).inverse()); //this computes the kalman gain without the function as an intermediary 
     inPar->data[it] = inPar->data[it] + (kGain.data[it]*(msP->data[it]- ((inPar->data[it]).block<3,1>(0,0)))); 
+    trkErr->data[it] = trkErr->data[it] - (kGain.data[it]*((trkErr->data[it]).block<3,6>(0,0))); 
   }
 
 }
@@ -387,28 +355,10 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
     outPar->data[it](3,0)= ipt(inPar,it);
     outPar->data[it](4,0)= phi(inPar,it)+alpha ;
     outPar->data[it](5,0) = theta(inPar,it) ;
-    //setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
-    //sety(outPar,it, y(inPar,it) + k*(pyin*sina + pxin*(1.-cosa)) );
-    //setz(outPar,it,zout);
-    //setipt(outPar,it, ipt(inPar,it));
-    //setphi(outPar,it, phi(inPar,it)+alpha );
-    //settheta(outPar,it, theta(inPar,it) );
     
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    //for (size_t i=0;i<6;++i) errorProp.data(bsize*PosInMtrx(i,i,6) + it) = 1.;
-    //errorProp.data(bsize*PosInMtrx(0,2,6) + it) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    //errorProp.data(bsize*PosInMtrx(0,3,6) + it) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    //errorProp.data(bsize*PosInMtrx(0,4,6) + it) = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    //errorProp.data(bsize*PosInMtrx(0,5,6) + it) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    //errorProp.data(bsize*PosInMtrx(1,2,6) + it) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    //errorProp.data(bsize*PosInMtrx(1,3,6) + it) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    //errorProp.data(bsize*PosInMtrx(1,4,6) + it) = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    //errorProp.data(bsize*PosInMtrx(1,5,6) + it) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    //errorProp.data(bsize*PosInMtrx(4,2,6) + it) = -ipt(inPar,it)*sinT/(cosT*k);
-    //errorProp.data(bsize*PosInMtrx(4,3,6) + it) = sinT*deltaZ/(cosT*k);
-    //errorProp.data(bsize*PosInMtrx(4,5,6) + it) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
     for (size_t i=0;i<6;++i) errorProp.data[it](i,i) = 1.;
     errorProp.data[it](0,2) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
     errorProp.data[it](0,3) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
@@ -422,13 +372,8 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
     errorProp.data[it](4,3) = sinT*deltaZ/(cosT*k);
     errorProp.data[it](4,5) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
-  //
-  //outErr->data.noalias() = (errorProp.data*inErr->data)*(errorProp.data).transpose();
-  //(temp.data).noalias() = (errorProp.data*inErr->data);
-  //outErr->data.noalias() = errorProp.data*(temp.data).transpose();
   MultHelixPropEndcap(&errorProp, inErr, &temp);
   MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
-  //MultHelixPropTranspEndcap(&errorProp, inErr, outErr);
 }
 
 int main (int argc, char* argv[]) {
@@ -469,13 +414,6 @@ int main (int argc, char* argv[]) {
    MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); 
    gettimeofday(&timecheck, NULL);
    end_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-     //  printf("hy=%f\n",y(&hit,0,0));
-   //     printf("hz=%f\n",z(&hit,ie,it));
-   //     printf("tx=%f\n",x(&trk,ie,it));
-   //     printf("ty=%f\n",y(&trk,ie,it));
-   //     printf("tz=%f\n",z(&trk,ie,it));
-   //   }
-   // }
   
    gettimeofday(&timecheck, NULL);
    start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -485,10 +423,12 @@ int main (int argc, char* argv[]) {
 #pragma omp simd
         for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
           const MPTRK* btracks = bTk(trk, ie, ib);
-          const MPHIT* bhits = bHit(hit, ie, ib);
           MPTRK* obtracks = bTk(outtrk, ie, ib);
-          propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-          KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+          for(size_t layer=0;layer<nlayer;++layer){
+            const MPHIT* bhits = bHit(hit, ie, ib,layer);
+            propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+          }
         }
       }
     }
@@ -496,14 +436,6 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-   // for (size_t ie=0;ie<nevts;++ie) {
-   //   for (size_t it=0;it<ntrks;++it) {
-   //     printf("ie=%lu it=%lu\n",ie,it);
-   //     printf("tx=%f\n",x(&outtrk,ie,it));
-   //     printf("ty=%f\n",y(&outtrk,ie,it));
-   //     printf("tz=%f\n",z(&outtrk,ie,it));
-   //   }
-   // }
    
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
    printf("formatted %i %i %i %i %i %f %f 0 %f %i\n",int(NITER),nevts,ntrks, bsize, nb, (end-start)*0.001, (end-start)*0.001, (end_setup-start_setup)*0.001, nthreads);

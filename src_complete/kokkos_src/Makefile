@@ -1,8 +1,9 @@
 # KOKKOS_PATH = ${HOME}/kokkos-simd
 KOKKOS_PATH = ${HOME}/kokkos
 KOKKOS_DEVICES = "OpenMP"
+#KOKKOS_DEVICES = "Cuda"
 # KOKKOS_DEVICES = "OpenMP,Cuda"
-EXE_NAME = "test"
+#EXE_NAME = "test"
 
 SRC = $(wildcard *.cpp)
 
@@ -12,15 +13,18 @@ default: build
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
-EXE = ${EXE_NAME}.cuda
+#EXE = ${EXE_NAME}.cuda
 # KOKKOS_ARCH = "HSW,Kepler35"
 KOKKOS_ARCH = "BDW,Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
+EXE = "../../bin/propagate_nvcc_kokkos"
 else
 # -9 needed on apollo
-CXX = g++-9
+CXX = g++
+#CXX = g++-9
 # CXX = icpc
-EXE = ${EXE_NAME}.host
+#EXE = ${EXE_NAME}.host
+EXE = "../../bin/propagate_gcc_kokkos"
 KOKKOS_ARCH = "BDW"
 endif
 
