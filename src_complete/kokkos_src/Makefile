@@ -1,8 +1,8 @@
 # KOKKOS_PATH = ${HOME}/kokkos-simd
 KOKKOS_PATH = ${HOME}/kokkos
-KOKKOS_DEVICES = "OpenMP"
+#KOKKOS_DEVICES = "OpenMP"
 #KOKKOS_DEVICES = "Cuda"
-# KOKKOS_DEVICES = "OpenMP,Cuda"
+ KOKKOS_DEVICES = "OpenMP,Cuda"
 #EXE_NAME = "test"
 
 SRC = $(wildcard *.cpp)

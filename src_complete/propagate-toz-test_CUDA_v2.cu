@@ -29,8 +29,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef nlayer
 #define nlayer 20
 #endif
-#ifndef num_streams
-#define num_streams 7
+#ifndef num_stream
+#define num_streams 5
 #endif
 
 #ifndef threadsperblockx
@@ -141,7 +141,9 @@ float randn(float mu, float sigma) {
 }
 
 MPTRK* prepareTracks(ATRK inputtrk) {
-  MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  //MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  MPTRK* result;
+  cudaMallocHost((void**)&result,nevts*nb*sizeof(MPTRK));
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
@@ -162,7 +164,9 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
+  //MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
+  MPHIT* result;
+  cudaMallocHost((void**)&result,nlayer*nevts*nb*sizeof(MPHIT));
   for (size_t lay=0;lay<nlayer;++lay) {
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
@@ -654,9 +658,13 @@ int main (int argc, char* argv[]) {
   start_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
   MPTRK* trk = prepareTracks(inputtrk);
   MPHIT* hit = prepareHits(inputhit);
+  //cudaHostRegister((void**)&trk,nevts*nb*sizeof(MPTRK),cudaHostRegisterDefault);
+  //cudaHostRegister((void**)&hit,nlayer*nevts*nb*sizeof(MPHIT),cudaHostRegisterDefault);
   MPTRK* trk_dev;
   MPHIT* hit_dev;
-  MPTRK* outtrk= (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); 
+  //MPTRK* outtrk= (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); 
+  MPTRK* outtrk;
+  cudaMallocHost((void**)&outtrk,nevts*nb*sizeof(MPTRK)); 
   MPTRK* outtrk_dev;
   cudaMalloc((MPTRK**)&trk_dev,nevts*nb*sizeof(MPTRK));
   cudaMalloc((MPHIT**)&hit_dev,nlayer*nevts*nb*sizeof(MPHIT));
@@ -672,7 +680,8 @@ int main (int argc, char* argv[]) {
   else{stream_range = num_streams+1;}
   cudaStream_t streams[stream_range];
   for (int s = 0; s<stream_range;s++){
-    cudaStreamCreateWithFlags(&streams[s],cudaStreamNonBlocking);
+    //cudaStreamCreateWithFlags(&streams[s],cudaStreamNonBlocking);
+    cudaStreamCreate(&streams[s]);
   }
   gettimeofday(&timecheck, NULL);
   end_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -694,8 +703,6 @@ int main (int argc, char* argv[]) {
   start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
 
-//  cudaEventRecord(copy);	
-//  cudaEventSynchronize(copy);
   for(itr=0; itr<NITER; itr++){
     //  transfer(trk,hit, trk_dev,hit_dev);
     for (int s = 0; s<num_streams;s++){
@@ -734,14 +741,19 @@ int main (int argc, char* argv[]) {
       cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->cov).data,&((hit+(num_streams*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
     }
 
-//	  cudaDeviceSynchronize(); 
+  cudaEventRecord(copy);	
+  cudaEventSynchronize(copy);
+	  //cudaDeviceSynchronize(); 
     for (int s = 0; s<num_streams;s++){
   	  GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev+(s*stream_chunk),hit_dev+(s*stream_chunk*nlayer),outtrk_dev+(s*stream_chunk),s);
     }  
     if(stream_remainder != 0){
   	  GPUsequence<<<grid,block,0,streams[num_streams]>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streams*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
     }
-//      transfer_back(outtrk_dev,outtrk); 
+	  //cudaDeviceSynchronize(); 
+//     // transfer_back(outtrk_dev,outtrk); 
+  cudaEventRecord(copyback);	
+  cudaEventSynchronize(copyback);
     for (int s = 0; s<num_streams;s++){
       cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
       cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->par, &(outtrk_dev+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[s]);
@@ -790,7 +802,7 @@ int main (int argc, char* argv[]) {
    long walltime = end_wall-start_wall; 
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks));
    printf("data region time=%f (s)\n", regiontime*0.001);
-   printf("memory transfer time=%f (s)\n", (copytime+copybacktime)*0.001);
+   printf("memory transfer time=%f (s) [%f,%f]\n", (copytime+copybacktime)*0.001,copytime*0.001,copybacktime*0.001);
    printf("setup time time=%f (s)\n", (end_setup-start_setup)*0.001);
    printf("formatted %i %i %i %i %i %f %f %f %f 0\n",int(NITER),nevts,ntrks,bsize, nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (end_setup-start_setup)*0.001, num_streams);
 
@@ -871,9 +883,12 @@ int main (int argc, char* argv[]) {
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
 	
-   free(trk);
-   free(hit);
-   free(outtrk);
+   cudaFree(trk);
+   cudaFree(hit);
+   cudaFree(outtrk);
+   //free(trk);
+   //free(hit);
+   //free(outtrk);
    cudaFree(trk_dev);
    cudaFree(hit_dev);
    cudaFree(outtrk_dev);

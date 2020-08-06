@@ -532,8 +532,6 @@ printf("dev: %f\n",trk->par.data[0](0));
   start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
 
-  cudaEventRecord(copy);	
-  cudaEventSynchronize(copy);
   for(int itr=0; itr<NITER; itr++){
     for (int s = 0; s<num_streams;s++){
       cudaMemcpyAsync(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[s]);
@@ -570,6 +568,8 @@ printf("dev: %f\n",trk->par.data[0](0));
       cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->cov).data,&((hit+(num_streams*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
     }
 
+  cudaEventRecord(copy);	
+  cudaEventSynchronize(copy);
     for (int s = 0; s<num_streams;s++){
       GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev+(s*stream_chunk),hit_dev+(s*stream_chunk*nlayer),outtrk_dev+(s*stream_chunk),s);
     }  
@@ -623,7 +623,7 @@ printf("dev: %f\n",trk->par.data[0](0));
    long walltime = end_wall-start_wall; 
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks));
    printf("data region time=%f (s)\n", regiontime*0.001);
-   printf("memory transfer time=%f (s)\n", (copytime+copybacktime)*0.001);
+   printf("memory transfer time=%f (s) [%f,%f]\n", (copytime+copybacktime)*0.001,copytime*0.001,copybacktime*0.001);
    printf("setup time time=%f (s)\n", (end_setup-start_setup)*0.001);
    printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER), nevts,ntrks, bsize, nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (end_setup-start_setup)*0.001, num_streams);
 

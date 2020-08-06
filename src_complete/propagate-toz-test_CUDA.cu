@@ -23,7 +23,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 100 
+#define NITER 5 
 #endif
 #ifndef nlayer
 #define nlayer 20
@@ -443,7 +443,7 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
   MP3x3 inverse_temp;
   MP3x6 kGain;
   MP6x6SF newErr;
-  MP6F newPar;
+  //MP6F newPar;
   KalmanGainInv(trkErr,hitErr,&inverse_temp);
   //__syncthreads(); 
   KalmanGain(trkErr,&inverse_temp,&kGain);
@@ -604,8 +604,8 @@ int main (int argc, char* argv[]) {
   struct timeval timecheck;
   cudaEvent_t start, end, copy,copyback;
   cudaEventCreate(&start);
-  //cudaEventCreate(&copy);
-  //cudaEventCreate(&copyback);
+  cudaEventCreate(&copy);
+  cudaEventCreate(&copyback);
   cudaEventCreate(&end);
       
   gettimeofday(&timecheck, NULL);
@@ -625,7 +625,8 @@ int main (int argc, char* argv[]) {
   else{stream_range = num_streams+1;}
   cudaStream_t streams[stream_range];
   for (int s = 0; s<stream_range;s++){
-    cudaStreamCreateWithFlags(&streams[s],cudaStreamNonBlocking);
+    cudaStreamCreate(&streams[s]);
+    //cudaStreamCreateWithFlags(&streams[s],cudaStreamNonBlocking);
   }
   gettimeofday(&timecheck, NULL);
   end_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -671,8 +672,8 @@ int main (int argc, char* argv[]) {
 //  cudaMemAdvise(hit,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetReadMostly,device);
 
 
-//  cudaEventRecord(copy);	
-//  cudaEventSynchronize(copy);
+  cudaEventRecord(copy);	
+  cudaEventSynchronize(copy);
     for (int s = 0; s<num_streams;s++){
   	  GPUsequence<<<grid,block,0,streams[s]>>>(trk+(s*stream_chunk),hit+(s*stream_chunk*nlayer),outtrk+(s*stream_chunk),s);
     }  
@@ -682,8 +683,8 @@ int main (int argc, char* argv[]) {
 	  //cudaDeviceSynchronize(); // Normal sync
 
   
-//  cudaEventRecord(copyback);
-//  cudaEventSynchronize(copyback);
+  cudaEventRecord(copyback);
+  cudaEventSynchronize(copyback);
     for (int s = 0; s<num_streams;s++){
       cudaMemPrefetchAsync(outtrk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), cudaCpuDeviceId,streams[s]);
     }
@@ -698,9 +699,9 @@ int main (int argc, char* argv[]) {
   cudaEventSynchronize(end);
   float elapsedtime,copytime,copybacktime,regiontime = 0;
   cudaEventElapsedTime(&regiontime,start,end);
-  //cudaEventElapsedTime(&elapsedtime,copy,copyback);
-  //cudaEventElapsedTime(&copytime,start,copy);
-  //cudaEventElapsedTime(&copybacktime,copyback,end);
+  cudaEventElapsedTime(&elapsedtime,copy,copyback);
+  cudaEventElapsedTime(&copytime,start,copy);
+  cudaEventElapsedTime(&copybacktime,copyback,end);
   
  
     for (int s = 0; s<stream_range;s++){
@@ -710,10 +711,10 @@ int main (int argc, char* argv[]) {
    long walltime = end_wall-start_wall; 
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks));
    printf("data region time=%f (s)\n", regiontime*0.001);
-   //printf("memory transfer time=%f (s)\n", (copytime+copybacktime)*0.001);
+   printf("memory transfer time=%f (s) [%f, %f]\n", (copytime+copybacktime)*0.001, copytime*0.001, copybacktime*0.001);
    printf("setup time time=%f (s)\n", (end_setup-start_setup)*0.001);
-   printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER),nevts,ntrks, bsize,nb, (0)*0.001, (regiontime)*0.001,  (0)*0.001, (end_setup-start_setup)*0.001, num_streams);
-   //printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER),nevts,ntrks, bsize,nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (end_setup-start_setup)*0.001, num_streams);
+   //printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER),nevts,ntrks, bsize,nb, (0)*0.001, (regiontime)*0.001,  (0)*0.001, (end_setup-start_setup)*0.001, num_streams);
+   printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER),nevts,ntrks, bsize,nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (end_setup-start_setup)*0.001, num_streams);
 
    printf("wall region time=%f (s)\n", (end_wall-start_wall)*0.001);
    float avgx = 0, avgy = 0, avgz = 0;

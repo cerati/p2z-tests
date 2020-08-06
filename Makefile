@@ -12,13 +12,15 @@
 #               omp4                                     #
 ##########################################################
 COMPILER ?= nvcc
-MODE ?= eigen
+MODE ?= cudav2
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
 TUNEEVT ?= 0
 STREAMS ?= 0
 NTHREADS ?= 0
+NITER ?= 0
+NLAYER ?= 0
 ifneq ($(TUNEB),0)
 TUNE += -Dbsize=$(TUNEB)
 endif
@@ -33,6 +35,12 @@ TUNE += -Dnum_streams=$(STREAMS)
 endif
 ifneq ($(NTHREADS),0)
 TUNE += -Dnthreads=$(NTHREADS)
+endif
+ifneq ($(NITER),0)
+TUNE += -DNITER=$(NITER)
+endif
+ifneq ($(NLAYER),0)
+TUNE += -Dnlayer=$(NLAYER)
 endif
 ##########CUDA Tunable parameters########################
 THREADSX ?= 0

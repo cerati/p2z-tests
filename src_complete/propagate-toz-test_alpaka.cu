@@ -710,9 +710,14 @@ int main (int argc, char* argv[]) {
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
    
-   long start, end, setup_start, setup_end;
+   long start_wall, end_wall, setup_start, setup_end;
    long start2, end2;
    struct timeval timecheck;
+  cudaEvent_t start, end, copy,copyback;
+  cudaEventCreate(&start);
+  cudaEventCreate(&copy);
+  cudaEventCreate(&copyback);
+  cudaEventCreate(&end);
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -817,7 +822,9 @@ int main (int argc, char* argv[]) {
    //transfer(trk,hit, trk_dev,hit_dev);
 
    gettimeofday(&timecheck, NULL);
-   start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
+   cudaEventRecord(start);
    for(itr=0; itr<NITER; itr++) {
    transferTrk(trk,trk_dev);
    //for(int layer=0; layer<nlayer; layer++) {
@@ -829,16 +836,29 @@ int main (int argc, char* argv[]) {
      //}, trk_host, hit_host, outtrk_host);
      //alpaka::wait::wait(hostQueue);
      
+   cudaEventRecord(copy);
+   cudaEventSynchronize(copy);
+
     alpaka::kernel::exec<Acc>( accQueue,workDiv,
      [] ALPAKA_FN_ACC (Acc const & acc, MPTRK* trk_dev, MPHIT* hit_dev, MPTRK* outtrk_dev){
      alpaka_kernel(acc, trk_dev,hit_dev,outtrk_dev);
      }, trk_dev, hit_dev, outtrk_dev);
 
      alpaka::wait::wait(accQueue);
+   cudaEventRecord(copyback);
+   cudaEventSynchronize(copyback);
    transfer_back(outtrk_dev,outtrk);
   } //end of itr loop
+  
+  cudaEventRecord(end);
+  cudaEventSynchronize(end);
+  float elapsedtime,copytime,copybacktime,regiontime = 0;
+  cudaEventElapsedTime(&regiontime,start,end);
+  cudaEventElapsedTime(&elapsedtime,copy,copyback);
+  cudaEventElapsedTime(&copytime,start,copy);
+  cudaEventElapsedTime(&copybacktime,copyback,end);
    gettimeofday(&timecheck, NULL);
-   end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 //}
    //alpaka::mem::view::copy(accQueue, hostViewPlainPtr_outtrk_fin,hostViewPlainPtr_outtrkdev,extents);
    //alpaka::wait::wait(accQueue);
@@ -849,11 +869,17 @@ int main (int argc, char* argv[]) {
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    
-   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-   printf("data region time=%f (s)\n", (end2-start2)*0.001);
-   printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
+//   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
+//   printf("data region time=%f (s)\n", (end2-start2)*0.001);
+//   printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
+//   printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
+//   printf("formatted %i %i %i %i %i %f %f %f %f 0\n",int(NITER),nevts,ntrks,bsize,nb, (end-start)*0.001, (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
+
+  printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks));
+   printf("data region time=%f (s)\n", regiontime*0.001);
+   printf("memory transfer time=%f (s) [%f,%f]\n", (copytime+copybacktime)*0.001,copytime*0.001,copybacktime*0.001);
    printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
-   printf("formatted %i %i %i %i %i %f %f %f %f 0\n",int(NITER),nevts,ntrks,bsize,nb, (end-start)*0.001, (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
+   printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER),nevts,ntrks, bsize,nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (setup_end-setup_start)*0.001, 0);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;

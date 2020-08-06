@@ -13,7 +13,7 @@ for idx in "${!compilers[@]}";do
   echo ${compiler} and ${mode}
   
  # make -C .. COMPILER=${compiler} MODE=${mode} TUNEB=${btune} TUNETRK=${trktune} TUNEEVT=${event} NTHREADS=${nthread} clean
-  make -C .. COMPILER=${compiler} MODE=${mode} 
+  make -C .. COMPILER=${compiler} MODE=${mode} NITER="100" 
 done
 
 
