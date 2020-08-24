@@ -179,7 +179,7 @@ ifeq ($(MODE),cudav2)
 CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread
+CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
 endif
 endif

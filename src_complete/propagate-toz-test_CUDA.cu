@@ -602,10 +602,13 @@ int main (int argc, char* argv[]) {
  
   long start_wall, end_wall, start_setup, end_setup; 
   struct timeval timecheck;
-  cudaEvent_t start, end, copy,copyback;
+  cudaEvent_t start, end, copy, copyback;
+  cudaEvent_t startcopy, copybackend;
   cudaEventCreate(&start);
   cudaEventCreate(&copy);
   cudaEventCreate(&copyback);
+  cudaEventCreate(&startcopy);
+  cudaEventCreate(&copybackend);
   cudaEventCreate(&end);
       
   gettimeofday(&timecheck, NULL);
@@ -643,10 +646,13 @@ int main (int argc, char* argv[]) {
   
 
 
-  cudaEventRecord(start);	
+  float elapsedtime,copytime,copybacktime,regiontime = 0;
   gettimeofday(&timecheck, NULL);
   start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+  cudaEventRecord(start);	
   for(int itr=0; itr<NITER; itr++){
+  cudaEventRecord(startcopy);	
+  cudaEventSynchronize(startcopy);
   for (int s = 0; s<num_streams;s++){
     cudaMemPrefetchAsync(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), device,streams[s]);
       cudaMemPrefetchAsync(hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), device,streams[s]);
@@ -691,17 +697,26 @@ int main (int argc, char* argv[]) {
     if(stream_remainder != 0){
       cudaMemPrefetchAsync(outtrk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), cudaCpuDeviceId,streams[num_streams]);
     }
+  cudaEventRecord(copybackend);	
+  cudaEventSynchronize(copybackend);
+  float elapsedtime_itr,copytime_itr,copybacktime_itr = 0;
+  cudaEventElapsedTime(&elapsedtime_itr,copy,copyback);
+  cudaEventElapsedTime(&copytime_itr,startcopy,copy);
+  cudaEventElapsedTime(&copybacktime_itr,copyback,copybackend);
+  elapsedtime += elapsedtime_itr;
+  copytime += copytime_itr;
+  copybacktime += copybacktime_itr;
   } //end itr loop
   cudaDeviceSynchronize(); // shaves a few seconds
-  gettimeofday(&timecheck, NULL);
-  end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
   cudaEventRecord(end);
   cudaEventSynchronize(end);
-  float elapsedtime,copytime,copybacktime,regiontime = 0;
+  gettimeofday(&timecheck, NULL);
+  end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+  //float elapsedtime,copytime,copybacktime,regiontime = 0;
   cudaEventElapsedTime(&regiontime,start,end);
-  cudaEventElapsedTime(&elapsedtime,copy,copyback);
-  cudaEventElapsedTime(&copytime,start,copy);
-  cudaEventElapsedTime(&copybacktime,copyback,end);
+  //cudaEventElapsedTime(&elapsedtime,copy,copyback);
+  //cudaEventElapsedTime(&copytime,start,copy);
+  //cudaEventElapsedTime(&copybacktime,copyback,end);
   
  
     for (int s = 0; s<stream_range;s++){

@@ -30,16 +30,17 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define nlayer 20
 #endif
 #ifndef num_stream
-#define num_streams 5
+#define num_streams 10
 #endif
 
 #ifndef threadsperblockx
-#define threadsperblockx 32
+#define threadsperblockx 2
 #endif
 //#define threadsperblocky 1024/threadsperblockx
-#define threadsperblocky 512/threadsperblockx
+//#define threadsperblocky 512/threadsperblockx
+#define threadsperblocky 32/threadsperblockx
 #ifndef blockspergrid
-#define blockspergrid 15
+#define blockspergrid 40
 #endif
 
 #define HOSTDEV __host__ __device__
@@ -439,7 +440,7 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
     const float xin = x(inPar,it);
     const float yin = y(inPar,it);
     const float zin = z(inPar,it);
-    const float ptin = 1./ipt(inPar,it);
+    const float ptin = 1./ipt(inPar,it); // is this pt or ipt? 
     const float phiin = phi(inPar,it);
     const float thetain = theta(inPar,it);
     const float xout = x(msP,it);
@@ -491,11 +492,13 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
   trkErr = &newErr;
 }
 
+__device__ __constant__ float kfact = 100/3.8;
 __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg,const MP3F* msP, 
 			  MP6x6SF* outErr, MP6F* outPar, struct MP6x6F* errorProp, struct MP6x6F* temp) {
+        //struct MP6x6F* errorProp, temp; 
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     const float zout = z(msP,it);
-    const float k = q(inChg,it)*100/3.8;
+    const float k = q(inChg,it)*kfact;//*100/3.8;
     const float deltaZ = zout - z(inPar,it);
     const float pt = 1./ipt(inPar,it);
     const float cosP = cosf(phi(inPar,it));
@@ -517,18 +520,31 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
+    const float icosT = 1.0/cosT;
+    const float icosTk = icosT/k;
     for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
-    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
-    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
-    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
+    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
+    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
+    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
+    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT*(icosTk);
+    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
+    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ*(icosT*icosTk);
+    //errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+    //errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    //errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    //errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    //errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+    //errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+    //errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    //errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+    //errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
+    //errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
+    //errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
   __syncthreads(); 
   MultHelixPropEndcap(errorProp, inErr, temp);
@@ -538,11 +554,33 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
 
 
 
+__device__ __constant__ int ie_range = (int) nevts/num_streams; 
+__device__ __constant__ int ie_rangeR = (int) nevts%num_streams; 
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
-  int ie_range;
-  if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
-  else{ie_range = (int)(nevts/num_streams);}
+   //__shared__ int ie_range;
+   //ie_range = (int)(nevts/num_streams);
+  //if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
+  //else{ie_range = (int)(nevts/num_streams);}
+        /*__shared__*/ struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
   for (size_t ie = blockIdx.x; ie<ie_range; ie+=gridDim.x){
+    for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
+      const MPTRK* btracks = bTk(trk,ie,ib);
+      MPTRK* obtracks = bTk(outtrk,ie,ib);
+      for (int layer=0;layer<nlayer;++layer){	
+        const MPHIT* bhits = bHit(hit,ie,ib,layer);
+        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
+                     &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
+ //       __syncthreads();
+        KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+      }
+    }
+  }
+}
+__global__ void GPUsequenceR(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
+  //const int ie_range = (int)(nevts%num_streams);
+  //if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
+  //else{ie_range = (int)(nevts/num_streams);}
+  for (size_t ie = blockIdx.x; ie<ie_rangeR; ie+=gridDim.x){
     for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
       const MPTRK* btracks = bTk(trk,ie,ib);
       MPTRK* obtracks = bTk(outtrk,ie,ib);
@@ -551,7 +589,7 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
         /*__shared__*/ struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
         propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
                      &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
-        __syncthreads();
+       // __syncthreads();
         KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
       }
     }
@@ -648,14 +686,20 @@ int main (int argc, char* argv[]) {
  
   long start_wall, end_wall, start_setup, end_setup; 
   struct timeval timecheck;
-  cudaEvent_t start, end, copy,copyback;
+  cudaEvent_t start, end, copy, copyback;
+  cudaEvent_t startcopy, copybackend;
   cudaEventCreate(&start);
   cudaEventCreate(&copy);
   cudaEventCreate(&copyback);
+  cudaEventCreate(&startcopy);
+  cudaEventCreate(&copybackend);
   cudaEventCreate(&end);
       
   gettimeofday(&timecheck, NULL);
   start_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+//  cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+  cudaFuncSetCacheConfig(GPUsequence,cudaFuncCachePreferL1);
+  cudaFuncSetCacheConfig(GPUsequenceR,cudaFuncCachePreferL1);
   MPTRK* trk = prepareTracks(inputtrk);
   MPHIT* hit = prepareHits(inputhit);
   //cudaHostRegister((void**)&trk,nevts*nb*sizeof(MPTRK),cudaHostRegisterDefault);
@@ -698,13 +742,17 @@ int main (int argc, char* argv[]) {
   
 
 
+  float elapsedtime,copytime,copybacktime,regiontime = 0;
   cudaEventRecord(start);	
-  gettimeofday(&timecheck, NULL);
-  start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+  cudaEventSynchronize(start);
+  //gettimeofday(&timecheck, NULL);
+ // start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
 
   for(itr=0; itr<NITER; itr++){
     //  transfer(trk,hit, trk_dev,hit_dev);
+  //cudaEventRecord(startcopy);	
+  //cudaEventSynchronize(startcopy);
     for (int s = 0; s<num_streams;s++){
 //      transferAsyncTrk(trk, trk_dev,streams[s]);
       cudaMemcpyAsync(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[s]);
@@ -741,19 +789,19 @@ int main (int argc, char* argv[]) {
       cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->cov).data,&((hit+(num_streams*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
     }
 
-  cudaEventRecord(copy);	
-  cudaEventSynchronize(copy);
+  //cudaEventRecord(copy);	
+  //cudaEventSynchronize(copy);
 	  //cudaDeviceSynchronize(); 
-    for (int s = 0; s<num_streams;s++){
+    for (int s = 0; s<num_streams;++s){
   	  GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev+(s*stream_chunk),hit_dev+(s*stream_chunk*nlayer),outtrk_dev+(s*stream_chunk),s);
     }  
     if(stream_remainder != 0){
-  	  GPUsequence<<<grid,block,0,streams[num_streams]>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streams*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
+  	  GPUsequenceR<<<grid,block,0,streams[num_streams]>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streams*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
     }
 	  //cudaDeviceSynchronize(); 
 //     // transfer_back(outtrk_dev,outtrk); 
-  cudaEventRecord(copyback);	
-  cudaEventSynchronize(copyback);
+  //cudaEventRecord(copyback);	
+  //cudaEventSynchronize(copyback);
     for (int s = 0; s<num_streams;s++){
       cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
       cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->par, &(outtrk_dev+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[s]);
@@ -777,21 +825,30 @@ int main (int argc, char* argv[]) {
       cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->hitidx).data), &(((outtrk_dev+(num_streams*stream_chunk))->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[num_streams]);
     }
 
-
+  //cudaEventRecord(copybackend);	
+  //cudaEventSynchronize(copybackend);
+  //float elapsedtime_itr,copytime_itr,copybacktime_itr = 0;
+  //cudaEventElapsedTime(&elapsedtime_itr,copy,copyback);
+  //cudaEventElapsedTime(&copytime_itr,startcopy,copy);
+  //cudaEventElapsedTime(&copybacktime_itr,copyback,copybackend);
+  //elapsedtime += elapsedtime_itr; 
+  //copytime += copytime_itr;
+  //copybacktime += copybacktime_itr;
+  //printf("copy %f\n",copytime);
 	  //cudaDeviceSynchronize(); // Normal sync
 
   } //end itr loop
   
   cudaDeviceSynchronize(); 
-  gettimeofday(&timecheck, NULL);
-  end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+//  gettimeofday(&timecheck, NULL);
+//  end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
   cudaEventRecord(end);
   cudaEventSynchronize(end);
-  float elapsedtime,copytime,copybacktime,regiontime = 0;
+  //float elapsedtime,copytime,copybacktime,regiontime = 0;
   cudaEventElapsedTime(&regiontime,start,end);
-  cudaEventElapsedTime(&elapsedtime,copy,copyback);
-  cudaEventElapsedTime(&copytime,start,copy);
-  cudaEventElapsedTime(&copybacktime,copyback,end);
+  //cudaEventElapsedTime(&elapsedtime,copy,copyback);
+  //cudaEventElapsedTime(&copytime,start,copy);
+  //cudaEventElapsedTime(&copybacktime,copyback,end);
  
 
   for (int s = 0; s<stream_range;s++){
@@ -799,14 +856,14 @@ int main (int argc, char* argv[]) {
   }
  
 
-   long walltime = end_wall-start_wall; 
+ //  long walltime = end_wall-start_wall; 
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks));
    printf("data region time=%f (s)\n", regiontime*0.001);
    printf("memory transfer time=%f (s) [%f,%f]\n", (copytime+copybacktime)*0.001,copytime*0.001,copybacktime*0.001);
    printf("setup time time=%f (s)\n", (end_setup-start_setup)*0.001);
-   printf("formatted %i %i %i %i %i %f %f %f %f 0\n",int(NITER),nevts,ntrks,bsize, nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (end_setup-start_setup)*0.001, num_streams);
+   printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER),nevts,ntrks,bsize, nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (end_setup-start_setup)*0.001, num_streams);
 
-   printf("wall region time=%f (s)\n", (walltime)*0.001);
+ //  printf("wall region time=%f (s)\n", (walltime)*0.001);
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;
