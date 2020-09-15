@@ -149,7 +149,9 @@ float randn(float mu, float sigma) {
 }
 
 MPTRK* prepareTracks(ATRK inputtrk) {
-  MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  //MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+  MPTRK* result;
+  cudaMallocHost((void**)&result,nevts*nb*sizeof(MPTRK));
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
@@ -170,7 +172,9 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
+  //MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
+  MPHIT* result;
+  cudaMallocHost((void**)&result,nlayer*nevts*nb*sizeof(MPHIT));
   for (int lay=0;lay<nlayer;++lay) {
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
@@ -352,12 +356,13 @@ __device__ __forceinline__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
 
 }
 
+__device__ __constant__ float kfact = 100/3.8;
 __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 			  const MP1I* inChg,const MP3F* msP, MP6x6SF* outErr, MP6F* outPar) {
   MP6x6F errorProp, temp;
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     const float zout = z(msP,it);
-    const float k = q(inChg,it)*100/3.8;
+    const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z(inPar,it);
     const float pt = 1./ipt(inPar,it);
     const float cosP = cosf(phi(inPar,it));
@@ -366,7 +371,10 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float sinT = sinf(theta(inPar,it));
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
+    const float icosT = 1.0/cosT;
+    const float icosTk = icosT/k;
+    const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
+    //const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
     outPar->data[it](0,0) = x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa));
@@ -380,17 +388,30 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float cCosPsina = cosf(cosP*sina);
     
     for (size_t i=0;i<6;++i) errorProp.data[it](i,i) = 1.;
-    errorProp.data[it](0,2) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp.data[it](0,3) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp.data[it](0,4) = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp.data[it](0,5) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    errorProp.data[it](1,2) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp.data[it](1,3) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp.data[it](1,4) = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp.data[it](1,5) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp.data[it](4,2) = -ipt(inPar,it)*sinT/(cosT*k);
-    errorProp.data[it](4,3) = sinT*deltaZ/(cosT*k);
-    errorProp.data[it](4,5) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+    errorProp.data[it](0,2) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
+    errorProp.data[it](0,3) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
+    errorProp.data[it](0,4) = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp.data[it](0,5) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
+    errorProp.data[it](1,2) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
+    errorProp.data[it](1,3) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
+    errorProp.data[it](1,4) = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp.data[it](1,5) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
+    errorProp.data[it](4,2) = -ipt(inPar,it)*sinT*(icosTk);
+    errorProp.data[it](4,3) = sinT*deltaZ*(icosTk);
+    errorProp.data[it](4,5) = ipt(inPar,it)*deltaZ*icosT*icosTk;
+    //errorProp.data[it](4,5) = ipt(inPar,it)*deltaZ*(icosT*icosTk);
+
+   // errorProp.data[it](0,2) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+   // errorProp.data[it](0,3) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+   // errorProp.data[it](0,4) = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+   // errorProp.data[it](0,5) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+   // errorProp.data[it](1,2) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+   // errorProp.data[it](1,3) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+   // errorProp.data[it](1,4) = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+   // errorProp.data[it](1,5) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+   // errorProp.data[it](4,2) = -ipt(inPar,it)*sinT/(cosT*k);
+   // errorProp.data[it](4,3) = sinT*deltaZ/(cosT*k);
+    //errorProp.data[it](4,5) = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
 
   }
   __syncthreads();
