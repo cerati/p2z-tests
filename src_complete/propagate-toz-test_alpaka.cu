@@ -225,7 +225,9 @@ HOSTDEV float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, e
 HOSTDEV float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
 MPTRK* prepareTracks(ATRK inputtrk) {
-  MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
+  //MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
+  MPTRK* result;
+  cudaMallocHost((void**)&result,nevts*nb*sizeof(MPTRK));
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -247,7 +249,9 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
+ // MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
+  MPHIT* result;
+  cudaMallocHost((void**)&result,nlayer*nevts*nb*sizeof(MPHIT));
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
     for (size_t ie=0;ie<nevts;++ie) {
@@ -492,9 +496,9 @@ __host__ __device__ inline void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
   trkErr = &newErr;
  }
 
-
+__device__ __constant__ float kfact= 100/3.8;
 template< typename TAcc>
-__host__ __device__ inline void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg, const MP3F* msP,
+/*__host__*/ __device__ inline void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar, struct MP6x6F* errorProp, struct MP6x6F* temp, TAcc const & acc) {
   using Dim = alpaka::dim::Dim<TAcc>;
   using Idx = alpaka::idx::Idx<TAcc>;
@@ -504,7 +508,7 @@ __host__ __device__ inline void propagateToZ(const MP6x6SF* inErr, const MP6F* i
   Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) {	
     const float zout = z(msP,it);
-    const float k = q(inChg,it)*100/3.8;
+    const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z(inPar,it);
     const float pt = 1./ipt(inPar,it);
     const float cosP = cosf(phi(inPar,it));
@@ -513,7 +517,10 @@ __host__ __device__ inline void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float sinT = sinf(theta(inPar,it));
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
+    const float icosT = 1.0/cosT;
+    const float icosTk = icosT/k;
+    const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
+    //const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
     setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
@@ -527,17 +534,28 @@ __host__ __device__ inline void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float cCosPsina = cosf(cosP*sina);
     
     for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
-    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
-    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
-    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
+    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
+    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
+    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
+    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT*(icosTk);
+    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
+    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ*(icosT*icosTk);
+//    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
+//    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+//    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+//    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+//    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
+//    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
+//    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+//    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
+//    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
+//    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
+//    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
   //
   MultHelixPropEndcap(errorProp, inErr, temp,acc);
@@ -710,9 +728,14 @@ int main (int argc, char* argv[]) {
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
    
-   long start, end, setup_start, setup_end;
+   long start_wall, end_wall, setup_start, setup_end;
    long start2, end2;
    struct timeval timecheck;
+  cudaEvent_t start, end, copy,copyback;
+  cudaEventCreate(&start);
+  cudaEventCreate(&copy);
+  cudaEventCreate(&copyback);
+  cudaEventCreate(&end);
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -817,7 +840,9 @@ int main (int argc, char* argv[]) {
    //transfer(trk,hit, trk_dev,hit_dev);
 
    gettimeofday(&timecheck, NULL);
-   start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
+   cudaEventRecord(start);
    for(itr=0; itr<NITER; itr++) {
    transferTrk(trk,trk_dev);
    //for(int layer=0; layer<nlayer; layer++) {
@@ -829,16 +854,29 @@ int main (int argc, char* argv[]) {
      //}, trk_host, hit_host, outtrk_host);
      //alpaka::wait::wait(hostQueue);
      
+   cudaEventRecord(copy);
+   cudaEventSynchronize(copy);
+
     alpaka::kernel::exec<Acc>( accQueue,workDiv,
      [] ALPAKA_FN_ACC (Acc const & acc, MPTRK* trk_dev, MPHIT* hit_dev, MPTRK* outtrk_dev){
      alpaka_kernel(acc, trk_dev,hit_dev,outtrk_dev);
      }, trk_dev, hit_dev, outtrk_dev);
 
      alpaka::wait::wait(accQueue);
+   cudaEventRecord(copyback);
+   cudaEventSynchronize(copyback);
    transfer_back(outtrk_dev,outtrk);
   } //end of itr loop
+  
+  cudaEventRecord(end);
+  cudaEventSynchronize(end);
+  float elapsedtime,copytime,copybacktime,regiontime = 0;
+  cudaEventElapsedTime(&regiontime,start,end);
+  cudaEventElapsedTime(&elapsedtime,copy,copyback);
+  cudaEventElapsedTime(&copytime,start,copy);
+  cudaEventElapsedTime(&copybacktime,copyback,end);
    gettimeofday(&timecheck, NULL);
-   end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 //}
    //alpaka::mem::view::copy(accQueue, hostViewPlainPtr_outtrk_fin,hostViewPlainPtr_outtrkdev,extents);
    //alpaka::wait::wait(accQueue);
@@ -849,11 +887,17 @@ int main (int argc, char* argv[]) {
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    
-   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-   printf("data region time=%f (s)\n", (end2-start2)*0.001);
-   printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
+//   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
+//   printf("data region time=%f (s)\n", (end2-start2)*0.001);
+//   printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
+//   printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
+//   printf("formatted %i %i %i %i %i %f %f %f %f 0\n",int(NITER),nevts,ntrks,bsize,nb, (end-start)*0.001, (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
+
+  printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks));
+   printf("data region time=%f (s)\n", regiontime*0.001);
+   printf("memory transfer time=%f (s) [%f,%f]\n", (copytime+copybacktime)*0.001,copytime*0.001,copybacktime*0.001);
    printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
-   printf("formatted %i %i %i %i %i %f %f %f %f 0\n",int(NITER),nevts,ntrks,bsize,nb, (end-start)*0.001, (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
+   printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER),nevts,ntrks, bsize,nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (setup_end-setup_start)*0.001, 0);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;

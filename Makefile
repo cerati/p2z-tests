@@ -19,6 +19,8 @@ TUNETRK ?= 0
 TUNEEVT ?= 0
 STREAMS ?= 0
 NTHREADS ?= 0
+NITER ?= 0
+NLAYER ?= 0
 ifneq ($(TUNEB),0)
 TUNE += -Dbsize=$(TUNEB)
 endif
@@ -33,6 +35,12 @@ TUNE += -Dnum_streams=$(STREAMS)
 endif
 ifneq ($(NTHREADS),0)
 TUNE += -Dnthreads=$(NTHREADS)
+endif
+ifneq ($(NITER),0)
+TUNE += -DNITER=$(NITER)
+endif
+ifneq ($(NLAYER),0)
+TUNE += -Dnlayer=$(NLAYER)
 endif
 ##########CUDA Tunable parameters########################
 THREADSX ?= 0
@@ -171,7 +179,7 @@ ifeq ($(MODE),cudav2)
 CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread
+CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
 endif
 endif
