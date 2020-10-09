@@ -507,7 +507,10 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float sinT = sinf(theta(inPar,it));
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
+    const float icosT = 1.0/cosT;
+    const float icosTk = icosT/k;
+    const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
+    //const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
     setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
@@ -520,8 +523,6 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    const float icosT = 1.0/cosT;
-    const float icosTk = icosT/k;
     for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
     errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
     errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);

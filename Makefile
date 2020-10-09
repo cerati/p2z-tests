@@ -12,7 +12,7 @@
 #               omp4                                     #
 ##########################################################
 COMPILER ?= nvcc
-MODE ?= cudav2
+MODE ?= eigen
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
