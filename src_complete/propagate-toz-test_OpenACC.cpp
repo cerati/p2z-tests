@@ -46,7 +46,7 @@ struct ATRK {
   float par[6];
   float cov[21];
   int q;
-  int hitidx[22];
+  //  int hitidx[22];
 };
 
 struct AHIT {
@@ -94,7 +94,7 @@ struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
   MP1I    q;
-  MP22I   hitidx;
+  //  MP22I   hitidx;
 };
 
 struct MPHIT {

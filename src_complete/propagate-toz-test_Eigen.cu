@@ -72,7 +72,7 @@ struct ATRK {
   Matrix<float,6,1> par;
   Matrix<float,21,1> cov;
   int q;
-  Matrix<float,22,1> hitidx;
+//  Matrix<float,22,1> hitidx;
 };
 
 struct AHIT {
@@ -118,7 +118,7 @@ struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
   MP1I    q;
-  MP22I   hitidx;
+//  MP22I   hitidx;
 };                                                                                                                   
 
 struct MPHIT {
