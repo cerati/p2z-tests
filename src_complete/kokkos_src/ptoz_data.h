@@ -13,6 +13,7 @@
 // our typedefs curtisy of the examples
 #include "kokkos_config.h"
 
+#define nlayers 20      // number of events
 #define nevts 100      // number of events
 #define nb    600     // number of batches? 600
 #define bsize 16       // batch size (tracks per batch?)
