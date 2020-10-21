@@ -23,23 +23,22 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 5
+#define NITER 5 
 #endif
 #ifndef nlayer
 #define nlayer 20
 #endif
-#ifndef num_stream
-#define num_streams 10
+#ifndef num_streams
+#define num_streams 7 //streams changes answers
 #endif
 
 #ifndef threadsperblockx
-#define threadsperblockx 2
+#define threadsperblockx 32
 #endif
-//#define threadsperblocky 1024/threadsperblockx
-//#define threadsperblocky 512/threadsperblockx
-#define threadsperblocky 32/threadsperblockx
+#define threadsperblocky 512/threadsperblockx
+//#define threadsperblocky 1024/threadsperblockx  //unclear why bit 1024 total threads per block gives resource error when running with more than one layer
 #ifndef blockspergrid
-#define blockspergrid 40
+#define blockspergrid 15
 #endif
 
 
@@ -566,38 +565,19 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }
 
-__device__ __constant__ int ie_range = (int) nevts/num_streams; 
-__device__ __constant__ int ie_rangeR = (int) nevts%num_streams; 
+
+
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
-   //__shared__ int ie_range;
-   //ie_range = (int)(nevts/num_streams);
-  //if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
-  //else{ie_range = (int)(nevts/num_streams);}
-        /*__shared__*/ struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
+  int ie_range;
+  if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
+  else{ie_range = (int)(nevts/num_streams);}
   for (size_t ie = blockIdx.x; ie<ie_range; ie+=gridDim.x){
     for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
       const MPTRK* btracks = bTk(trk,ie,ib);
       MPTRK* obtracks = bTk(outtrk,ie,ib);
-      for (int layer=0;layer<nlayer;++layer){ 
+      for(int layer=0;layer<nlayer;++layer){	
         const MPHIT* bhits = bHit(hit,ie,ib,layer);
-        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
-                     &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp,&(*bhits).cov);
-        KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
-      }
-    }
-  }
-}
-__global__ void GPUsequenceR(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
-  //const int ie_range = (int)(nevts%num_streams);
-  //if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
-  //else{ie_range = (int)(nevts/num_streams);}
-  for (size_t ie = blockIdx.x; ie<ie_rangeR; ie+=gridDim.x){
-    for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
-      const MPTRK* btracks = bTk(trk,ie,ib);
-      MPTRK* obtracks = bTk(outtrk,ie,ib);
-      for (int layer=0;layer<nlayer;++layer){ 
-        const MPHIT* bhits = bHit(hit,ie,ib,layer);
-        /*__shared__*/ struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
+      /*__shared__*/ struct MP6x6F errorProp, temp; // using shared here causes a race hazard. idk why i did it this way, might be to include shared. maybe move to inside p2z function 
         propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
                      &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp,&(*bhits).cov);
         KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
@@ -714,12 +694,12 @@ int main (int argc, char* argv[]) {
 
   cudaEventRecord(copy);	
   cudaEventSynchronize(copy);
-    for (int s = 0; s<num_streams;++s){
-      GPUsequence<<<grid,block,0,streams[s]>>>(trk+(s*stream_chunk),hit+(s*stream_chunk*nlayer),outtrk+(s*stream_chunk),s);
+    for (int s = 0; s<num_streams;s++){
+  	  GPUsequence<<<grid,block,0,streams[s]>>>(trk+(s*stream_chunk),hit+(s*stream_chunk*nlayer),outtrk+(s*stream_chunk),s);
     }  
     if(stream_remainder != 0){
-      GPUsequenceR<<<grid,block,0,streams[num_streams]>>>(trk+(num_streams*stream_chunk),hit+(num_streams*stream_chunk*nlayer),outtrk+(num_streams*stream_chunk),num_streams);
-    }
+  	  GPUsequence<<<grid,block,0,streams[num_streams]>>>(trk+(num_streams*stream_chunk),hit+(num_streams*stream_chunk*nlayer),outtrk+(num_streams*stream_chunk),num_streams);
+    }  
 	  //cudaDeviceSynchronize(); // Normal sync
 
   
