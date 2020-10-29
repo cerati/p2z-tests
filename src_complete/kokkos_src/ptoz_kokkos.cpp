@@ -6,6 +6,10 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+#include <chrono>
+#include <iomanip>
+#include <iostream>
+
 // kokkos
 #include <Kokkos_Core.hpp>
 // our typedefs curtisy of the examples
@@ -109,12 +113,18 @@ int main( int argc, char* argv[] )
   convert_in_t = get_time();
   
 
+  auto wall_start = std::chrono::high_resolution_clock::now();
   for(itr=0; itr<NITER; itr++) {
   
       propagateToZ(all_tracks, all_hits, all_out, errorProp, temp);
       update(all_out, all_hits);
 
   } // end of itr loop
+  Kokkos::fence();
+  auto wall_stop = std::chrono::high_resolution_clock::now();
+  auto wall_diff = wall_stop - wall_start;
+  auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+  std::cout << "Wall clock time " << std::scientific << wall_time << " s" << std::endl;
 
   p2z_t = get_time();
 

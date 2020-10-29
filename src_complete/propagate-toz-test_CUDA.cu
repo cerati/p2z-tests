@@ -9,6 +9,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <unistd.h>
 #include <sys/time.h>
 
+#include <chrono>
+#include <iomanip>
+#include <iostream>
+
 #ifndef nevts
 #define nevts 100
 #endif
@@ -664,6 +668,8 @@ int main (int argc, char* argv[]) {
   gettimeofday(&timecheck, NULL);
   start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
   cudaEventRecord(start);	
+
+  auto wall_start = std::chrono::high_resolution_clock::now();
   for(int itr=0; itr<NITER; itr++){
   cudaEventRecord(startcopy);	
   cudaEventSynchronize(startcopy);
@@ -722,6 +728,11 @@ int main (int argc, char* argv[]) {
   copybacktime += copybacktime_itr;
   } //end itr loop
   cudaDeviceSynchronize(); // shaves a few seconds
+  auto wall_stop = std::chrono::high_resolution_clock::now();
+  auto wall_diff = wall_stop - wall_start;
+  auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+  std::cout << "Wall clock time " << std::scientific << wall_time << " s" << std::endl;
+
   cudaEventRecord(end);
   cudaEventSynchronize(end);
   gettimeofday(&timecheck, NULL);
