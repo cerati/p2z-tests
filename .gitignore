@@ -1,0 +1,11 @@
+*.o
+*.txt
+*.data
+bin/*
+tools/cuda_outplots
+tools/*.pdf
+output_tuner/*
+alpaka_lib
+setup_vtune
+p2z-tests
+eigen
