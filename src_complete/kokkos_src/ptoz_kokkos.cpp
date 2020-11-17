@@ -111,7 +111,7 @@ int main( int argc, char* argv[] )
   for(itr=0; itr<NITER; itr++) {
   
       propagateToZ(all_tracks, all_hits, all_out, errorProp, temp);
-      update(all_tracks, all_hits);
+      update(all_out, all_hits);
 
   } // end of itr loop
 
@@ -442,6 +442,9 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks,
   // for (size_t ie=0;ie<nevts;++ie) { // combined these two loop over batches
   // for (size_t ib=0;ib<nb;++ib) {    // // TODO make a kookos parallel
   // size_t batch = ib + nb*ie;
+  
+  for (size_t layer=0;layer<nlayers;++layer) { 
+
   #pragma ivdep
   #pragma simd
   for (size_t it=0;it<bsize;++it) { 
@@ -528,9 +531,10 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks,
   } //gemmT
 
 
-// } // nb
-// }  // nevts
-});
+  } // nlayers
+  // } // nb
+  // }  // nevts
+  });
 
 } // P2Z
 
@@ -593,6 +597,7 @@ void update(const CBTRK &trk, const CBHIT &hit) {
 
   Kokkos::parallel_for( "update_batch_loop", range_policy(0,nb*nevts), KOKKOS_LAMBDA ( int batch ) {
 
+  for (size_t layer=0;layer<nlayers;++layer) { 
 
     // ViewMatrixOB Ht("Ht", 6, 3, bsize);
     // ViewMatrixOB H_trk_cov("H_trk_par", 3, 6, bsize);
@@ -619,9 +624,9 @@ void update(const CBTRK &trk, const CBHIT &hit) {
 // Kgain =  trk.cov*Ht(H*trk.cov*Ht+hit.cov)^-1 ---- 6x3?
     gemm(H_trk_cov, Ht, temp_33, batch, 3, 6, 3);
     for ( int i = 0; i < 3; ++i ) {
-      for ( int j = 0; j < 6; ++j ) {
+      for ( int j = 0; j < 3; ++j ) {
         for ( int it = 0; it < bsize; ++it )
-          mat(batch,i,j,it) += hit.cov(batch,i,j,it);
+          mat(batch,i,j,it) = hit.cov(batch,i,j,it) + temp_33(batch,i,j,it);
       }
     }
     
@@ -632,18 +637,19 @@ void update(const CBTRK &trk, const CBHIT &hit) {
     det[it] = mat(batch,0,0,it)*(mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it))
             - mat(batch,0,1,it)*(mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it))
             + mat(batch,0,2,it)*(mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
+    det[it] = 1.0/det[it];
 
-    temp_33(batch,0,0,it) =      (mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it));
-    temp_33(batch,0,1,it) = -1 * (mat(batch,0,1,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,1,it));
-    temp_33(batch,0,2,it) =      (mat(batch,0,1,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,1,it));
+    temp_33(batch,0,0,it) =      det[it] * (mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it));
+    temp_33(batch,0,1,it) = -1 * det[it] * (mat(batch,0,1,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,1,it));
+    temp_33(batch,0,2,it) =      det[it] * (mat(batch,0,1,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,1,it));
 
-    temp_33(batch,1,0,it) = -1 * (mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it));
-    temp_33(batch,1,1,it) =      (mat(batch,0,0,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,0,it));
-    temp_33(batch,1,2,it) = -1 * (mat(batch,0,0,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,0,it));
+    temp_33(batch,1,0,it) = -1 * det[it] * (mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it));
+    temp_33(batch,1,1,it) =      det[it] * (mat(batch,0,0,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,0,it));
+    temp_33(batch,1,2,it) = -1 * det[it] * (mat(batch,0,0,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,0,it));
     
-    temp_33(batch,2,0,it) =      (mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
-    temp_33(batch,2,1,it) = -1 * (mat(batch,0,0,it)*mat(batch,2,1,it)-mat(batch,0,1,it)*mat(batch,2,0,it));
-    temp_33(batch,2,2,it) =      (mat(batch,0,0,it)*mat(batch,1,1,it)-mat(batch,0,1,it)*mat(batch,1,0,it));
+    temp_33(batch,2,0,it) =      det[it] * (mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
+    temp_33(batch,2,1,it) = -1 * det[it] * (mat(batch,0,0,it)*mat(batch,2,1,it)-mat(batch,0,1,it)*mat(batch,2,0,it));
+    temp_33(batch,2,2,it) =      det[it] * (mat(batch,0,0,it)*mat(batch,1,1,it)-mat(batch,0,1,it)*mat(batch,1,0,it));
 
     // for (int i = 0; i < 3; i++)
     //   for (int j = 0; j < 3; j++)
@@ -652,7 +658,7 @@ void update(const CBTRK &trk, const CBHIT &hit) {
   }
 
 
-
+    // Kgain =  trk.cov*Ht*temp_33
     gemm(Ht, temp_33, temp_63, batch, 6, 3, 3);
     for ( int i = 0; i < 6; ++i ) {
       for ( int j = 0; j < 3; ++j ) {
@@ -687,7 +693,7 @@ void update(const CBTRK &trk, const CBHIT &hit) {
       }
     }
 
-
+  } // nlayers
 
   });
 
