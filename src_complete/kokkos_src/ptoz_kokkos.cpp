@@ -198,7 +198,7 @@ void prepareTracks(ATRK inputtrk, MPTRK* &result) { // TODO the type on result i
       new(&(result[ib + nb*ie].par))    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
       new(&(result[ib + nb*ie].cov))    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
       new(&(result[ib + nb*ie].q))      ViewVectorINT("q", bsize);          // bsize array of int
-      new(&(result[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
+      //      new(&(result[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
     }
   }
 
@@ -407,7 +407,7 @@ void allocateOutTracks(MPTRK* &outtrk) {
       new(&(outtrk[ib + nb*ie].par))    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
       new(&(outtrk[ib + nb*ie].cov))    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
       new(&(outtrk[ib + nb*ie].q))      ViewVectorINT("q", bsize);          // bsize array of int
-      new(&(outtrk[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
+      //      new(&(outtrk[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
     }
   }
 

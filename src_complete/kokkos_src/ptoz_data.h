@@ -53,7 +53,7 @@ struct MPTRK {
   ViewVectorMP  par;    // batch of len 6 vectors
   ViewMatrixMP  cov;    // 6x6 symmetric batch matrix
   ViewVectorINT q;      // bsize array of int
-  ViewVectorINT hitidx; // unused; array len 22 of int
+  //  ViewVectorINT hitidx; // unused; array len 22 of int
 };
 
 struct MPHIT {
@@ -140,7 +140,7 @@ struct ATRK {
   float par[6];  // vector
   float cov[36]; // symmetric mat
   int q;
-  int hitidx[22];
+  //  int hitidx[22];
 };
 struct AHIT {
   float pos[3];
