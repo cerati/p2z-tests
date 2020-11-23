@@ -120,7 +120,7 @@ int main( int argc, char* argv[] )
       update(all_out, all_hits);
 
   } // end of itr loop
-
+  Kokkos::fence();
   auto wall_stop = std::chrono::high_resolution_clock::now();
 
   p2z_t = get_time();
