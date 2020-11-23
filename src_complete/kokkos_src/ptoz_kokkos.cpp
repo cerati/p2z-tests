@@ -30,6 +30,7 @@ void update(const CBTRK &inTrks, const CBHIT &inHits);
 void averageOutputs(MPTRK* &outtrk, MPHIT* &hit);
 
 void invert_33(const ViewMatrixCB &mat, int batch);
+KOKKOS_INLINE_FUNCTION
 void gemm(const ViewMatrixCB &A, const ViewMatrixCB &B, const ViewMatrixCB &C, int batch, int rows_a, int cols_a, int cols_b);
 void gemm_T(const ViewMatrixCB &A, const ViewMatrixCB &B, const ViewMatrixCB &C, int batch, int rows_a, int cols_a, int cols_b);
 
@@ -621,8 +622,16 @@ void update(const CBTRK &trk, const CBHIT &hit) {
       }
     }
 
-// Kgain =  trk.cov*Ht(H*trk.cov*Ht+hit.cov)^-1 ---- 6x3?
+    // Kgain =  trk.cov*Ht(H*trk.cov*Ht+hit.cov)^-1 ---- 6x3?
     gemm(H_trk_cov, Ht, temp_33, batch, 3, 6, 3);
+    // for ( int i = 0; i < 3; ++i ) {
+    //   for ( int j = 0; j < 3; ++j ) {
+    //     for ( int b = 0; b < bsize; ++b )  temp_33(batch,i,j,b) = 0.0;
+    //     for ( int k = 0; k < 6; ++k ) {
+    //       for ( int b = 0; b < bsize; ++b ) temp_33(batch,i,j,b) += H_trk_cov(batch,i,k,b) * Ht(batch,k,j,b);
+    //     }
+    //   }
+    // }
     for ( int i = 0; i < 3; ++i ) {
       for ( int j = 0; j < 3; ++j ) {
         for ( int it = 0; it < bsize; ++it )
@@ -630,33 +639,32 @@ void update(const CBTRK &trk, const CBHIT &hit) {
       }
     }
     
-  float det[bsize];
+    float det[bsize];
 
-  for ( int it = 0; it < bsize; ++it ) {
+    for ( int it = 0; it < bsize; ++it ) {
 
-    det[it] = mat(batch,0,0,it)*(mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it))
-            - mat(batch,0,1,it)*(mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it))
-            + mat(batch,0,2,it)*(mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
-    det[it] = 1.0/det[it];
+      det[it] = mat(batch,0,0,it)*(mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it))
+              - mat(batch,0,1,it)*(mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it))
+              + mat(batch,0,2,it)*(mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
+      det[it] = 1.0/det[it];
 
-    temp_33(batch,0,0,it) =      det[it] * (mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it));
-    temp_33(batch,0,1,it) = -1 * det[it] * (mat(batch,0,1,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,1,it));
-    temp_33(batch,0,2,it) =      det[it] * (mat(batch,0,1,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,1,it));
+      temp_33(batch,0,0,it) =      det[it] * (mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it));
+      temp_33(batch,0,1,it) = -1 * det[it] * (mat(batch,0,1,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,1,it));
+      temp_33(batch,0,2,it) =      det[it] * (mat(batch,0,1,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,1,it));
 
-    temp_33(batch,1,0,it) = -1 * det[it] * (mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it));
-    temp_33(batch,1,1,it) =      det[it] * (mat(batch,0,0,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,0,it));
-    temp_33(batch,1,2,it) = -1 * det[it] * (mat(batch,0,0,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,0,it));
-    
-    temp_33(batch,2,0,it) =      det[it] * (mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
-    temp_33(batch,2,1,it) = -1 * det[it] * (mat(batch,0,0,it)*mat(batch,2,1,it)-mat(batch,0,1,it)*mat(batch,2,0,it));
-    temp_33(batch,2,2,it) =      det[it] * (mat(batch,0,0,it)*mat(batch,1,1,it)-mat(batch,0,1,it)*mat(batch,1,0,it));
+      temp_33(batch,1,0,it) = -1 * det[it] * (mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it));
+      temp_33(batch,1,1,it) =      det[it] * (mat(batch,0,0,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,0,it));
+      temp_33(batch,1,2,it) = -1 * det[it] * (mat(batch,0,0,it)*mat(batch,1,2,it)-mat(batch,0,2,it)*mat(batch,1,0,it));
+      
+      temp_33(batch,2,0,it) =      det[it] * (mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
+      temp_33(batch,2,1,it) = -1 * det[it] * (mat(batch,0,0,it)*mat(batch,2,1,it)-mat(batch,0,1,it)*mat(batch,2,0,it));
+      temp_33(batch,2,2,it) =      det[it] * (mat(batch,0,0,it)*mat(batch,1,1,it)-mat(batch,0,1,it)*mat(batch,1,0,it));
 
-    // for (int i = 0; i < 3; i++)
-    //   for (int j = 0; j < 3; j++)
-    //     mat(batch,i,j,it) = temp_33(batch,i,j,it);
+      // for (int i = 0; i < 3; i++)
+      //   for (int j = 0; j < 3; j++)
+      //     mat(batch,i,j,it) = temp_33(batch,i,j,it);
 
-  }
-
+    }
 
     // Kgain =  trk.cov*Ht*temp_33
     gemm(Ht, temp_33, temp_63, batch, 6, 3, 3);
@@ -764,10 +772,9 @@ void averageOutputs(MPTRK* &outtrk, MPHIT* &hit) {
   printf("track dz/z avg=%f std=%f\n", avgdz, stddz);
 }
 
-
 // TODO make these use kokkos?
 // TODO make them actually fit the gemm standard?
-void gemm(const ViewMatrixCB &A, const ViewMatrixCB &B, const ViewMatrixCB &C, int batch, int rows_a, int cols_a, int cols_b) {
+KOKKOS_INLINE_FUNCTION void gemm(const ViewMatrixCB &A, const ViewMatrixCB &B, const ViewMatrixCB &C, int batch, int rows_a, int cols_a, int cols_b) {
 
   for ( int i = 0; i < rows_a; ++i ) {
     for ( int j = 0; j < cols_b; ++j ) {
