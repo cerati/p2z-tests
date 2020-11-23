@@ -5,6 +5,10 @@
 #include <math.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <iostream>
+#include <chrono>
+#include <iomanip>
+
 
 // kokkos
 #include <Kokkos_Core.hpp>
@@ -107,6 +111,7 @@ int main( int argc, char* argv[] )
   
   convert_in_t = get_time();
   
+  auto wall_start = std::chrono::high_resolution_clock::now();
 
   for(itr=0; itr<NITER; itr++) {
   
@@ -114,6 +119,8 @@ int main( int argc, char* argv[] )
       update(all_out, all_hits);
 
   } // end of itr loop
+
+  auto wall_stop = std::chrono::high_resolution_clock::now();
 
   p2z_t = get_time();
 
@@ -143,8 +150,13 @@ int main( int argc, char* argv[] )
   printf("MP prep time =%f \n", prep_t - start_t);
   printf("CB convert   =%f \n", (convert_in_t - prep_t) + (convert_out_t - p2z_t));
   printf("p2z time     =%f \n", p2z_t - convert_in_t);
-  printf("Time / track =%e \n", (p2z_t - convert_in_t) / (float)(nevts*ntrks) );
+  printf("Time / track =%e \n", (p2z_t - convert_in_t) / (float)(nevts*ntrks*NITER) );
 
+  auto wall_diff = wall_stop - wall_start;
+  auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+  printf("setup time time=%f (s)\n", (convert_in_t - start_t));
+  printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*NITER));
+  printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (convert_in_t - start_t), nthreads);
 
   // for (size_t ie=0;ie<nevts;++ie) {
   //   for (size_t ib=0;ib<nb;++ib) {

@@ -15,18 +15,18 @@
 
 #define nlayers 20      // number of events
 #define nevts 100      // number of events
-#define nb    600     // number of batches? 600
+#define nb    ntrks/bsize     // number of batches? 600
 #define bsize 16       // batch size (tracks per batch?)
 
 // #define nevts 100      // number of events
 // #define nb    150      // number of batches?
 // #define bsize 64       // batch size (tracks per batch?) 
 
-#define ntrks nb*bsize // number of tracks per event?
+#define ntrks 9600 // number of tracks per event?
 #define smear 0.1      // for making more tracks for the one
 
 #ifndef NITER
-#define NITER 100
+#define NITER 5
 #endif
 
 // TODO adjust everything so it is all full matrices
