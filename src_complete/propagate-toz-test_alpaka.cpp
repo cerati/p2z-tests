@@ -10,6 +10,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <alpaka/alpaka.hpp>
 #include <functional>
 #include <iostream>
+#include <chrono>
+#include <iomanip>
 
 #ifndef bsize
 #define bsize 128
@@ -672,8 +674,7 @@ int main (int argc, char* argv[]) {
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
    
-   long start, end, setup_start, setup_end;
-   long start2, end2;
+   long setup_start, setup_stop;
    struct timeval timecheck;
 
    gettimeofday(&timecheck, NULL);
@@ -682,7 +683,7 @@ int main (int argc, char* argv[]) {
    MPHIT* hit = prepareHits(inputhit);
    MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
    gettimeofday(&timecheck, NULL);
-   setup_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
@@ -692,12 +693,8 @@ int main (int argc, char* argv[]) {
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nlayer*nevts*nb*sizeof(struct MPHIT));
 
-   gettimeofday(&timecheck, NULL);
-   start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   auto wall_start = std::chrono::high_resolution_clock::now();
 
-
-   gettimeofday(&timecheck, NULL);
-   start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    for(itr=0; itr<NITER; itr++) {
      alpaka::kernel::exec<Acc>( queue,workDiv,
      [] ALPAKA_FN_ACC (Acc const & acc, MPTRK* trk, MPHIT* hit, MPTRK* outtrk){
@@ -707,18 +704,13 @@ int main (int argc, char* argv[]) {
      alpaka::wait::wait(queue);
    } //end of itr loop
    
-   gettimeofday(&timecheck, NULL);
-   end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   auto wall_stop = std::chrono::high_resolution_clock::now();
 
-   gettimeofday(&timecheck, NULL);
-   end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-
-   
-   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-   printf("data region time=%f (s)\n", (end2-start2)*0.001);
-   printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
-   printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
-   printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER), nevts,ntrks,bsize,nb, (end-start)*0.001, (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001, num_streams);
+   auto wall_diff = wall_stop - wall_start;
+   auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+   printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
+   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
+   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, nthreads);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;

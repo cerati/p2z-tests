@@ -11,6 +11,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <functional>
 #include <iostream>
 #include <cstdint>
+#include <chrono>
+#include <iomanip>
 
 #ifndef bsize
 #define bsize 128
@@ -727,15 +729,9 @@ int main (int argc, char* argv[]) {
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
-   
-   long start_wall, end_wall, setup_start, setup_end;
-   long start2, end2;
+
+   long setup_start, setup_stop;
    struct timeval timecheck;
-  cudaEvent_t start, end, copy,copyback;
-  cudaEventCreate(&start);
-  cudaEventCreate(&copy);
-  cudaEventCreate(&copyback);
-  cudaEventCreate(&end);
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -800,7 +796,7 @@ int main (int argc, char* argv[]) {
 //   MPHIT * const hit_dev = alpaka::mem::view::getPtrNative(hitbuf);
 
    gettimeofday(&timecheck, NULL);
-   setup_end = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
@@ -829,9 +825,6 @@ int main (int argc, char* argv[]) {
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
 
-   gettimeofday(&timecheck, NULL);
-   start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-
   //copy host to acc
   //alpaka::mem::view::copy(queue,trk_dev,trk,nevts*nb*sizeof(MPTRK));
   //alpaka::mem::view::copy(queue,trk_dev->par,trk->par,sizeof(MP6F));
@@ -839,10 +832,8 @@ int main (int argc, char* argv[]) {
 
    //transfer(trk,hit, trk_dev,hit_dev);
 
-   gettimeofday(&timecheck, NULL);
-   start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   auto wall_start = std::chrono::high_resolution_clock::now();
 
-   cudaEventRecord(start);
    for(itr=0; itr<NITER; itr++) {
    transferTrk(trk,trk_dev);
    //for(int layer=0; layer<nlayer; layer++) {
@@ -854,8 +845,6 @@ int main (int argc, char* argv[]) {
      //}, trk_host, hit_host, outtrk_host);
      //alpaka::wait::wait(hostQueue);
      
-   cudaEventRecord(copy);
-   cudaEventSynchronize(copy);
 
     alpaka::kernel::exec<Acc>( accQueue,workDiv,
      [] ALPAKA_FN_ACC (Acc const & acc, MPTRK* trk_dev, MPHIT* hit_dev, MPTRK* outtrk_dev){
@@ -863,41 +852,25 @@ int main (int argc, char* argv[]) {
      }, trk_dev, hit_dev, outtrk_dev);
 
      alpaka::wait::wait(accQueue);
-   cudaEventRecord(copyback);
-   cudaEventSynchronize(copyback);
-   transfer_back(outtrk_dev,outtrk);
+     transfer_back(outtrk_dev,outtrk);
   } //end of itr loop
   
-  cudaEventRecord(end);
-  cudaEventSynchronize(end);
-  float elapsedtime,copytime,copybacktime,regiontime = 0;
-  cudaEventElapsedTime(&regiontime,start,end);
-  cudaEventElapsedTime(&elapsedtime,copy,copyback);
-  cudaEventElapsedTime(&copytime,start,copy);
-  cudaEventElapsedTime(&copybacktime,copyback,end);
-   gettimeofday(&timecheck, NULL);
-   end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+   cudaDeviceSynchronize(); 
+   auto wall_stop = std::chrono::high_resolution_clock::now();
+  
 //}
    //alpaka::mem::view::copy(accQueue, hostViewPlainPtr_outtrk_fin,hostViewPlainPtr_outtrkdev,extents);
    //alpaka::wait::wait(accQueue);
    //alpaka::mem::view::copy(hostQueue, hostViewPlainPtr_outtrk_fin,hostViewPlainPtr_outtrk,extents);
    //alpaka::wait::wait(hostQueue);
   // transfer_back(outtrk_dev,outtrk);
-   gettimeofday(&timecheck, NULL);
-   end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-   
-//   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (end-start)*0.001, (end-start)*0.001/(nevts*ntrks));
-//   printf("data region time=%f (s)\n", (end2-start2)*0.001);
-//   printf("memory transter time=%f (s)\n", ((end2-start2) - (end-start))*0.001);
-//   printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
-//   printf("formatted %i %i %i %i %i %f %f %f %f 0\n",int(NITER),nevts,ntrks,bsize,nb, (end-start)*0.001, (end2-start2)*0.001,  ((end2-start2) - (end-start))*0.001, (setup_end-setup_start)*0.001);
+   auto wall_diff = wall_stop - wall_start;
+   auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+   printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
+   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
+   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, nthreads);
 
-  printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks));
-   printf("data region time=%f (s)\n", regiontime*0.001);
-   printf("memory transfer time=%f (s) [%f,%f]\n", (copytime+copybacktime)*0.001,copytime*0.001,copybacktime*0.001);
-   printf("setup time time=%f (s)\n", (setup_end-setup_start)*0.001);
-   printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER),nevts,ntrks, bsize,nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (setup_end-setup_start)*0.001, 0);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;

@@ -11,6 +11,10 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <vector>
 #include <Eigen/Dense>
 #include <Eigen/Core>
+include <iostream>
+#include <chrono>
+#include <iomanip>
+
 
 #ifndef bsize
 #define bsize 1
@@ -500,16 +504,11 @@ int main (int argc, char* argv[]) {
   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
   printf("NITER=%d\n", NITER);
  
-  long start_wall, end_wall, start_setup, end_setup; 
+  long setup_start, setup_stop;
   struct timeval timecheck;
-  cudaEvent_t start, end, copy,copyback;
-  cudaEventCreate(&start);
-  cudaEventCreate(&copy);
-  cudaEventCreate(&copyback);
-  cudaEventCreate(&end);
-      
+ 
   gettimeofday(&timecheck, NULL);
-  start_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+  setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
   MPTRK* trk = prepareTracks(inputtrk);
   MPHIT* hit = prepareHits(inputhit);
   MPTRK* trk_dev;
@@ -533,25 +532,19 @@ int main (int argc, char* argv[]) {
   for (int s = 0; s<stream_range;s++){
     cudaStreamCreateWithFlags(&streams[s],cudaStreamNonBlocking);
   }
+
   gettimeofday(&timecheck, NULL);
-  end_setup = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+  setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
  
 
   printf("done preparing!\n");
-printf("dev: %f\n",trk->par.data[0](0));
-  //long start, end;
-  //long start2, end2;
-  //struct timeval timecheck;
-
+  printf("dev: %f\n",trk->par.data[0](0));
+  
   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
   printf("Size of struct struct MPHIT hit[] = %ld\n", nlayer*nevts*nb*sizeof(struct MPHIT));
 
-
-  cudaEventRecord(start);	
-  gettimeofday(&timecheck, NULL);
-  start_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-
+  auto wall_start = std::chrono::high_resolution_clock::now();
 
   for(int itr=0; itr<NITER; itr++){
     for (int s = 0; s<num_streams;s++){
@@ -589,18 +582,13 @@ printf("dev: %f\n",trk->par.data[0](0));
       cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->cov).data,&((hit+(num_streams*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
     }
 
-  cudaEventRecord(copy);	
-  cudaEventSynchronize(copy);
     for (int s = 0; s<num_streams;s++){
       GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev+(s*stream_chunk),hit_dev+(s*stream_chunk*nlayer),outtrk_dev+(s*stream_chunk),s);
     }  
     if(stream_remainder != 0){
       GPUsequence<<<grid,block,0,streams[num_streams]>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streams*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams); 
     }
-
   
-  cudaEventRecord(copyback);
-  cudaEventSynchronize(copyback);
     for (int s = 0; s<num_streams;s++){
       cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
       cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->par, &(outtrk_dev+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[s]);
@@ -626,29 +614,19 @@ printf("dev: %f\n",trk->par.data[0](0));
   } //end itr loop
 
   cudaDeviceSynchronize(); // shaves a few seconds
-  gettimeofday(&timecheck, NULL);
-  end_wall = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-  cudaEventRecord(end);
-  cudaEventSynchronize(end);
-  float elapsedtime,copytime,copybacktime,regiontime = 0;
-  cudaEventElapsedTime(&regiontime,start,end);
-  cudaEventElapsedTime(&elapsedtime,copy,copyback);
-  cudaEventElapsedTime(&copytime,start,copy);
-  cudaEventElapsedTime(&copybacktime,copyback,end);
+  auto wall_stop = std::chrono::high_resolution_clock::now();
+
   
   for (int s = 0; s<stream_range;s++){
     cudaStreamDestroy(streams[s]);
   }
  
+   auto wall_diff = wall_stop - wall_start;
+   auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+   printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
+   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
+   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, nthreads);
 
-   long walltime = end_wall-start_wall; 
-   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), (elapsedtime)*0.001, (elapsedtime)*0.001/(nevts*ntrks));
-   printf("data region time=%f (s)\n", regiontime*0.001);
-   printf("memory transfer time=%f (s) [%f,%f]\n", (copytime+copybacktime)*0.001,copytime*0.001,copybacktime*0.001);
-   printf("setup time time=%f (s)\n", (end_setup-start_setup)*0.001);
-   printf("formatted %i %i %i %i %i %f %f %f %f %i\n",int(NITER), nevts,ntrks, bsize, nb, (elapsedtime)*0.001, (regiontime)*0.001,  (copytime+copybacktime)*0.001, (end_setup-start_setup)*0.001, num_streams);
-
-   printf("wall region time=%f (s)\n", (end_wall-start_wall)*0.001);
    int bad_count =0;
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;
