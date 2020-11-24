@@ -605,8 +605,6 @@ void transfer(MPTRK* trk, MPHIT* hit, MPTRK* trk_dev, MPHIT* hit_dev){
   cudaMemcpy(&((trk_dev->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(&trk_dev->q, &trk->q, sizeof(MP1I), cudaMemcpyHostToDevice);
   cudaMemcpy(&((trk_dev->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice);
-  cudaMemcpy(&trk_dev->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice);
-  cudaMemcpy(&((trk_dev->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice);
 
   cudaMemcpy(hit_dev,hit,nlayer*nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
   cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
@@ -623,8 +621,6 @@ void transfer_back(MPTRK* trk, MPTRK* trk_host){
   cudaMemcpy(&((trk_host->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(&trk_host->q, &trk->q, sizeof(MP1I), cudaMemcpyDeviceToHost);
   cudaMemcpy(&((trk_host->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&trk_host->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&((trk_host->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyDeviceToHost);
 }
 inline void transferTrk(MPTRK* trk, MPTRK* trk_dev){
 
@@ -635,8 +631,6 @@ inline void transferTrk(MPTRK* trk, MPTRK* trk_dev){
   cudaMemcpy(&((trk_dev->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(&trk_dev->q, &trk->q, sizeof(MP1I), cudaMemcpyHostToDevice);
   cudaMemcpy(&((trk_dev->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice);
-  cudaMemcpy(&trk_dev->hitidx, &trk->hitidx, sizeof(MP22I), cudaMemcpyHostToDevice);
-  cudaMemcpy(&((trk_dev->hitidx).data), &((trk->hitidx).data), 22*bsize*sizeof(int), cudaMemcpyHostToDevice);
 
 }
 inline void transferHit(MPHIT* hit, MPHIT* hit_dev){
@@ -712,8 +706,7 @@ int main (int argc, char* argv[]) {
      {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
       6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
       0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348},
-     1,
-     {1, 0, 17, 16, 36, 35, 33, 34, 59, 58, 70, 85, 101, 102, 116, 117, 132, 133, 152, 169, 187, 202}
+     1
    };
 
    AHIT inputhit = {
@@ -869,7 +862,7 @@ int main (int argc, char* argv[]) {
    auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
-   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, nthreads);
+   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, 3);
 
 
    float avgx = 0, avgy = 0, avgz = 0;

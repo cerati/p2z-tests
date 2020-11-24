@@ -247,7 +247,7 @@ endif
 TARGET = ./bin
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
 
-CFLAGS1 += -std=c++11
+CFLAGS1 += -std=c++17
 
 $(TARGET)/$(BENCHMARK): src/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi
