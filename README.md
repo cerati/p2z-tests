@@ -1,7 +1,5 @@
 # p2z-tests
 
-Local repository of p2z-tests for mkFit
-=======
 ## OpenMP
 #### Compilers: gcc, icc, pgi.
 version 3 is most up to date. 
