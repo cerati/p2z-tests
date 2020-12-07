@@ -247,10 +247,11 @@ endif
 TARGET = ./bin
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
 
+CFLAGS1 += -std=c++17
 
-$(TARGET)/$(BENCHMARK): src_complete/$(CSRCS)
+$(TARGET)/$(BENCHMARK): src/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi
-	$(CXX) $(CFLAGS1) src_complete/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK)
+	$(CXX) $(CFLAGS1) src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK)
 	if [ -f $(TARGET)/*.ptx ]; then rm $(TARGET)/*.ptx; fi
 	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
