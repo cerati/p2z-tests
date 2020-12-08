@@ -6,35 +6,23 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <stdlib.h>
 #include <math.h>
 #include <unistd.h>
-#include <sys/time.h>
 #include <iostream>
 #include <chrono>
 #include <iomanip>
+#include <sys/time.h>
 
-#ifndef nevts
-#define nevts 10
-#endif
 #ifndef bsize
-#define bsize 32
+#define bsize 128
 #endif
 #ifndef ntrks
 #define ntrks 9600
 #endif
+
 #define nb    ntrks/bsize
-#define smear 0.1
-#ifdef _OPENARC_
-#pragma openarc #ifndef nevts
-#pragma openarc #define nevts 100
-#pragma openarc #endif
-#pragma openarc #ifndef bsize
-#pragma openarc #define bsize 32
-#pragma openarc #endif
-#pragma openarc #ifndef ntrks
-#pragma openarc #define ntrks 9600
-#pragma openarc #endif
-#pragma openarc #define nb    ntrks/bsize
-#pragma openarc #define N bsize
+#ifndef nevts
+#define nevts 100
 #endif
+#define smear 0.1
 
 #ifndef NITER
 #define NITER 5
@@ -88,6 +76,7 @@ struct MP6F {
 struct MP3x3 {
   float data[9*bsize];
 };
+
 struct MP3x6 {
   float data[18*bsize];
 };
@@ -147,7 +136,7 @@ const struct MPTRK* bTkC(const struct MPTRK* tracks, size_t ev, size_t ib) {
 float q(const struct MP1I* bq, size_t it){
   return (*bq).data[it];
 }
-
+//
 float par(const struct MP6F* bpars, size_t it, size_t ipar){
   return (*bpars).data[it + ipar*bsize];
 }
@@ -238,16 +227,16 @@ struct MPTRK* prepareTracks(struct ATRK inputtrk) {
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
-	    //par
-      	for (size_t ip=0;ip<6;++ip) {
-      	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
-      	}
-      	//cov
-      	for (size_t ip=0;ip<21;++ip) {
-      	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
-      	}
-      	//q
-      	result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+    	//par
+    	for (size_t ip=0;ip<6;++ip) {
+    	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+    	}
+    	//cov
+    	for (size_t ip=0;ip<21;++ip) {
+    	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+    	}
+    	//q
+    	result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
       }
     }
   }
@@ -327,10 +316,10 @@ void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct
 
 #pragma omp declare target
 void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, struct MP6x6SF* C) {
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp parallel for num_threads(64)
+  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
+  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
+  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
+#pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -364,7 +353,7 @@ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp parallel for num_threads(64)
+#pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
     double det =
@@ -391,7 +380,7 @@ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp parallel for num_threads(64)
+#pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
@@ -417,12 +406,13 @@ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
 #pragma omp end declare target
 
 #pragma omp declare target
-void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
-  MP3x3 inverse_temp;
-  MP3x6 kGain;
-  MP6x6SF newErr;
-  KalmanGainInv(trkErr,hitErr,&inverse_temp);
-  KalmanGain(trkErr,&inverse_temp,&kGain);
+void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP3x3* inverse_temp, MP3x6* kGain, MP6x6SF* newErr){
+  //MP3x3 inverse_temp;
+  //MP3x6 kGain;
+  //MP6x6SF newErr;
+  KalmanGainInv(trkErr,hitErr,inverse_temp);
+  KalmanGain(trkErr,inverse_temp,kGain);
+
 
 #pragma omp parallel for num_threads(bsize)
   for (size_t it=0;it<bsize;++it) {
@@ -436,39 +426,39 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     const float yout = y(msP,it);
     const float zout = z(msP,it);
   
-    float xnew = xin + (kGain.data[0*bsize+it]*(xout-xin)) +(kGain.data[1*bsize+it]*(yout-yin));
-    float ynew = yin + (kGain.data[3*bsize+it]*(xout-xin)) +(kGain.data[4*bsize+it]*(yout-yin));
-    float znew = zin + (kGain.data[6*bsize+it]*(xout-xin)) +(kGain.data[7*bsize+it]*(yout-yin));
-    float ptnew = ptin + (kGain.data[9*bsize+it]*(xout-xin)) +(kGain.data[10*bsize+it]*(yout-yin));
-    float phinew = phiin + (kGain.data[12*bsize+it]*(xout-xin)) +(kGain.data[13*bsize+it]*(yout-yin));
-    float thetanew = thetain + (kGain.data[15*bsize+it]*(xout-xin)) +(kGain.data[16*bsize+it]*(yout-yin));
+    float xnew = xin + (kGain->data[0*bsize+it]*(xout-xin)) +(kGain->data[1*bsize+it]*(yout-yin));
+    float ynew = yin + (kGain->data[3*bsize+it]*(xout-xin)) +(kGain->data[4*bsize+it]*(yout-yin));
+    float znew = zin + (kGain->data[6*bsize+it]*(xout-xin)) +(kGain->data[7*bsize+it]*(yout-yin));
+    float ptnew = ptin + (kGain->data[9*bsize+it]*(xout-xin)) +(kGain->data[10*bsize+it]*(yout-yin));
+    float phinew = phiin + (kGain->data[12*bsize+it]*(xout-xin)) +(kGain->data[13*bsize+it]*(yout-yin));
+    float thetanew = thetain + (kGain->data[15*bsize+it]*(xout-xin)) +(kGain->data[16*bsize+it]*(yout-yin));
+
+    newErr->data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[2*bsize+it]);
+    newErr->data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[7*bsize+it]);
+    newErr->data[2*bsize+it] = trkErr->data[2*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[11*bsize+it]);
+    newErr->data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[12*bsize+it]);
+    newErr->data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr->data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[14*bsize+it]);
   
-    newErr.data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[2*bsize+it]);
-    newErr.data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[7*bsize+it]);
-    newErr.data[2*bsize+it] = trkErr->data[2*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr.data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr.data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr->data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[7*bsize+it]);
+    newErr->data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[11*bsize+it]);
+    newErr->data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[12*bsize+it]);
+    newErr->data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr->data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[14*bsize+it]);
   
-    newErr.data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[7*bsize+it]);
-    newErr.data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr.data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr.data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr->data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[11*bsize+it]);
+    newErr->data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[12*bsize+it]);
+    newErr->data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr->data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[14*bsize+it]);
   
-    newErr.data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr.data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr.data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr->data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[12*bsize+it]);
+    newErr->data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr->data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[14*bsize+it]);
   
-    newErr.data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr.data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr->data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[13*bsize+it]);
+    newErr->data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[14*bsize+it]);
   
-    newErr.data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain.data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[14*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain.data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[14*bsize+it]*trkErr->data[14*bsize+it]);
-  
-    newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain.data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[17*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr->data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain->data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[17*bsize+it]*trkErr->data[14*bsize+it]);
 
     setx(inPar,it,xnew );
     sety(inPar,it,ynew );
@@ -477,7 +467,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
- trkErr = &newErr;
+  trkErr = newErr;
 }
 #pragma omp end declare target
 
@@ -487,6 +477,7 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
 		  const struct MP1I* inChg, const struct MP3F* msP,
 	                struct MP6x6SF* outErr, struct MP6F* outPar,
 			struct MP6x6F* errorProp, struct MP6x6F* temp) {
+  //
 #pragma omp parallel for num_threads(bsize)
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z(msP,it);
@@ -527,7 +518,6 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
     errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT*(icosTk);
     errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
     errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ*(icosT*icosTk);
-
 //    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
 //    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
 //    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
@@ -570,7 +560,7 @@ int main (int argc, char* argv[]) {
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
-
+   
    long setup_start, setup_stop;
    struct timeval timecheck;
 
@@ -580,7 +570,6 @@ int main (int argc, char* argv[]) {
    struct MPHIT* hit = prepareHits(inputhit);
    struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
 
-//#pragma omp target enter data map(alloc: trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
 #pragma omp target enter data map(alloc: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
 
    gettimeofday(&timecheck, NULL);
@@ -588,60 +577,51 @@ int main (int argc, char* argv[]) {
 
    printf("done preparing!\n");
    
-
-   // for (size_t ie=0;ie<nevts;++ie) {
-   //   for (size_t it=0;it<ntrks;++it) {
-   //     printf("ie=%lu it=%lu\n",ie,it);
-   //     printf("hx=%f\n",x(&hit,ie,it));
-   //     printf("hy=%f\n",y(&hit,ie,it));
-   //     printf("hz=%f\n",z(&hit,ie,it));
-   //     printf("tx=%f\n",x(&trk,ie,it));
-   //     printf("ty=%f\n",y(&trk,ie,it));
-   //     printf("tz=%f\n",z(&trk,ie,it));
-   //   }
-   // }
   
 
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
 
+   auto wall_start = std::chrono::high_resolution_clock::now();
 
-//#pragma omp target update to(trk[0:nevts*nb], hit[0:nevts*nb])
-#pragma omp target update to(trk[0:nevts*nb], hit[0:nevts*nb*nlayer])
-
-{
-  auto wall_start = std::chrono::high_resolution_clock::now();
-  for(itr=0; itr<NITER; itr++) {
-     printf("iter %i/%i\n",itr,(int)NITER);
-//  #pragma omp target teams distribute collapse(2) map(to: trk[0:nevts*nb], hit[0:nevts*nb]) map(from: outtrk[0:nevts*nb])
-#pragma omp target teams distribute collapse(2) map(to: trk[0:nevts*nb], hit[0:nevts*nb*nlayer]) map(from: outtrk[0:nevts*nb])
+   for(itr=0; itr<NITER; itr++) {
+	#pragma omp target update to(trk[0:nevts*nb], hit[0:nevts*nb*nlayer])
+	{
+	#pragma omp target teams distribute collapse(2) map(to: trk[0:nevts*nb], hit[0:nevts*nb*nlayer]) map(from: outtrk[0:nevts*nb])
      for (size_t ie=0;ie<nevts;++ie) { // loop over events
        for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
          //
-         const struct MPTRK* btracks = bTkC(trk, ie, ib);
+         const struct MPTRK* btracks = bTk(trk, ie, ib);
          struct MPTRK* obtracks = bTk(outtrk, ie, ib);
          for(size_t layer=0; layer<nlayer; ++layer) {
-            const struct MPHIT* bhits = bHit(hit, ie, ib);
-	          struct MP6x6F errorPro, temp;
+            const struct MPHIT* bhits = bHit(hit, ie, ib, layer);
+   	        struct MP6x6F errorProp, temp;
+			//[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device function (KalmanUpdate) to here.
+			//When using the PGI compiler, all gang-private variable declarations should 
+			//be lexically included in the enclosing compute contruct.
+  			MP3x3 inverse_temp;
+  			MP3x6 kGain;
+  			MP6x6SF newErr;
          //
             propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-            &errorPro, &temp); // vectorized function
-            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+  	        &errorProp, &temp); // vectorized function
+            //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr);
          }
        }
      }
+   }  
+   #pragma omp target update from(outtrk[0:nevts*nb])
    } //end of itr loop
-  auto wall_stop = std::chrono::high_resolution_clock::now();
- }
 
-#pragma omp target update from(outtrk[0:nevts*nb])
+   auto wall_stop = std::chrono::high_resolution_clock::now();
 
-    auto wall_diff = wall_stop - wall_start;
-    auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
-    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
-    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
-    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, 64);
+   auto wall_diff = wall_stop - wall_start;
+   auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+   printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
+   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
+   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, -1);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;
@@ -671,12 +651,12 @@ int main (int argc, char* argv[]) {
    avgpt = avgpt/float(nevts*ntrks);
    avgphi = avgphi/float(nevts*ntrks);
    avgtheta = avgtheta/float(nevts*ntrks);
-   avgx = avgx/((float)nevts*ntrks);
-   avgy = avgy/((float)nevts*ntrks);
-   avgz = avgz/((float)nevts*ntrks);
-   avgdx = avgdx/((float)nevts*ntrks);
-   avgdy = avgdy/((float)nevts*ntrks);
-   avgdz = avgdz/((float)nevts*ntrks);
+   avgx = avgx/float(nevts*ntrks);
+   avgy = avgy/float(nevts*ntrks);
+   avgz = avgz/float(nevts*ntrks);
+   avgdx = avgdx/float(nevts*ntrks);
+   avgdy = avgdy/float(nevts*ntrks);
+   avgdz = avgdz/float(nevts*ntrks);
 
    float stdx = 0, stdy = 0, stdz = 0;
    float stddx = 0, stddy = 0, stddz = 0;
@@ -697,12 +677,12 @@ int main (int argc, char* argv[]) {
      }
    }
 
-   stdx = sqrtf(stdx/((float)nevts*ntrks));
-   stdy = sqrtf(stdy/((float)nevts*ntrks));
-   stdz = sqrtf(stdz/((float)nevts*ntrks));
-   stddx = sqrtf(stddx/((float)nevts*ntrks));
-   stddy = sqrtf(stddy/((float)nevts*ntrks));
-   stddz = sqrtf(stddz/((float)nevts*ntrks));
+   stdx = sqrtf(stdx/float(nevts*ntrks));
+   stdy = sqrtf(stdy/float(nevts*ntrks));
+   stdz = sqrtf(stdz/float(nevts*ntrks));
+   stddx = sqrtf(stddx/float(nevts*ntrks));
+   stddy = sqrtf(stddy/float(nevts*ntrks));
+   stddz = sqrtf(stddz/float(nevts*ntrks));
 
    printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
    printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
@@ -717,7 +697,7 @@ int main (int argc, char* argv[]) {
    free(trk);
    free(hit);
    free(outtrk);
-#pragma omp target exit data map(delete: trk[0:nevts*nb], hit[0:nevts*nb], outtrk[0:nevts*nb])
+#pragma omp target exit data map(delete: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
 
    return 0;
 }
