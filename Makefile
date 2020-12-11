@@ -9,7 +9,7 @@
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
 #                   ibm                                  #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
-#               omp4                                     #
+#               omp4, pstl                               #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -63,7 +63,7 @@ ifeq ($(MODE),omp)
 CSRCS = propagate-toz-test_OMP.cpp
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1 += -O3 -I. -fopenmp 
+CFLAGS1 += -O3 -I. -fopenmp
 CLIBS1 += -lm -lgomp
 endif
 ifeq ($(COMPILER),pgi)
@@ -85,6 +85,36 @@ CFLAGS1 += -I. -Wall -v -O3 -qarch=pwr9 -qsmp=noauto:omp -qnooffload #host power
 endif
 endif
 
+################
+#  PSTL Setting #
+################
+ifeq ($(MODE),pstl)
+CSRCS = propagate-toz-test_pstl.cpp
+ifeq ($(COMPILER),gcc)
+CXX=g++
+CFLAGS1 += -O3 -I. -fopenmp -std=c++17
+CLIBS1 += -lm -lgomp -L/opt/intel/tbb-gnu9.3/lib -ltbb
+endif
+ifeq ($(COMPILER),pgi)
+CXX=pgc++
+CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
+endif
+ifeq ($(COMPILER),icc)
+CXX=icc
+CFLAGS1 += -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
+endif
+ifeq ($(COMPILER),llvm)
+CXX=clang
+CFLAGS1 += -Wall -O3 -I. -fopenmp -fopenmp-targets=x86_64 -lm
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -lm
+endif
+ifeq ($(COMPILER),ibm)
+CXX=xlc
+CFLAGS1 += -I. -Wall -v -O3 -qarch=pwr9 -qsmp=noauto:omp -qnooffload #host power9
+endif
+endif
+
+
 #################
 #  OMP4 Setting #
 #################
@@ -93,7 +123,7 @@ CSRCS = propagate-toz-test_OpenMP4.cpp
 ifeq ($(COMPILER),gcc)
 CXX=gcc
 CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
-CLIBS1 += -lm -lgomp 
+CLIBS1 += -lm -lgomp
 endif
 ifeq ($(COMPILER),llvm)
 CXX=clang
@@ -108,7 +138,7 @@ ifeq ($(COMPILER),openarc)
 CXX=g++
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4.cpp
 # On Linux with CUDA GPU
-CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
+CFLAGS1 += -O3 -I. -I${openarc}/openarcrt
 CLIBS1 += -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper
 # On macOS
 #CFLAGS1 = -O3 -I. -I${openarc}/openarcrt -arch x86_64
@@ -130,7 +160,7 @@ ifeq ($(COMPILER),openarc)
 CXX=g++
 CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
 # On Linux with CUDA GPU
-CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
+CFLAGS1 += -O3 -I. -I${openarc}/openarcrt
 CLIBS1 += -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper
 # On macOS
 #CFLAGS1 = -O3 -I. -I${openarc}/openarcrt -arch x86_64
@@ -143,7 +173,7 @@ endif
 ################
 ifeq ($(MODE),tbb)
 CSRCS = propagate-toz-test_tbb.cpp
-TBB_PREIX := /opt/intel
+TBB_PREFIX := /opt/intel/tbb-gnu9.3
 CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
 ifeq ($(COMPILER),gcc)
 CXX=g++
@@ -170,7 +200,7 @@ CSRCS = propagate-toz-test_CUDA.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread
-CLIBS1 += -L${CUDALIBDIR} -lcudart 
+CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
 
@@ -180,7 +210,7 @@ CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
-CLIBS1 += -L${CUDALIBDIR} -lcudart 
+CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
 
@@ -189,11 +219,11 @@ endif
 ##################
 ifeq ($(MODE),eigen)
 CSRCS = propagate-toz-test_Eigen.cpp
-CLIBS1 += -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub -L${CUDALIBDIR} -lcudart 
-#CLIBS1 += -Ieigen -I/mnt/data1/dsr/cub -L${CUDALIBDIR} -lcudart 
+CLIBS1 += -I/opt/eigen-3.3.7/include/eigen3 -I/mnt/data1/dsr/cub -L${CUDALIBDIR} -lcudart
+#CLIBS1 += -Ieigen -I/mnt/data1/dsr/cub -L${CUDALIBDIR} -lcudart
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1 += -fopenmp -O3 -fopenmp-simd -lm -lgomp -march=native 
+CFLAGS1 += -fopenmp -O3 -fopenmp-simd -lm -lgomp -march=native
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
@@ -217,7 +247,7 @@ endif
 ifeq ($(MODE),alpaka)
 CSRCS = propagate-toz-test_alpaka.cpp
 #CSRCS = alpaka_test.cpp
-CLIBS1 = -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include 
+CLIBS1 = -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include
 ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
@@ -233,7 +263,7 @@ endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_alpaka.cu
-CFLAGS1+= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda 
+CFLAGS1+= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda
 CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 #CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 CLIBS1 += -L${CUDALIBDIR} -lcudart -g
@@ -260,7 +290,7 @@ clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
 
 cleanall:
-	rm -f $(TARGET)/* 
+	rm -f $(TARGET)/*
 
 purge: clean
-	rm -rf bin cetus_output openarcConf.txt 
+	rm -rf bin cetus_output openarcConf.txt
