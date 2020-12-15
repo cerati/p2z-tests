@@ -18,7 +18,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define ntrks 9600
 #endif
 
-#define nb    ntrks/bsize //75 ?
+#define nb    ntrks/bsize
 #ifndef nevts
 #define nevts 100
 #endif
@@ -56,27 +56,26 @@ struct AHIT {
   std::array<float,6> cov;
 };
 
-template <typename T, int N>
+template <typename T, int N, int base>
 struct MPNX {
-   std::array<T,N*bsize> data;
+   std::array<T,N*base> data;
 };
 
-using MP1I    = MPNX<int,   1 >;
-using MP22I   = MPNX<int,   22>;
-using MP3F    = MPNX<float, 3 >;
-using MP6F    = MPNX<float, 6 >;
-using MP3x3   = MPNX<float, 9 >;
-using MP3x6   = MPNX<float, 18>;
-using MP3x3SF = MPNX<float, 6 >;
-using MP6x6SF = MPNX<float, 21>;
-using MP6x6F  = MPNX<float, 36>;
-
+using MP1I    = MPNX<int,   1 , bsize>;
+using MP22I   = MPNX<int,   22, bsize>;
+using MP3F    = MPNX<float, 3 , bsize>;
+using MP6F    = MPNX<float, 6 , bsize>;
+using MP3x3   = MPNX<float, 9 , bsize>;
+using MP3x6   = MPNX<float, 18, bsize>;
+using MP3x3SF = MPNX<float, 6 , bsize>;
+using MP6x6SF = MPNX<float, 21, bsize>;
+using MP6x6F  = MPNX<float, 36, bsize>;
 
 struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
   MP1I    q;
-  //  struct MP22I   hitidx;
+  //  MP22I   hitidx;
 };
 
 struct MPHIT {
@@ -96,27 +95,27 @@ float randn(float mu, float sigma) {
     U2 = -1 + ((float) rand () / RAND_MAX) * 2;
     W = pow (U1, 2) + pow (U2, 2);
   }
-  while (W >= 1 || W == 0);
+  while (W >= 1 || W == 0); 
   mult = sqrt ((-2 * log (W)) / W);
   X1 = U1 * mult;
-  X2 = U2 * mult;
-  call = !call;
+  X2 = U2 * mult; 
+  call = !call; 
   return (mu + sigma * (float) X1);
 }
 
-MPTRK* bTk(MPTRK* tracks, size_t ev, size_t ib) {
+struct MPTRK* bTk(struct MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-const MPTRK* bTkC(const MPTRK* tracks, size_t ev, size_t ib) {
+const struct MPTRK* bTkC(const struct MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-inline float q(const MP1I* bq, size_t it){
+float q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 //
-inline float par(const MP6F* bpars, size_t it, size_t ipar){
+float par(const MP6F* bpars, size_t it, size_t ipar){
   return (*bpars).data[it + ipar*bsize];
 }
 float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
@@ -126,28 +125,28 @@ float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
 float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
 float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
 //
-float par(const MPTRK* btracks, size_t it, size_t ipar){
+float par(const struct MPTRK* btracks, size_t it, size_t ipar){
   return par(&(*btracks).par,it,ipar);
 }
-float x    (const MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
-float y    (const MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
-float z    (const MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
-float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
-float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
-float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
+float x    (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
+float y    (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
+float z    (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
+float ipt  (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
+float phi  (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
+float theta(const struct MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
 //
-float par(const MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
+float par(const struct MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const MPTRK* btracks = bTkC(tracks, ev, ib);
+  const struct MPTRK* btracks = bTkC(tracks, ev, ib);
   size_t it = tk % bsize;
   return par(btracks, it, ipar);
 }
-float x    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
-float y    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
-float z    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
-float ipt  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
-float phi  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
-float theta(const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
+float x    (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
+float y    (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
+float z    (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
+float ipt  (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
+float phi  (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
+float theta(const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
 //
 void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
   (*bpars).data[it + ipar*bsize] = val;
@@ -159,20 +158,20 @@ void setipt  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 3, val); }
 void setphi  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 4, val); }
 void settheta(MP6F* bpars, size_t it, float val){ setpar(bpars, it, 5, val); }
 //
-void setpar(MPTRK* btracks, size_t it, size_t ipar, float val){
+void setpar(struct MPTRK* btracks, size_t it, size_t ipar, float val){
   setpar(&(*btracks).par,it,ipar,val);
 }
-void setx    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 0, val); }
-void sety    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 1, val); }
-void setz    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 2, val); }
-void setipt  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 3, val); }
-void setphi  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 4, val); }
-void settheta(MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val); }
+void setx    (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 0, val); }
+void sety    (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 1, val); }
+void setz    (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 2, val); }
+void setipt  (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 3, val); }
+void setphi  (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 4, val); }
+void settheta(struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val); }
 
-const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
+const struct MPHIT* bHit(const struct MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
-const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,size_t lay) {
+const struct MPHIT* bHit(const struct MPHIT* hits, size_t ev, size_t ib,size_t lay) {
   return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
 }
 //
@@ -183,25 +182,25 @@ float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
 float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
 float z(const MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
 //
-float pos(const MPHIT* hits, size_t it, size_t ipar){
+float pos(const struct MPHIT* hits, size_t it, size_t ipar){
   return pos(&(*hits).pos,it,ipar);
 }
-float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
-float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
-float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
+float x(const struct MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
+float y(const struct MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
+float z(const struct MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
 //
-float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
+float pos(const struct MPHIT* hits, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const MPHIT* bhits = bHit(hits, ev, ib);
+  const struct MPHIT* bhits = bHit(hits, ev, ib);
   size_t it = tk % bsize;
   return pos(bhits,it,ipar);
 }
-float x(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
-float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
-float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
+float x(const struct MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
+float y(const struct MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
+float z(const struct MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
-MPTRK* prepareTracks(ATRK inputtrk) {
-  MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
+struct MPTRK* prepareTracks(struct ATRK inputtrk) {
+  struct MPTRK* result = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK)); //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -222,8 +221,8 @@ MPTRK* prepareTracks(ATRK inputtrk) {
   return result;
 }
 
-MPHIT* prepareHits(AHIT inputhit) {
-  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
+struct MPHIT* prepareHits(struct AHIT inputhit) {
+  struct MPHIT* result = (struct MPHIT*) malloc(nlayer*nevts*nb*sizeof(struct MPHIT));  //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
     for (size_t ie=0;ie<nevts;++ie) {
@@ -244,14 +243,14 @@ MPHIT* prepareHits(AHIT inputhit) {
   return result;
 }
 
-#define N bsize
-template <int block_size>
-void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
-  const auto a = A->data; //ASSUME_ALIGNED(a, 64);
-  const auto b = B->data; //ASSUME_ALIGNED(b, 64);
-  auto c = C->data;       //ASSUME_ALIGNED(c, 64);
+#define N bsize 
+template <size_t block_size = 1>
+void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, const size_t offset = 0) {
+  const auto &a = A->data; //ASSUME_ALIGNED(a, 64);
+  const auto &b = B->data; //ASSUME_ALIGNED(b, 64);
+  auto &c = C->data;       //ASSUME_ALIGNED(c, 64);
 
-  for (int n = 0; n < N; n += block_size)//
+  for (int n = offset; n < N; n += block_size)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
@@ -292,13 +291,13 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   }
 }
 
-template <int block_size>
-void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
-  const auto a = A->data; //ASSUME_ALIGNED(a, 64);
-  const auto b = B->data; //ASSUME_ALIGNED(b, 64);
-  auto c = C->data;       //ASSUME_ALIGNED(c, 64);
+template <size_t block_size = 1>
+void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, const size_t offset = 0) {
+  const auto &a = A->data; //ASSUME_ALIGNED(a, 64);
+  const auto &b = B->data; //ASSUME_ALIGNED(b, 64);
+  auto &c = C->data;       //ASSUME_ALIGNED(c, 64);
 
-  for (int n = 0; n < N; n += block_size)
+  for (int n = offset; n < N; n += block_size)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
@@ -324,14 +323,13 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   }
 }
 
+template <size_t block_size = 1>
+void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C, const size_t offset = 0) {
+  const auto &a = (*A).data; //ASSUME_ALIGNED(a, 64);
+  const auto &b = (*B).data; //ASSUME_ALIGNED(b, 64);
+  auto &c = (*C).data;       //ASSUME_ALIGNED(c, 64);
 
-template <int block_size>
-void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
-  const auto a = A->data; //ASSUME_ALIGNED(a, 64);
-  const auto b = B->data; //ASSUME_ALIGNED(b, 64);
-  auto c = C->data;       //ASSUME_ALIGNED(c, 64);
-
-  for (int n = 0; n < N; n += block_size)
+  for (int n = offset; n < N; n += block_size)
   {
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
@@ -351,13 +349,12 @@ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
   }
 }
 
-template <int block_size>
-void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
-  const auto a = A->data; //ASSUME_ALIGNED(a, 64);
-  const auto b = B->data; //ASSUME_ALIGNED(b, 64);
-  auto c = C->data;       //ASSUME_ALIGNED(c, 64);
-
-  for (int n = 0; n < N; n += block_size)
+template <size_t block_size = 1>
+void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C, const size_t offset = 0) {
+  const auto &a = (*A).data; //ASSUME_ALIGNED(a, 64);
+  const auto &b = (*B).data; //ASSUME_ALIGNED(b, 64);
+  auto &c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+  for (int n = offset; n < N; n += block_size)
   {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
@@ -380,15 +377,16 @@ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
   }
 }
 
-template <int block_size>
-void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP3x3* inverse_temp, MP3x6* kGain, MP6x6SF* newErr){
+template <size_t block_size = 1>
+void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP3x3* inverse_temp, MP3x6* kGain, MP6x6SF* newErr, const size_t offset = 0){
   //MP3x3 inverse_temp;
   //MP3x6 kGain;
   //MP6x6SF newErr;
-  KalmanGainInv<block_size>(trkErr,hitErr,inverse_temp);
-  KalmanGain<block_size>(trkErr,inverse_temp,kGain);
+  KalmanGainInv<block_size>(trkErr,hitErr,inverse_temp, offset);
+  KalmanGain<block_size>(trkErr,inverse_temp,kGain, offset);
 
-  for (int it = 0; it < bsize; it += block_size){//128
+
+  for (size_t it=offset;it<bsize; it += block_size) {
     const float xin = x(inPar,it);
     const float yin = y(inPar,it);
     const float zin = z(inPar,it);
@@ -398,7 +396,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     const float xout = x(msP,it);
     const float yout = y(msP,it);
     const float zout = z(msP,it);
-
+  
     float xnew = xin + (kGain->data[0*bsize+it]*(xout-xin)) +(kGain->data[1*bsize+it]*(yout-yin));
     float ynew = yin + (kGain->data[3*bsize+it]*(xout-xin)) +(kGain->data[4*bsize+it]*(yout-yin));
     float znew = zin + (kGain->data[6*bsize+it]*(xout-xin)) +(kGain->data[7*bsize+it]*(yout-yin));
@@ -412,25 +410,25 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     newErr->data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[12*bsize+it]);
     newErr->data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[14*bsize+it]);
-
+  
     newErr->data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[7*bsize+it]);
     newErr->data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[11*bsize+it]);
     newErr->data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[12*bsize+it]);
     newErr->data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[14*bsize+it]);
-
+  
     newErr->data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[11*bsize+it]);
     newErr->data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[12*bsize+it]);
     newErr->data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[14*bsize+it]);
-
+  
     newErr->data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[12*bsize+it]);
     newErr->data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[14*bsize+it]);
-
+  
     newErr->data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[14*bsize+it]);
-
+  
     newErr->data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain->data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[17*bsize+it]*trkErr->data[14*bsize+it]);
 
     setx(inPar,it,xnew );
@@ -444,14 +442,13 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
 }
 
 const float kfact = 100/3.8;
-
-template <int block_size>
+template <size_t block_size = 1>
 void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar,
-			MP6x6F* errorProp, MP6x6F* temp) {
+			MP6x6F* errorProp, MP6x6F* temp, const size_t offset = 0) {
   //
-  for (int it = 0; it < bsize; it += block_size){//128
+  for (size_t it=offset;it<bsize; it += block_size) {	
     const float zout = z(msP,it);
     const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z(inPar,it);
@@ -474,10 +471,10 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
     setipt(outPar,it, ipt(inPar,it));
     setphi(outPar,it, phi(inPar,it)+alpha );
     settheta(outPar,it, theta(inPar,it) );
-
+    
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
-
+    
     for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
     errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
     errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
@@ -503,8 +500,8 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 //    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
   //
-  MultHelixPropEndcap<block_size>(errorProp, inErr, temp);
-  MultHelixPropTranspEndcap<block_size>(errorProp, temp, outErr);
+  MultHelixPropEndcap<block_size>(errorProp, inErr, temp, offset);
+  MultHelixPropTranspEndcap<block_size>(errorProp, temp, outErr, offset);
 }
 
 int main (int argc, char* argv[]) {
@@ -528,63 +525,63 @@ int main (int argc, char* argv[]) {
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
    printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
-
+   
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
-
+   
    long setup_start, setup_stop;
    struct timeval timecheck;
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-   MPTRK* trk = prepareTracks(inputtrk);
-   MPHIT* hit = prepareHits(inputhit);
-   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+   struct MPTRK* trk = prepareTracks(inputtrk);
+   struct MPHIT* hit = prepareHits(inputhit);
+   struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
-
-
-
-   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(MPTRK));
-   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(MPTRK));
-   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
+   
+   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
+   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
+   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
 
    auto wall_start = std::chrono::high_resolution_clock::now();
-   constexpr int block_size = 32;
-   for(itr=0; itr<NITER; itr++) {
-	   const size_t outer_range = nevts*nb*block_size;
-     const size_t nbblock = nb*block_size;
 
+   constexpr size_t blk_sz = 32;
+
+   for(itr=0; itr<NITER; itr++) {
+     const size_t outer_loop_size = nevts*nb*blk_sz;
+     const size_t nbxblk_sz       = nb*blk_sz; 
+     for (size_t ii = 0; ii < outer_loop_size; ii++){
+       const size_t ie = ii / nbxblk_sz;
+       const size_t ibt= ii - ie*nbxblk_sz;
+       const size_t ib = ibt / blk_sz;  
+       const size_t inner_loop_offset = ibt - ib*blk_sz;
      //for (size_t ie=0;ie<nevts;++ie) { // loop over events
        //for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-     for(size_t ii = 0; ii < outer_range; ii++) {
          //
-         const size_t ie = ii / nbblock;
-         const size_t ib = ii / block_size;
-
-         const MPTRK* btracks = bTk(trk, ie, ib);
-         MPTRK* obtracks = bTk(outtrk, ie, ib);
-         for(size_t layer=0; layer<nlayer; ++layer) {
-            const MPHIT* bhits = bHit(hit, ie, ib, layer);
-   	        MP6x6F errorProp, temp;
-			//[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device function (KalmanUpdate) to here.
-			//When using the PGI compiler, all gang-private variable declarations should
-			//be lexically included in the enclosing compute contruct.
-  			MP3x3 inverse_temp;
-  			MP3x6 kGain;
-  			MP6x6SF newErr;
+       const struct MPTRK* btracks = bTk(trk, ie, ib);
+       struct MPTRK* obtracks = bTk(outtrk, ie, ib);
+       for(size_t layer=0; layer<nlayer; ++layer) {
+         const struct MPHIT* bhits = bHit(hit, ie, ib, layer);
+         MP6x6F errorProp, temp;
+         //[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device function (KalmanUpdate) to here.
+         //When using the PGI compiler, all gang-private variable declarations should 
+         //be lexically included in the enclosing compute contruct.
+         MP3x3 inverse_temp;
+         MP3x6 kGain;
+         MP6x6SF newErr;
          //
-            propagateToZ<block_size>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-  	        &errorProp, &temp); // vectorized function
+         propagateToZ<blk_sz>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+  	        &errorProp, &temp, inner_loop_offset); // vectorized function
             //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
-            KalmanUpdate<block_size>(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr);
-         }
-      }
+         KalmanUpdate<blk_sz>(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr, inner_loop_offset);
+       }
        //}
-     //}
+     //} 
+     }//end of outer loop 
    } //end of itr loop
 
    auto wall_stop = std::chrono::high_resolution_clock::now();
@@ -669,7 +666,6 @@ int main (int argc, char* argv[]) {
    free(trk);
    free(hit);
    free(outtrk);
-#pragma omp target exit data map(delete: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
 
    return 0;
 }
