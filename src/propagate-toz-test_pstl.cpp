@@ -11,6 +11,12 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <iomanip>
 #include <sys/time.h>
 
+#include <algorithm>
+#include <vector>
+#include <memory>
+#include <numeric>
+#include <execution>
+
 #ifndef bsize
 #define bsize 128
 #endif
@@ -30,6 +36,19 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef nlayer
 #define nlayer 20
 #endif
+
+#ifdef __NVCOMPILER_CUDA__
+
+#include <thrust/iterator/counting_iterator.h>
+using namespace thrust;
+
+#else //X86
+
+#include <tbb/tbb.h>
+using namespace tbb;
+
+#endif
+
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -549,39 +568,36 @@ int main (int argc, char* argv[]) {
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
-   constexpr size_t blk_sz = 32;
+   constexpr size_t blk_sz = 1;
+   auto policy = std::execution::par_unseq;
 
    for(itr=0; itr<NITER; itr++) {
-     const size_t outer_loop_size = nevts*nb*blk_sz;
-     const size_t nbxblk_sz       = nb*blk_sz; 
-     for (size_t ii = 0; ii < outer_loop_size; ii++){
-       const size_t ie = ii / nbxblk_sz;
-       const size_t ibt= ii - ie*nbxblk_sz;
-       const size_t ib = ibt / blk_sz;  
-       const size_t inner_loop_offset = ibt - ib*blk_sz;
-     //for (size_t ie=0;ie<nevts;++ie) { // loop over events
-       //for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-         //
-       const struct MPTRK* btracks = bTk(trk, ie, ib);
-       struct MPTRK* obtracks = bTk(outtrk, ie, ib);
-       for(size_t layer=0; layer<nlayer; ++layer) {
-         const struct MPHIT* bhits = bHit(hit, ie, ib, layer);
-         MP6x6F errorProp, temp;
-         //[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device function (KalmanUpdate) to here.
-         //When using the PGI compiler, all gang-private variable declarations should 
-         //be lexically included in the enclosing compute contruct.
-         MP3x3 inverse_temp;
-         MP3x6 kGain;
-         MP6x6SF newErr;
-         //
-         propagateToZ<blk_sz>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-  	        &errorProp, &temp, inner_loop_offset); // vectorized function
-            //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
-         KalmanUpdate<blk_sz>(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr, inner_loop_offset);
-       }
-       //}
-     //} 
-     }//end of outer loop 
+     const int outer_loop_range = nevts*nb*blk_sz;
+     const int nbxblk_sz        = nb*blk_sz;
+     std::for_each(policy,
+                   counting_iterator(0),
+                   counting_iterator(outer_loop_range),
+                   [&] (auto ii) {
+                   const size_t ie = ii / nbxblk_sz;
+                   const size_t ibt= ii - ie*nbxblk_sz;
+                   const size_t ib = ibt / blk_sz;  
+                   const size_t inner_loop_offset = ibt - ib*blk_sz;
+                   const MPTRK* btracks = bTk(trk, ie, ib);
+                   MPTRK* obtracks = bTk(outtrk, ie, ib);
+                  
+                   for(size_t layer=0; layer<nlayer; ++layer) {
+                     const MPHIT* bhits = bHit(hit, ie, ib, layer);
+                     MP6x6F errorProp, temp;
+                     MP3x3 inverse_temp;
+                     MP3x6 kGain;
+                     MP6x6SF newErr;
+                     //
+                     propagateToZ<blk_sz>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+                     &errorProp, &temp, inner_loop_offset); // vectorized function
+                     KalmanUpdate<blk_sz>(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr, inner_loop_offset);
+                   }
+
+                   });
    } //end of itr loop
 
    auto wall_stop = std::chrono::high_resolution_clock::now();
