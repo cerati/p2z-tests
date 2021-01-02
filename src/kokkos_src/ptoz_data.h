@@ -25,6 +25,11 @@
 #define ntrks 9600 // number of tracks per event?
 #define smear 0.1      // for making more tracks for the one
 
+
+#ifndef nlayers
+#define nlayers 20     // number of layers
+#endif
+
 #ifndef NITER
 #define NITER 5
 #endif
@@ -71,7 +76,7 @@ struct MPHIT {
 
 
 // typedef Kokkos::CudaUVMSpace MemSpace_CB;
-typedef Kokkos::OpenMP MemSpace_CB;
+// typedef Kokkos::OpenMP MemSpace_CB;
 typedef Kokkos::View<int**,     Layout,  MemSpace_CB> ViewIntCB;    // collated batch of ints
 typedef Kokkos::View<float***,  Layout,  MemSpace_CB> ViewVectorCB; // collated batch of vecs
 typedef Kokkos::View<float****, Layout,  MemSpace_CB> ViewMatrixCB; // collated batch of mats

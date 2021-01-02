@@ -50,28 +50,41 @@
 // typedef Kokkos::View<double*>   ViewVectorType;
 // typedef Kokkos::View<double**>  ViewMatrixType;
 
+#ifdef USE_GPU
+// GPU options
+typedef Kokkos::Cuda          ExecSpace;
+typedef Kokkos::CudaUVMSpace  MemSpace_CB;
+typedef Kokkos::LayoutLeft    Layout;
+#else
+// CPU options
+typedef Kokkos::OpenMP   ExecSpace;
+typedef Kokkos::OpenMP   MemSpace_CB;
+typedef Kokkos::LayoutRight  Layout; // faster for CPUs
+#endif
+
+// All options
 // typedef Kokkos::Serial   ExecSpace;
 // typedef Kokkos::Threads  ExecSpace;
-typedef Kokkos::OpenMP   ExecSpace;
+// typedef Kokkos::OpenMP   ExecSpace;
 // typedef Kokkos::Cuda     ExecSpace;
 
 // typedef Kokkos::HostSpace     MemSpace;
-typedef Kokkos::OpenMP        MemSpace;
+// typedef Kokkos::OpenMP        MemSpace;
 // typedef Kokkos::CudaSpace     MemSpace;
 // typedef Kokkos::CudaUVMSpace  MemSpace;
 
 // typedef Kokkos::LayoutLeft   Layout;
-typedef Kokkos::LayoutRight  Layout; // faster for CPUs
+// typedef Kokkos::LayoutRight  Layout; // faster for CPUs
 
 typedef Kokkos::RangePolicy<ExecSpace>  range_policy;
 
 // Allocate y, x vectors and Matrix A on device.
-typedef Kokkos::View<double*, Layout, MemSpace>   ViewVectorType;
-typedef Kokkos::View<double**, Layout, MemSpace>  ViewMatrixType;
+// typedef Kokkos::View<double*, Layout, MemSpace>   ViewVectorType;
+// typedef Kokkos::View<double**, Layout, MemSpace>  ViewMatrixType;
 
-typedef Kokkos::View<double**, Kokkos::LayoutLeft,  MemSpace> ViewMatrixTypeL;
-typedef Kokkos::View<double**, Kokkos::LayoutRight, MemSpace> ViewMatrixTypeR;
+// typedef Kokkos::View<double**, Kokkos::LayoutLeft,  MemSpace> ViewMatrixTypeL;
+// typedef Kokkos::View<double**, Kokkos::LayoutRight, MemSpace> ViewMatrixTypeR;
 
-typedef Kokkos::View<double****, Kokkos::LayoutLeft,  MemSpace> ViewMatrixBatch;
+// typedef Kokkos::View<double****, Kokkos::LayoutLeft,  MemSpace> ViewMatrixBatch;
 
 #endif
