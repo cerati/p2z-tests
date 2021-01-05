@@ -44,14 +44,17 @@ $ make COMPILER=nvcc MODE=alpaka//not yet functional
 # Therefore, do not use propagate-*_async.c files as input.
 
 ## Kokkos
+The kokkos version exists in its own directory, `src/kokkos_src`, which contains
+the p2z code along with a Makefile and README to help the user make use of the
+Kokkos library. Here we have basic instructions.
 
 #### Getting started
 1. clone https://github.com/kokkos/kokkos to ${HOME}/kokkos
-2. make will build everything
-3. ./test.cuda to run
+2. in the `src/kokkos_src` direcory edit the Makefile setting to match your needs
+3. run `make` to build
+4. The executable can be found under `bin` with the others
 
 #### Makefile setting
 - KOKKOS_DEVICES = OpenMP or OpenMP,Cuda
 - KOKKOS_ARCH = [GPU arch],[CPU arch] i.e. "BDW,Volta70"
-- 
 
