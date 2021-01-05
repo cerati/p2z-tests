@@ -12,6 +12,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <chrono>
 #include <iomanip>
 
+#define FIXED_RSEED
 
 #ifndef nevts
 #define nevts 100
@@ -475,6 +476,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
   }
   //Is this the correct way to assign the errors? Should I use memcpy instead?  
   //sets new track errors
+  //[DEBUG on Dec.8, 2020] below does not have any effect since trkErr is a local variable.
   trkErr = &newErr;
 }
 
@@ -543,8 +545,10 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg,
 
 int main (int argc, char* argv[]) {
   printf("bsize: %d, nb:%d, omp threads:%d\n",(int)bsize,(int)nb,(int)nthreads);
+#ifdef _OPENMP
   omp_set_dynamic(0);
   omp_set_num_threads(nthreads);
+#endif
    int itr;
    ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
@@ -572,6 +576,10 @@ int main (int argc, char* argv[]) {
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+#ifdef FIXED_RSEED
+   //[DEBUG by Seyong on Dec. 28, 2020] add an explicit srand(1) call to generate fixed inputs for better debugging.
+   srand(1);
+#endif
    MPTRK* trk = prepareTracks(inputtrk);
    MPHIT* hit = prepareHits(inputhit);
    MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
