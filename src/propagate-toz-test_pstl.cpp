@@ -610,23 +610,15 @@ int main (int argc, char* argv[]) {
                    const size_t ibt= ii - ie*nbxblk_sz;
                    const size_t ib = ibt / blk_sz;  
                    const size_t inner_loop_offset = ibt - ib*blk_sz;
-                   const MPTRK* btracks = bTk(trk, ie, ib);//why do you need it here??
+                   const MPTRK* btracks = bTk(trk, ie, ib);
                    MPTRK* obtracks = bTk(outtrk, ie, ib);
                   
                    for(size_t layer=0; layer<nlayer; ++layer) {
                      const MPHIT* bhits = bHit(hit, ie, ib, layer);
-#ifndef __NVCOMPILER_CUDA__
                      MP6x6F errorProp, temp;
                      MP3x3 inverse_temp;
                      MP3x6 kGain;
                      MP6x6SF newErr;
-#else
-                     MP6x6F errorProp;
-		     MP6x6F temp;
-                     MP3x3 inverse_temp;
-                     MP3x6 kGain;
-                     MP6x6SF newErr;
-#endif
                      //
                      propagateToZ<blk_sz>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
                      &errorProp, &temp, inner_loop_offset); // vectorized function
