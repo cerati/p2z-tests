@@ -50,19 +50,11 @@ using namespace tbb;
 #endif
 
 
-size_t PosInMtrx(size_t i, size_t j, size_t D) {
+inline size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
 }
 
-size_t SymOffsets33(size_t i) {
-  const std::array<size_t, 9> offs = {0, 1, 3, 1, 2, 4, 3, 4, 5};
-  return offs[i];
-}
-
-size_t SymOffsets66(size_t i) {
-  const std::array<size_t, 36> offs = {0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
-  return offs[i];
-}
+const std::array<size_t, 36> SymOffsets66{0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
 
 struct ATRK {
   std::array<float,6> par;
@@ -75,31 +67,52 @@ struct AHIT {
   std::array<float,6> cov;
 };
 
+//#define VEC
+
+#ifndef __NVCOMPILER_CUDA__
+
 template <typename T, int N, int base>
 struct MPNX {
    std::array<T,N*base> data;
 };
 
-using MP1I    = MPNX<int,   1 , bsize>;
-using MP22I   = MPNX<int,   22, bsize>;
-using MP3F    = MPNX<float, 3 , bsize>;
-using MP6F    = MPNX<float, 6 , bsize>;
-using MP3x3   = MPNX<float, 9 , bsize>;
-using MP3x6   = MPNX<float, 18, bsize>;
-using MP3x3SF = MPNX<float, 6 , bsize>;
-using MP6x6SF = MPNX<float, 21, bsize>;
-using MP6x6F  = MPNX<float, 36, bsize>;
+#else
+
+template <typename T, int N, int base>
+struct MPNX {
+   std::vector<T> data;
+   MPNX() : data(N*base){}
+};
+
+#endif
+
+using MP1I    = MPNX<int,   1 , bsize>;//MPTRK.q
+//using MP22I   = MPNX<int,   22, bsize>;//?
+using MP3F    = MPNX<float, 3 , bsize>;//MPHIT.pos
+using MP6F    = MPNX<float, 6 , bsize>;//MPTRK.par
+using MP3x3   = MPNX<float, 9 , bsize>;//inverse_temp=>
+using MP3x6   = MPNX<float, 18, bsize>;//kGain
+using MP3x3SF = MPNX<float, 6 , bsize>;//MPHIT.cov
+using MP6x6SF = MPNX<float, 21, bsize>;//MPTRK.cov, newErr
+using MP6x6F  = MPNX<float, 36, bsize>;//errorProp, temp
+
 
 struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
   MP1I    q;
+#ifdef __NVCOMPILER_CUDA__
+  MPTRK() : par(), cov(), q() {}
+#endif
   //  MP22I   hitidx;
 };
 
 struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
+#ifdef __NVCOMPILER_CUDA__
+  MPHIT() : pos(), cov(){}
+#endif
 };
 
 float randn(float mu, float sigma) {
@@ -122,52 +135,52 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-struct MPTRK* bTk(struct MPTRK* tracks, size_t ev, size_t ib) {
+MPTRK* bTk(MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-const struct MPTRK* bTkC(const struct MPTRK* tracks, size_t ev, size_t ib) {
+inline const MPTRK* bTkC(const MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-float q(const MP1I* bq, size_t it){
+inline float q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 //
-float par(const MP6F* bpars, size_t it, size_t ipar){
+inline float par(const MP6F* bpars, size_t it, size_t ipar){
   return (*bpars).data[it + ipar*bsize];
 }
-float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
-float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
-float z    (const MP6F* bpars, size_t it){ return par(bpars, it, 2); }
-float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
-float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
-float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
+inline float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
+inline float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
+inline float z    (const MP6F* bpars, size_t it){ return par(bpars, it, 2); }
+inline float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
+inline float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
+inline float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
 //
-float par(const struct MPTRK* btracks, size_t it, size_t ipar){
+inline float par(const MPTRK* btracks, size_t it, size_t ipar){
   return par(&(*btracks).par,it,ipar);
 }
-float x    (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
-float y    (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
-float z    (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
-float ipt  (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
-float phi  (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
-float theta(const struct MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
+inline float x    (const MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
+inline float y    (const MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
+inline float z    (const MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
+inline float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
+inline float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
+inline float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
 //
-float par(const struct MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
+inline float par(const MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const struct MPTRK* btracks = bTkC(tracks, ev, ib);
+  const MPTRK* btracks = bTkC(tracks, ev, ib);
   size_t it = tk % bsize;
   return par(btracks, it, ipar);
 }
-float x    (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
-float y    (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
-float z    (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
-float ipt  (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
-float phi  (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
-float theta(const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
+inline float x    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
+inline float y    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
+inline float z    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
+inline float ipt  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
+inline float phi  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
+inline float theta(const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
 //
-void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
+inline void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
   (*bpars).data[it + ipar*bsize] = val;
 }
 void setx    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 0, val); }
@@ -177,49 +190,53 @@ void setipt  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 3, val); }
 void setphi  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 4, val); }
 void settheta(MP6F* bpars, size_t it, float val){ setpar(bpars, it, 5, val); }
 //
-void setpar(struct MPTRK* btracks, size_t it, size_t ipar, float val){
+void setpar(MPTRK* btracks, size_t it, size_t ipar, float val){
   setpar(&(*btracks).par,it,ipar,val);
 }
-void setx    (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 0, val); }
-void sety    (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 1, val); }
-void setz    (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 2, val); }
-void setipt  (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 3, val); }
-void setphi  (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 4, val); }
-void settheta(struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val); }
+void setx    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 0, val); }
+void sety    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 1, val); }
+void setz    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 2, val); }
+void setipt  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 3, val); }
+void setphi  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 4, val); }
+void settheta(MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val); }
 
-const struct MPHIT* bHit(const struct MPHIT* hits, size_t ev, size_t ib) {
+inline const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
-const struct MPHIT* bHit(const struct MPHIT* hits, size_t ev, size_t ib,size_t lay) {
-  return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
+inline const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib, size_t lay) {
+  return &(hits[lay + (ib + nb*ev)*nlayer]);
 }
 //
-float pos(const MP3F* hpos, size_t it, size_t ipar){
+inline float pos(const MP3F* hpos, size_t it, size_t ipar){
   return (*hpos).data[it + ipar*bsize];
 }
-float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
-float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
-float z(const MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
+inline float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
+inline float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
+inline float z(const MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
 //
-float pos(const struct MPHIT* hits, size_t it, size_t ipar){
+inline float pos(const MPHIT* hits, size_t it, size_t ipar){
   return pos(&(*hits).pos,it,ipar);
 }
-float x(const struct MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
-float y(const struct MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
-float z(const struct MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
+inline float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
+inline float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
+inline float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
 //
-float pos(const struct MPHIT* hits, size_t ev, size_t tk, size_t ipar){
+float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const struct MPHIT* bhits = bHit(hits, ev, ib);
+  const MPHIT* bhits = bHit(hits, ev, ib);
   size_t it = tk % bsize;
   return pos(bhits,it,ipar);
 }
-float x(const struct MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
-float y(const struct MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
-float z(const struct MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
+inline float x(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
+inline float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
+inline float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
-struct MPTRK* prepareTracks(struct ATRK inputtrk) {
-  struct MPTRK* result = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK)); //fixme, align?
+MPTRK* prepareTracks(struct ATRK inputtrk) {
+#ifndef __NVCOMPILER_CUDA__
+  MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
+#else
+  MPTRK* result = new MPTRK[nevts*nb];
+#endif
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -240,8 +257,12 @@ struct MPTRK* prepareTracks(struct ATRK inputtrk) {
   return result;
 }
 
-struct MPHIT* prepareHits(struct AHIT inputhit) {
-  struct MPHIT* result = (struct MPHIT*) malloc(nlayer*nevts*nb*sizeof(struct MPHIT));  //fixme, align?
+MPHIT* prepareHits(struct AHIT inputhit) {
+#ifndef __NVCOMPILER_CUDA__
+  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
+#else
+  MPHIT* result = new MPHIT[nlayer*nevts*nb];
+#endif
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
     for (size_t ie=0;ie<nevts;++ie) {
@@ -268,7 +289,7 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, const siz
   const auto &a = A->data; //ASSUME_ALIGNED(a, 64);
   const auto &b = B->data; //ASSUME_ALIGNED(b, 64);
   auto &c = C->data;       //ASSUME_ALIGNED(c, 64);
-
+#pragma simd
   for (int n = offset; n < N; n += block_size)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -315,7 +336,7 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, con
   const auto &a = A->data; //ASSUME_ALIGNED(a, 64);
   const auto &b = B->data; //ASSUME_ALIGNED(b, 64);
   auto &c = C->data;       //ASSUME_ALIGNED(c, 64);
-
+#pragma simd
   for (int n = offset; n < N; n += block_size)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -344,10 +365,10 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, con
 
 template <size_t block_size = 1>
 void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C, const size_t offset = 0) {
-  const auto &a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const auto &b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  auto &c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-
+  const auto &a = A->data; //ASSUME_ALIGNED(a, 64);
+  const auto &b = B->data; //ASSUME_ALIGNED(b, 64);
+  auto &c = C->data;       //ASSUME_ALIGNED(c, 64);
+#pragma simd
   for (int n = offset; n < N; n += block_size)
   {
     double det =
@@ -370,9 +391,10 @@ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C, const size_t of
 
 template <size_t block_size = 1>
 void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C, const size_t offset = 0) {
-  const auto &a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const auto &b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  auto &c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+  const auto &a = A->data; //ASSUME_ALIGNED(a, 64);
+  const auto &b = B->data; //ASSUME_ALIGNED(b, 64);
+  auto &c = C->data;       //ASSUME_ALIGNED(c, 64);
+#pragma simd  
   for (int n = offset; n < N; n += block_size)
   {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
@@ -404,7 +426,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
   KalmanGainInv<block_size>(trkErr,hitErr,inverse_temp, offset);
   KalmanGain<block_size>(trkErr,inverse_temp,kGain, offset);
 
-
+#pragma simd
   for (size_t it=offset;it<bsize; it += block_size) {
     const float xin = x(inPar,it);
     const float yin = y(inPar,it);
@@ -540,9 +562,9 @@ int main (int argc, char* argv[]) {
    };
 
    printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
-   printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
-	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
-	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
+   printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66[PosInMtrx(0,0,6)]],
+	                                       inputtrk.cov[SymOffsets66[PosInMtrx(1,1,6)]],
+	                                       inputtrk.cov[SymOffsets66[PosInMtrx(2,2,6)]]);
    printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
@@ -553,18 +575,24 @@ int main (int argc, char* argv[]) {
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-   struct MPTRK* trk = prepareTracks(inputtrk);
-   struct MPHIT* hit = prepareHits(inputhit);
-   struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
+   
+   MPTRK* trk = prepareTracks(inputtrk);
+   
+   MPHIT* hit = prepareHits(inputhit);
+#ifndef __NVCOMPILER_CUDA__   
+   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+#else
+   MPTRK* outtrk = new MPTRK[nevts*nb];
+#endif
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
    
-   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
-   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
-   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
+   printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(MPTRK));
+   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(MPTRK));
+   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
@@ -582,15 +610,23 @@ int main (int argc, char* argv[]) {
                    const size_t ibt= ii - ie*nbxblk_sz;
                    const size_t ib = ibt / blk_sz;  
                    const size_t inner_loop_offset = ibt - ib*blk_sz;
-                   const MPTRK* btracks = bTk(trk, ie, ib);
+                   const MPTRK* btracks = bTk(trk, ie, ib);//why do you need it here??
                    MPTRK* obtracks = bTk(outtrk, ie, ib);
                   
                    for(size_t layer=0; layer<nlayer; ++layer) {
                      const MPHIT* bhits = bHit(hit, ie, ib, layer);
+#ifndef __NVCOMPILER_CUDA__
                      MP6x6F errorProp, temp;
                      MP3x3 inverse_temp;
                      MP3x6 kGain;
                      MP6x6SF newErr;
+#else
+                     MP6x6F errorProp;
+		     MP6x6F temp;
+                     MP3x3 inverse_temp;
+                     MP3x6 kGain;
+                     MP6x6SF newErr;
+#endif
                      //
                      propagateToZ<blk_sz>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
                      &errorProp, &temp, inner_loop_offset); // vectorized function
@@ -678,10 +714,15 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
-
+#ifndef __NVCOMPILER_CUDA__
    free(trk);
    free(hit);
    free(outtrk);
+#else
+   delete [] trk;
+   delete [] hit;
+   delete [] outtrk;
+#endif
 
    return 0;
 }
