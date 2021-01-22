@@ -107,7 +107,6 @@ struct MPNX {
 #endif
 
 using MP1I    = MPNX<int,   1 , bsize>;//MPTRK.q
-//using MP22I   = MPNX<int,   22, bsize>;//?
 using MP3F    = MPNX<float, 3 , bsize>;//MPHIT.pos
 using MP6F    = MPNX<float, 6 , bsize>;//MPTRK.par
 using MP3x3   = MPNX<float, 9 , bsize>;//inverse_temp=>
@@ -144,14 +143,6 @@ struct MPNXAccessor {
    template <int ipar, typename AccessedFieldTp = MPNTp> 
    typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
    Set(size_t it, float val, size_t id)    { (data_ + stride*id)[it + ipar*basesz] = val; }
-
-   //template <int ipar, typename AccessedFieldTp = MPNTp>
-   //typename std::enable_if<(std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3) or (std::is_same<AccessedFieldTp, MP6F>::value and ipar < 6), T>::type
-   //Get(size_t it)  const { return data_[it + ipar*basesz]; }
-
-   //template <int ipar, typename AccessedFieldTp = MPNTp> 
-   //typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
-   //Set(size_t it, T val)    { data_[it + ipar*basesz] = val; }
 
    // same as above but with a (shifted) raw pointer (and more generic)
    template <int ipar>
@@ -765,7 +756,6 @@ void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, MP6x6SFAccessor &B, cons
 #pragma simd
   for (int n = offset; n < N; n += block_size)
   {
-    //compute inversion
     float temp00 = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     //float temp01 = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     float temp02 = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -803,7 +793,6 @@ void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, MP6x6SFAccessor &B, cons
     float temp34 = b[19*N+n];
     float temp35 = b[20*N+n];
 
-    // transformation
     b[ 0*N+n] = temp00 + temp02*a[ 2*N+n] + temp03*a[ 3*N+n] + temp04*a[ 4*N+n] + temp05*a[ 5*N+n];
     b[ 1*N+n] = temp06 + temp08*a[ 2*N+n] + temp09*a[ 3*N+n] + temp10*a[ 4*N+n] + temp11*a[ 5*N+n];
     b[ 2*N+n] = temp07 + temp08*a[ 8*N+n] + temp09*a[ 9*N+n] + temp10*a[10*N+n] + temp11*a[11*N+n];
