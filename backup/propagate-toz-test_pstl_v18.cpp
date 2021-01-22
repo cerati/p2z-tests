@@ -145,13 +145,13 @@ struct MPNXAccessor {
    typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
    Set(size_t it, float val, size_t id)    { (data_ + stride*id)[it + ipar*basesz] = val; }
 
-   //template <int ipar, typename AccessedFieldTp = MPNTp>
-   //typename std::enable_if<(std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3) or (std::is_same<AccessedFieldTp, MP6F>::value and ipar < 6), T>::type
-   //Get(size_t it)  const { return data_[it + ipar*basesz]; }
+   template <int ipar, typename AccessedFieldTp = MPNTp>
+   typename std::enable_if<(std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3) or (std::is_same<AccessedFieldTp, MP6F>::value and ipar < 6), T>::type
+   Get(size_t it)  const { return data_[it + ipar*basesz]; }
 
-   //template <int ipar, typename AccessedFieldTp = MPNTp> 
-   //typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
-   //Set(size_t it, T val)    { data_[it + ipar*basesz] = val; }
+   template <int ipar, typename AccessedFieldTp = MPNTp> 
+   typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
+   Set(size_t it, T val)    { data_[it + ipar*basesz] = val; }
 
    // same as above but with a (shifted) raw pointer (and more generic)
    template <int ipar>
@@ -385,33 +385,6 @@ std::shared_ptr<MPTRK> prepareTracksN(struct ATRK inputtrk) {
   }
   return std::move(result);
 }
-
-void convertTracks(MPTRK* out,  const MPTRK* inp) {
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  const size_t stride_par = bsize*6;
-  const size_t stride_cov = bsize*21;
-  const size_t stride_q   = bsize*1;
-
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      const int l = ib + nb*ie;
-      for (size_t it=0;it<bsize;++it) {
-    	//par
-    	for (size_t ip=0;ip<6;++ip) {
-    	  out[ib + nb*ie].par.data[it + ip*bsize] = inp->par.data[l*stride_par + ip*bsize + it];
-    	}
-    	//cov
-    	for (size_t ip=0;ip<21;++ip) {
-    	  out[ib + nb*ie].cov.data[it + ip*bsize] = inp->cov.data[l*stride_cov + ip*bsize + it];
-    	}
-    	//q
-    	out[ib + nb*ie].q.data[it] = inp->q.data[l*stride_q + it];//fixme check
-      }
-    }
-  }
-  return;
-}
-
 #endif
 
 MPHIT* prepareHits(struct AHIT inputhit) {
@@ -465,31 +438,6 @@ std::shared_ptr<MPHIT> prepareHitsN(struct AHIT inputhit) {
     }
   }
   return std::move(result);
-}
-
-void convertHits(MPHIT* out, const MPHIT* inp) {
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  const size_t stride_pos = bsize*3;
-  const size_t stride_cov = bsize*6;
-
-  for (size_t lay=0;lay<nlayer;++lay) {
-    for (size_t ie=0;ie<nevts;++ie) {
-      for (size_t ib=0;ib<nb;++ib) {
-        const size_t l = ib + nb*ie;
-        for (size_t it=0;it<bsize;++it) {
-        	//pos
-        	for (size_t ip=0;ip<3;++ip) {
-        	  out[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = inp->pos.data[(lay+nlayer*l)*stride_pos + ip*bsize + it];
-        	}
-        	//cov
-        	for (size_t ip=0;ip<6;++ip) {
-        	  out[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = inp->cov.data[(lay+nlayer*l)*stride_cov + ip*bsize +it];
-        	}
-        }
-      }
-    }
-  }
-  return;
 }
 #endif
 
@@ -754,18 +702,17 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 }
 
 /////////////////////////////////////////
-////////PSTL adjusted versions///////////
+/////////////////////////////////////////
 /////////////////////////////////////////
 /////////////////////////////////////////
 
 template <size_t block_size = 1>
-void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, MP6x6SFAccessor &B, const size_t lid, const size_t offset = 0) {
+void MultHelixPropTranspEndcap_mod(const MP6x6FAccessor &A, MP6x6SFAccessor &B, const size_t lid, const size_t offset = 0) {
   const auto a = A(lid);
-  auto       b = B(lid);
+  auto b = B(lid);
 #pragma simd
   for (int n = offset; n < N; n += block_size)
   {
-    //compute inversion
     float temp00 = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     //float temp01 = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     float temp02 = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -803,7 +750,6 @@ void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, MP6x6SFAccessor &B, cons
     float temp34 = b[19*N+n];
     float temp35 = b[20*N+n];
 
-    // transformation
     b[ 0*N+n] = temp00 + temp02*a[ 2*N+n] + temp03*a[ 3*N+n] + temp04*a[ 4*N+n] + temp05*a[ 5*N+n];
     b[ 1*N+n] = temp06 + temp08*a[ 2*N+n] + temp09*a[ 3*N+n] + temp10*a[ 4*N+n] + temp11*a[ 5*N+n];
     b[ 2*N+n] = temp07 + temp08*a[ 8*N+n] + temp09*a[ 9*N+n] + temp10*a[10*N+n] + temp11*a[11*N+n];
@@ -829,12 +775,12 @@ void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, MP6x6SFAccessor &B, cons
 }
 
 template <size_t block_size = 1>
-void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
-                  MP6FAccessor &inParAcc, 
-		  const MPHITAccessor &bhits, 
-                  const size_t lid, 
-                  const size_t llid, 
-                  const size_t offset = 0) {
+void KalmanUpdate_mod(MP6x6SFAccessor  &trkErrAcc,
+                      MP6FAccessor &inParAcc, 
+		      const MPHITAccessor &bhits, 
+                      const size_t lid, 
+                      const size_t llid, 
+                      const size_t offset = 0) {
 
   const auto trkErr   = trkErrAcc(lid);
   auto inPar          = inParAcc (lid);
@@ -975,13 +921,13 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
 
 
 template <size_t block_size = 1>
-void propagateToZ(const MPTRKAccessor &btracks, 
-		  const MPHITAccessor &bhits,
-                  MPTRKAccessor  &obtracks, 
-		  MP6x6FAccessor &errorPropAcc,  
-                  const size_t lid, 
-                  const size_t llid, 
-                  const size_t offset = 0) {
+void propagateToZ_mod(const MPTRKAccessor &btracks, 
+		      const MPHITAccessor &bhits,
+                      MPTRKAccessor  &obtracks, 
+		      MP6x6FAccessor &errorPropAcc,  
+                      const size_t lid, 
+                      const size_t llid, 
+                      const size_t offset = 0) {
 
   const auto inPar    = btracks.par(lid);
   const auto inChg    = btracks.q  (lid);
@@ -1035,7 +981,7 @@ void propagateToZ(const MPTRKAccessor &btracks,
     errorProp[bsize*PosInMtrx(4,5,6) + it] = MP6FAccessor::Get<iparIpt>(inPar, it)*deltaZ*(icosT*icosTk);
   }
 
-  MultHelixPropTranspEndcap<block_size>(errorPropAcc, obtracks.cov, lid, offset);
+  MultHelixPropTranspEndcap_mod<block_size>(errorPropAcc, obtracks.cov, lid, offset);
 
   return;
 }
@@ -1072,9 +1018,10 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    
-   //MPTRK* trk    = prepareTracks(inputtrk); 
-   MPHIT* hit    = nullptr;//prepareHits(inputhit);
-   MPTRK* outtrk = nullptr;//(MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+   MPTRK* trk = prepareTracks(inputtrk); 
+   MPHIT* hit = prepareHits(inputhit);
+
+   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
 
    auto trkNPtr = prepareTracksN(inputtrk);
    std::unique_ptr<MPTRKAccessor> trkNaccPtr(new MPTRKAccessor(*trkNPtr));
@@ -1122,8 +1069,8 @@ int main (int argc, char* argv[]) {
                    for(size_t layer=0; layer<nlayer; ++layer) {
                      const size_t lii = layer+ii*nlayer;
                      //
-                     propagateToZ<blk_sz>(trkNacc, hitNacc, outtrkNacc, errorPropAcc, ii, lii, inner_loop_offset);
-                     KalmanUpdate<blk_sz>(outtrkNacc.cov, outtrkNacc.par, hitNacc, ii, lii, inner_loop_offset);
+                     propagateToZ_mod<blk_sz>(trkNacc, hitNacc, outtrkNacc, errorPropAcc, ii, lii, inner_loop_offset);
+                     KalmanUpdate_mod<blk_sz>(outtrkNacc.cov, outtrkNacc.par, hitNacc, ii, lii, inner_loop_offset);
                    }
 
                    });
@@ -1136,9 +1083,6 @@ int main (int argc, char* argv[]) {
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, -1);
-#if 0
-   convertTracks(outtrk, outtrkNPtr.get());
-   convertHits(hit, hitNPtr.get());
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;
@@ -1148,8 +1092,8 @@ int main (int argc, char* argv[]) {
        float x_ = x(outtrk,ie,it);
        float y_ = y(outtrk,ie,it);
        float z_ = z(outtrk,ie,it);
-       float pt_    = 1./ipt(outtrk,ie,it);
-       float phi_   = phi(outtrk,ie,it);
+       float pt_ = 1./ipt(outtrk,ie,it);
+       float phi_ = phi(outtrk,ie,it);
        float theta_ = theta(outtrk,ie,it);
        avgpt += pt_;
        avgphi += phi_;
@@ -1211,10 +1155,10 @@ int main (int argc, char* argv[]) {
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
 
-   //free(trk);
+   free(trk);
    free(hit);
    free(outtrk);
-#endif
+
 
    return 0;
 }

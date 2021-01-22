@@ -145,13 +145,13 @@ struct MPNXAccessor {
    typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
    Set(size_t it, float val, size_t id)    { (data_ + stride*id)[it + ipar*basesz] = val; }
 
-   //template <int ipar, typename AccessedFieldTp = MPNTp>
-   //typename std::enable_if<(std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3) or (std::is_same<AccessedFieldTp, MP6F>::value and ipar < 6), T>::type
-   //Get(size_t it)  const { return data_[it + ipar*basesz]; }
+   template <int ipar, typename AccessedFieldTp = MPNTp>
+   typename std::enable_if<(std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3) or (std::is_same<AccessedFieldTp, MP6F>::value and ipar < 6), T>::type
+   Get(size_t it)  const { return data_[it + ipar*basesz]; }
 
-   //template <int ipar, typename AccessedFieldTp = MPNTp> 
-   //typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
-   //Set(size_t it, T val)    { data_[it + ipar*basesz] = val; }
+   template <int ipar, typename AccessedFieldTp = MPNTp> 
+   typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
+   Set(size_t it, T val)    { data_[it + ipar*basesz] = val; }
 
    // same as above but with a (shifted) raw pointer (and more generic)
    template <int ipar>
@@ -385,33 +385,6 @@ std::shared_ptr<MPTRK> prepareTracksN(struct ATRK inputtrk) {
   }
   return std::move(result);
 }
-
-void convertTracks(MPTRK* out,  const MPTRK* inp) {
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  const size_t stride_par = bsize*6;
-  const size_t stride_cov = bsize*21;
-  const size_t stride_q   = bsize*1;
-
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      const int l = ib + nb*ie;
-      for (size_t it=0;it<bsize;++it) {
-    	//par
-    	for (size_t ip=0;ip<6;++ip) {
-    	  out[ib + nb*ie].par.data[it + ip*bsize] = inp->par.data[l*stride_par + ip*bsize + it];
-    	}
-    	//cov
-    	for (size_t ip=0;ip<21;++ip) {
-    	  out[ib + nb*ie].cov.data[it + ip*bsize] = inp->cov.data[l*stride_cov + ip*bsize + it];
-    	}
-    	//q
-    	out[ib + nb*ie].q.data[it] = inp->q.data[l*stride_q + it];//fixme check
-      }
-    }
-  }
-  return;
-}
-
 #endif
 
 MPHIT* prepareHits(struct AHIT inputhit) {
@@ -465,31 +438,6 @@ std::shared_ptr<MPHIT> prepareHitsN(struct AHIT inputhit) {
     }
   }
   return std::move(result);
-}
-
-void convertHits(MPHIT* out, const MPHIT* inp) {
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  const size_t stride_pos = bsize*3;
-  const size_t stride_cov = bsize*6;
-
-  for (size_t lay=0;lay<nlayer;++lay) {
-    for (size_t ie=0;ie<nevts;++ie) {
-      for (size_t ib=0;ib<nb;++ib) {
-        const size_t l = ib + nb*ie;
-        for (size_t it=0;it<bsize;++it) {
-        	//pos
-        	for (size_t ip=0;ip<3;++ip) {
-        	  out[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = inp->pos.data[(lay+nlayer*l)*stride_pos + ip*bsize + it];
-        	}
-        	//cov
-        	for (size_t ip=0;ip<6;++ip) {
-        	  out[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = inp->cov.data[(lay+nlayer*l)*stride_cov + ip*bsize +it];
-        	}
-        }
-      }
-    }
-  }
-  return;
 }
 #endif
 
@@ -631,9 +579,15 @@ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C, const size_t offset 
 template <size_t block_size = 1>
 void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP3x3* inverse_temp, MP3x6* kGain, MP6x6SF* newErr, const size_t offset = 0){
 
-  KalmanGainInv<block_size>(trkErr,hitErr,inverse_temp, offset);
-  KalmanGain<block_size>(trkErr,inverse_temp,kGain, offset);
-
+  //KalmanGainInv<block_size>(trkErr,hitErr,inverse_temp, offset);
+  //KalmanGain<block_size>(trkErr,inverse_temp,kGain, offset);
+//TESTTT
+//auto &a = trkErr->data;
+auto &a = newErr->data;
+auto &b = inverse_temp->data;
+auto &c = kGain->data;
+c[0] = a[0]*b[0]; 
+#if 0
 #pragma simd
   for (size_t it=offset;it<bsize; it += block_size) {
     const float xin = x(inPar,it);
@@ -688,6 +642,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     settheta(inPar,it, thetanew);
   }
   trkErr = newErr;
+#endif
 }
 
 const float kfact = 100/3.8;
@@ -754,93 +709,170 @@ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 }
 
 /////////////////////////////////////////
-////////PSTL adjusted versions///////////
+/////////////////////////////////////////
 /////////////////////////////////////////
 /////////////////////////////////////////
 
 template <size_t block_size = 1>
-void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, MP6x6SFAccessor &B, const size_t lid, const size_t offset = 0) {
-  const auto a = A(lid);
-  auto       b = B(lid);
+void MultHelixPropEndcap_mod(const MP6x6FAccessor &A, const MP6x6SFAccessor &B, MP6x6FAccessor &C, const size_t lid, const size_t offset = 0) {
+  const auto a = A(lid); 
+  const auto b = B(lid); 
+  auto c = C(lid);      
 #pragma simd
   for (int n = offset; n < N; n += block_size)
   {
-    //compute inversion
-    float temp00 = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
-    //float temp01 = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
-    float temp02 = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
-    float temp03 = b[ 6*N+n] + a[ 2*N+n]*b[ 8*N+n] + a[ 3*N+n]*b[ 9*N+n] + a[ 4*N+n]*b[13*N+n] + a[ 5*N+n]*b[18*N+n];
-    float temp04 = b[10*N+n] + a[ 2*N+n]*b[12*N+n] + a[ 3*N+n]*b[13*N+n] + a[ 4*N+n]*b[14*N+n] + a[ 5*N+n]*b[19*N+n];
-    float temp05 = b[15*N+n] + a[ 2*N+n]*b[17*N+n] + a[ 3*N+n]*b[18*N+n] + a[ 4*N+n]*b[19*N+n] + a[ 5*N+n]*b[20*N+n];
-    float temp06 = b[ 1*N+n] + a[ 8*N+n]*b[ 3*N+n] + a[ 9*N+n]*b[ 6*N+n] + a[10*N+n]*b[10*N+n] + a[11*N+n]*b[15*N+n];
-    float temp07 = b[ 2*N+n] + a[ 8*N+n]*b[ 4*N+n] + a[ 9*N+n]*b[ 7*N+n] + a[10*N+n]*b[11*N+n] + a[11*N+n]*b[16*N+n];
-    float temp08 = b[ 4*N+n] + a[ 8*N+n]*b[ 5*N+n] + a[ 9*N+n]*b[ 8*N+n] + a[10*N+n]*b[12*N+n] + a[11*N+n]*b[17*N+n];
-    float temp09 = b[ 7*N+n] + a[ 8*N+n]*b[ 8*N+n] + a[ 9*N+n]*b[ 9*N+n] + a[10*N+n]*b[13*N+n] + a[11*N+n]*b[18*N+n];
-    float temp10 = b[11*N+n] + a[ 8*N+n]*b[12*N+n] + a[ 9*N+n]*b[13*N+n] + a[10*N+n]*b[14*N+n] + a[11*N+n]*b[19*N+n];
-    float temp11 = b[16*N+n] + a[ 8*N+n]*b[17*N+n] + a[ 9*N+n]*b[18*N+n] + a[10*N+n]*b[19*N+n] + a[11*N+n]*b[20*N+n];
-    //float temp12 = 0;
-    //float temp13 = 0;
-    //float temp14 = 0;
-    //float temp15 = 0;
-    //float temp16 = 0;
-    //float temp17 = 0;
-    float temp18 = b[ 6*N+n];
-    float temp19 = b[ 7*N+n];
-    float temp20 = b[ 8*N+n];
-    float temp21 = b[ 9*N+n];
-    float temp22 = b[13*N+n];
-    float temp23 = b[18*N+n];
-    float temp24 = a[26*N+n]*b[ 3*N+n] + a[27*N+n]*b[ 6*N+n] + b[10*N+n] + a[29*N+n]*b[15*N+n];
-    float temp25 = a[26*N+n]*b[ 4*N+n] + a[27*N+n]*b[ 7*N+n] + b[11*N+n] + a[29*N+n]*b[16*N+n];
-    float temp26 = a[26*N+n]*b[ 5*N+n] + a[27*N+n]*b[ 8*N+n] + b[12*N+n] + a[29*N+n]*b[17*N+n];
-    float temp27 = a[26*N+n]*b[ 8*N+n] + a[27*N+n]*b[ 9*N+n] + b[13*N+n] + a[29*N+n]*b[18*N+n];
-    float temp28 = a[26*N+n]*b[12*N+n] + a[27*N+n]*b[13*N+n] + b[14*N+n] + a[29*N+n]*b[19*N+n];
-    float temp29 = a[26*N+n]*b[17*N+n] + a[27*N+n]*b[18*N+n] + b[19*N+n] + a[29*N+n]*b[20*N+n];
-    float temp30 = b[15*N+n];
-    float temp31 = b[16*N+n];
-    float temp32 = b[17*N+n];
-    float temp33 = b[18*N+n];
-    float temp34 = b[19*N+n];
-    float temp35 = b[20*N+n];
-
-    // transformation
-    b[ 0*N+n] = temp00 + temp02*a[ 2*N+n] + temp03*a[ 3*N+n] + temp04*a[ 4*N+n] + temp05*a[ 5*N+n];
-    b[ 1*N+n] = temp06 + temp08*a[ 2*N+n] + temp09*a[ 3*N+n] + temp10*a[ 4*N+n] + temp11*a[ 5*N+n];
-    b[ 2*N+n] = temp07 + temp08*a[ 8*N+n] + temp09*a[ 9*N+n] + temp10*a[10*N+n] + temp11*a[11*N+n];
-    b[ 3*N+n] = 0;
-    b[ 4*N+n] = 0;
-    b[ 5*N+n] = 0;
-    b[ 6*N+n] = temp18 + temp20*a[ 2*N+n] + temp21*a[ 3*N+n] + temp22*a[ 4*N+n] + temp23*a[ 5*N+n];
-    b[ 7*N+n] = temp19 + temp20*a[ 8*N+n] + temp21*a[ 9*N+n] + temp22*a[10*N+n] + temp23*a[11*N+n];
-    b[ 8*N+n] = 0;
-    b[ 9*N+n] = temp21;
-    b[10*N+n] = temp24 + temp26*a[ 2*N+n] + temp27*a[ 3*N+n] + temp28*a[ 4*N+n] + temp29*a[ 5*N+n];
-    b[11*N+n] = b[25*N+n] + temp26*a[ 8*N+n] + temp27*a[ 9*N+n] + temp28*a[10*N+n] + temp29*a[11*N+n];
-    b[12*N+n] = 0;
-    b[13*N+n] = temp27;
-    b[14*N+n] = temp26*a[26*N+n] + temp27*a[27*N+n] + temp28 + temp29*a[29*N+n];
-    b[15*N+n] = temp30 + temp32*a[ 2*N+n] + temp33*a[ 3*N+n] + temp34*a[ 4*N+n] + temp35*a[ 5*N+n];
-    b[16*N+n] = temp31 + temp32*a[ 8*N+n] + temp33*a[ 9*N+n] + temp34*a[10*N+n] + temp35*a[11*N+n];
-    b[17*N+n] = 0;
-    b[18*N+n] = temp33;
-    b[19*N+n] = temp32*a[26*N+n] + temp33*a[27*N+n] + temp34 + temp35*a[29*N+n];
-    b[20*N+n] = temp35;
+    c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
+    c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
+    c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
+    c[ 3*N+n] = b[ 6*N+n] + a[ 2*N+n]*b[ 8*N+n] + a[ 3*N+n]*b[ 9*N+n] + a[ 4*N+n]*b[13*N+n] + a[ 5*N+n]*b[18*N+n];
+    c[ 4*N+n] = b[10*N+n] + a[ 2*N+n]*b[12*N+n] + a[ 3*N+n]*b[13*N+n] + a[ 4*N+n]*b[14*N+n] + a[ 5*N+n]*b[19*N+n];
+    c[ 5*N+n] = b[15*N+n] + a[ 2*N+n]*b[17*N+n] + a[ 3*N+n]*b[18*N+n] + a[ 4*N+n]*b[19*N+n] + a[ 5*N+n]*b[20*N+n];
+    c[ 6*N+n] = b[ 1*N+n] + a[ 8*N+n]*b[ 3*N+n] + a[ 9*N+n]*b[ 6*N+n] + a[10*N+n]*b[10*N+n] + a[11*N+n]*b[15*N+n];
+    c[ 7*N+n] = b[ 2*N+n] + a[ 8*N+n]*b[ 4*N+n] + a[ 9*N+n]*b[ 7*N+n] + a[10*N+n]*b[11*N+n] + a[11*N+n]*b[16*N+n];
+    c[ 8*N+n] = b[ 4*N+n] + a[ 8*N+n]*b[ 5*N+n] + a[ 9*N+n]*b[ 8*N+n] + a[10*N+n]*b[12*N+n] + a[11*N+n]*b[17*N+n];
+    c[ 9*N+n] = b[ 7*N+n] + a[ 8*N+n]*b[ 8*N+n] + a[ 9*N+n]*b[ 9*N+n] + a[10*N+n]*b[13*N+n] + a[11*N+n]*b[18*N+n];
+    c[10*N+n] = b[11*N+n] + a[ 8*N+n]*b[12*N+n] + a[ 9*N+n]*b[13*N+n] + a[10*N+n]*b[14*N+n] + a[11*N+n]*b[19*N+n];
+    c[11*N+n] = b[16*N+n] + a[ 8*N+n]*b[17*N+n] + a[ 9*N+n]*b[18*N+n] + a[10*N+n]*b[19*N+n] + a[11*N+n]*b[20*N+n];
+    c[12*N+n] = 0;
+    c[13*N+n] = 0;
+    c[14*N+n] = 0;
+    c[15*N+n] = 0;
+    c[16*N+n] = 0;
+    c[17*N+n] = 0;
+    c[18*N+n] = b[ 6*N+n];
+    c[19*N+n] = b[ 7*N+n];
+    c[20*N+n] = b[ 8*N+n];
+    c[21*N+n] = b[ 9*N+n];
+    c[22*N+n] = b[13*N+n];
+    c[23*N+n] = b[18*N+n];
+    c[24*N+n] = a[26*N+n]*b[ 3*N+n] + a[27*N+n]*b[ 6*N+n] + b[10*N+n] + a[29*N+n]*b[15*N+n];
+    c[25*N+n] = a[26*N+n]*b[ 4*N+n] + a[27*N+n]*b[ 7*N+n] + b[11*N+n] + a[29*N+n]*b[16*N+n];
+    c[26*N+n] = a[26*N+n]*b[ 5*N+n] + a[27*N+n]*b[ 8*N+n] + b[12*N+n] + a[29*N+n]*b[17*N+n];
+    c[27*N+n] = a[26*N+n]*b[ 8*N+n] + a[27*N+n]*b[ 9*N+n] + b[13*N+n] + a[29*N+n]*b[18*N+n];
+    c[28*N+n] = a[26*N+n]*b[12*N+n] + a[27*N+n]*b[13*N+n] + b[14*N+n] + a[29*N+n]*b[19*N+n];
+    c[29*N+n] = a[26*N+n]*b[17*N+n] + a[27*N+n]*b[18*N+n] + b[19*N+n] + a[29*N+n]*b[20*N+n];
+    c[30*N+n] = b[15*N+n];
+    c[31*N+n] = b[16*N+n];
+    c[32*N+n] = b[17*N+n];
+    c[33*N+n] = b[18*N+n];
+    c[34*N+n] = b[19*N+n];
+    c[35*N+n] = b[20*N+n];
   }
 }
 
 template <size_t block_size = 1>
-void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
-                  MP6FAccessor &inParAcc, 
-		  const MPHITAccessor &bhits, 
-                  const size_t lid, 
-                  const size_t llid, 
-                  const size_t offset = 0) {
+void MultHelixPropTranspEndcap_mod(const MP6x6FAccessor &A, const MP6x6FAccessor &B, MP6x6SFAccessor &C, const size_t lid, const size_t offset = 0) {
+  const auto a = A(lid);
+  const auto b = B(lid);
+  auto c = C(lid);     
+#pragma simd
+  for (int n = offset; n < N; n += block_size)
+  {
+    c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
+    c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
+    c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
+    c[ 3*N+n] = b[12*N+n] + b[14*N+n]*a[ 2*N+n] + b[15*N+n]*a[ 3*N+n] + b[16*N+n]*a[ 4*N+n] + b[17*N+n]*a[ 5*N+n];
+    c[ 4*N+n] = b[13*N+n] + b[14*N+n]*a[ 8*N+n] + b[15*N+n]*a[ 9*N+n] + b[16*N+n]*a[10*N+n] + b[17*N+n]*a[11*N+n];
+    c[ 5*N+n] = 0;
+    c[ 6*N+n] = b[18*N+n] + b[20*N+n]*a[ 2*N+n] + b[21*N+n]*a[ 3*N+n] + b[22*N+n]*a[ 4*N+n] + b[23*N+n]*a[ 5*N+n];
+    c[ 7*N+n] = b[19*N+n] + b[20*N+n]*a[ 8*N+n] + b[21*N+n]*a[ 9*N+n] + b[22*N+n]*a[10*N+n] + b[23*N+n]*a[11*N+n];
+    c[ 8*N+n] = 0;
+    c[ 9*N+n] = b[21*N+n];
+    c[10*N+n] = b[24*N+n] + b[26*N+n]*a[ 2*N+n] + b[27*N+n]*a[ 3*N+n] + b[28*N+n]*a[ 4*N+n] + b[29*N+n]*a[ 5*N+n];
+    c[11*N+n] = b[25*N+n] + b[26*N+n]*a[ 8*N+n] + b[27*N+n]*a[ 9*N+n] + b[28*N+n]*a[10*N+n] + b[29*N+n]*a[11*N+n];
+    c[12*N+n] = 0;
+    c[13*N+n] = b[27*N+n];
+    c[14*N+n] = b[26*N+n]*a[26*N+n] + b[27*N+n]*a[27*N+n] + b[28*N+n] + b[29*N+n]*a[29*N+n];
+    c[15*N+n] = b[30*N+n] + b[32*N+n]*a[ 2*N+n] + b[33*N+n]*a[ 3*N+n] + b[34*N+n]*a[ 4*N+n] + b[35*N+n]*a[ 5*N+n];
+    c[16*N+n] = b[31*N+n] + b[32*N+n]*a[ 8*N+n] + b[33*N+n]*a[ 9*N+n] + b[34*N+n]*a[10*N+n] + b[35*N+n]*a[11*N+n];
+    c[17*N+n] = 0;
+    c[18*N+n] = b[33*N+n];
+    c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
+    c[20*N+n] = b[35*N+n];
+  }
+}
+
+template <size_t block_size = 1>
+void KalmanGainInv_mod(const MP6x6SFAccessor &A, const MP3x3SFAccessor &B, MP3x3Accessor &C, const size_t lid, const size_t llid, const size_t offset = 0) {
+  const auto a = A(lid) ; 
+  const auto b = B(llid);
+  auto       c = C(lid);       
+#pragma simd
+  for (int n = offset; n < N; n += block_size)
+  {
+    double det =
+      ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
+      ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
+      ((a[2*N+n]+b[2*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n]))));
+    double invdet = 1.0/det;
+
+    c[ 0*N+n] =  invdet*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
+    c[ 1*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
+    c[ 2*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
+    c[ 3*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])));
+    c[ 4*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[2*N+n]+b[2*N+n])));
+    c[ 5*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
+    c[ 6*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n])));
+    c[ 7*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
+    c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
+  }
+}
+
+template <size_t block_size = 1>
+void KalmanGain_mod(const MP6x6SFAccessor &A, const MP3x3Accessor &B, MP3x6Accessor &C, const size_t lid, const size_t offset = 0) {
+  const auto a = A(lid); 
+  const auto b = B(lid); 
+  auto c = C(lid);       
+#pragma simd  
+  for (int n = offset; n < N; n += block_size)
+  {
+    c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
+    c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
+    c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
+    c[ 3*N+n] = a[1*N+n]*b[0*N+n] + a[6*N+n]*b[3*N+n] + a[7*N+n]*b[6*N+n];
+    c[ 4*N+n] = a[1*N+n]*b[1*N+n] + a[6*N+n]*b[4*N+n] + a[7*N+n]*b[7*N+n];
+    c[ 5*N+n] = a[1*N+n]*b[2*N+n] + a[6*N+n]*b[5*N+n] + a[7*N+n]*b[8*N+n];
+    c[ 6*N+n] = a[2*N+n]*b[0*N+n] + a[7*N+n]*b[3*N+n] + a[11*N+n]*b[6*N+n];
+    c[ 7*N+n] = a[2*N+n]*b[1*N+n] + a[7*N+n]*b[4*N+n] + a[11*N+n]*b[7*N+n];
+    c[ 8*N+n] = a[2*N+n]*b[2*N+n] + a[7*N+n]*b[5*N+n] + a[11*N+n]*b[8*N+n];
+    c[ 9*N+n] = a[3*N+n]*b[0*N+n] + a[8*N+n]*b[3*N+n] + a[12*N+n]*b[6*N+n];
+    c[ 10*N+n] = a[3*N+n]*b[1*N+n] + a[8*N+n]*b[4*N+n] + a[12*N+n]*b[7*N+n];
+    c[ 11*N+n] = a[3*N+n]*b[2*N+n] + a[8*N+n]*b[5*N+n] + a[12*N+n]*b[8*N+n];
+    c[ 12*N+n] = a[4*N+n]*b[0*N+n] + a[9*N+n]*b[3*N+n] + a[13*N+n]*b[6*N+n];
+    c[ 13*N+n] = a[4*N+n]*b[1*N+n] + a[9*N+n]*b[4*N+n] + a[13*N+n]*b[7*N+n];
+    c[ 14*N+n] = a[4*N+n]*b[2*N+n] + a[9*N+n]*b[5*N+n] + a[13*N+n]*b[8*N+n];
+    c[ 15*N+n] = a[5*N+n]*b[0*N+n] + a[10*N+n]*b[3*N+n] + a[14*N+n]*b[6*N+n];
+    c[ 16*N+n] = a[5*N+n]*b[1*N+n] + a[10*N+n]*b[4*N+n] + a[14*N+n]*b[7*N+n];
+    c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
+  }
+}
+
+
+template <size_t block_size = 1>
+void KalmanUpdate_mod(MP6x6SFAccessor  &trkErrAcc,
+                      MP6FAccessor &inParAcc, 
+		      const MPHITAccessor &bhits,
+		      MP3x3Accessor &inverse_tempAcc, 
+                      MP3x6Accessor &kGainAcc,
+		      MP6x6SFAccessor &newErrAcc, 
+                      const size_t lid, 
+                      const size_t llid, 
+                      const size_t offset = 0) {
+  //KalmanGainInv_mod<block_size>(trkErr,hitErr,inverse_temp, offset);
+  //KalmanGain_mod<block_size>(trkErr,inverse_temp,kGain, offset);
+
+  KalmanGainInv_mod<block_size>(trkErrAcc,bhits.cov,inverse_tempAcc, lid, llid, offset);
+  KalmanGain_mod<block_size>(trkErrAcc,inverse_tempAcc,kGainAcc, lid, offset);
 
   const auto trkErr   = trkErrAcc(lid);
   auto inPar          = inParAcc (lid);
 
   const auto hitErr   = bhits.cov(llid);
   const auto msP      = bhits.pos(llid);
+
+  auto inverse_temp   = inverse_tempAcc(lid); 
+  auto kGain          = kGainAcc(lid); 
+  auto newErr         = newErrAcc(lid);
  
 #pragma simd
   for (size_t it=offset; it<bsize; it += block_size) {
@@ -853,113 +885,40 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
     const float xout = MP3FAccessor::Get<iparX>(msP, it);
     const float yout = MP3FAccessor::Get<iparY>(msP, it);
     const float zout = MP3FAccessor::Get<iparZ>(msP, it);
-
-
-    double det =
-      ((trkErr[0*bsize+it]+hitErr[0*bsize+it])*(((trkErr[ 6*bsize+it]+hitErr[ 3*bsize+it]) *(trkErr[11*bsize+it]+hitErr[5*bsize+it])) - ((trkErr[7*bsize+it]+hitErr[4*bsize+it]) *(trkErr[7*bsize+it]+hitErr[4*bsize+it])))) -
-      ((trkErr[1*bsize+it]+hitErr[1*bsize+it])*(((trkErr[ 1*bsize+it]+hitErr[ 1*bsize+it]) *(trkErr[11*bsize+it]+hitErr[5*bsize+it])) - ((trkErr[7*bsize+it]+hitErr[4*bsize+it]) *(trkErr[2*bsize+it]+hitErr[2*bsize+it])))) +
-      ((trkErr[2*bsize+it]+hitErr[2*bsize+it])*(((trkErr[ 1*bsize+it]+hitErr[ 1*bsize+it]) *(trkErr[7*bsize+it]+hitErr[4*bsize+it])) - ((trkErr[2*bsize+it]+hitErr[2*bsize+it]) *(trkErr[6*bsize+it]+hitErr[3*bsize+it]))));
-    double invdet = 1.0/det;
-
-    float temp00 =  invdet*(((trkErr[ 6*bsize+it]+hitErr[ 3*bsize+it]) *(trkErr[11*bsize+it]+hitErr[5*bsize+it])) - ((trkErr[7*bsize+it]+hitErr[4*bsize+it]) *(trkErr[7*bsize+it]+hitErr[4*bsize+it])));
-    float temp01 =  -1*invdet*(((trkErr[ 1*bsize+it]+hitErr[ 1*bsize+it]) *(trkErr[11*bsize+it]+hitErr[5*bsize+it])) - ((trkErr[2*bsize+it]+hitErr[2*bsize+it]) *(trkErr[7*bsize+it]+hitErr[4*bsize+it])));
-    float temp02 =  invdet*(((trkErr[ 1*bsize+it]+hitErr[ 1*bsize+it]) *(trkErr[7*bsize+it]+hitErr[4*bsize+it])) - ((trkErr[2*bsize+it]+hitErr[2*bsize+it]) *(trkErr[7*bsize+it]+hitErr[4*bsize+it])));
-    float temp03 =  -1*invdet*(((trkErr[ 1*bsize+it]+hitErr[ 1*bsize+it]) *(trkErr[11*bsize+it]+hitErr[5*bsize+it])) - ((trkErr[7*bsize+it]+hitErr[4*bsize+it]) *(trkErr[2*bsize+it]+hitErr[2*bsize+it])));
-    float temp04 =  invdet*(((trkErr[ 0*bsize+it]+hitErr[ 0*bsize+it]) *(trkErr[11*bsize+it]+hitErr[5*bsize+it])) - ((trkErr[2*bsize+it]+hitErr[2*bsize+it]) *(trkErr[2*bsize+it]+hitErr[2*bsize+it])));
-    float temp05 =  -1*invdet*(((trkErr[ 0*bsize+it]+hitErr[ 0*bsize+it]) *(trkErr[7*bsize+it]+hitErr[4*bsize+it])) - ((trkErr[2*bsize+it]+hitErr[2*bsize+it]) *(trkErr[1*bsize+it]+hitErr[1*bsize+it])));
-    float temp06 =  invdet*(((trkErr[ 1*bsize+it]+hitErr[ 1*bsize+it]) *(trkErr[7*bsize+it]+hitErr[4*bsize+it])) - ((trkErr[2*bsize+it]+hitErr[2*bsize+it]) *(trkErr[6*bsize+it]+hitErr[3*bsize+it])));
-    float temp07 =  -1*invdet*(((trkErr[ 0*bsize+it]+hitErr[ 0*bsize+it]) *(trkErr[7*bsize+it]+hitErr[4*bsize+it])) - ((trkErr[2*bsize+it]+hitErr[2*bsize+it]) *(trkErr[1*bsize+it]+hitErr[1*bsize+it])));
-    float temp08 =  invdet*(((trkErr[ 0*bsize+it]+hitErr[ 0*bsize+it]) *(trkErr[6*bsize+it]+hitErr[3*bsize+it])) - ((trkErr[1*bsize+it]+hitErr[1*bsize+it]) *(trkErr[1*bsize+it]+hitErr[1*bsize+it])));
-    //
-    float temp09 = 0.0f;
-
-    float kGain00 = trkErr[0*bsize+it]*temp00 + trkErr[1*bsize+it]*temp03 + trkErr[2*bsize+it]*temp06;
-    float kGain01 = trkErr[0*bsize+it]*temp01 + trkErr[1*bsize+it]*temp04 + trkErr[2*bsize+it]*temp07;
-    float kGain02 = trkErr[0*bsize+it]*temp02 + trkErr[1*bsize+it]*temp05 + trkErr[2*bsize+it]*temp08;
-    float kGain03 = trkErr[1*bsize+it]*temp00 + trkErr[6*bsize+it]*temp03 + trkErr[7*bsize+it]*temp06;
-    float kGain04 = trkErr[1*bsize+it]*temp01 + trkErr[6*bsize+it]*temp04 + trkErr[7*bsize+it]*temp07;
-    float kGain05 = trkErr[1*bsize+it]*temp02 + trkErr[6*bsize+it]*temp05 + trkErr[7*bsize+it]*temp08;
-    float kGain06 = trkErr[2*bsize+it]*temp00 + trkErr[7*bsize+it]*temp03 + trkErr[11*bsize+it]*temp06;
-    float kGain07 = trkErr[2*bsize+it]*temp01 + trkErr[7*bsize+it]*temp04 + trkErr[11*bsize+it]*temp07;
-    float kGain08 = trkErr[2*bsize+it]*temp02 + trkErr[7*bsize+it]*temp05 + trkErr[11*bsize+it]*temp08;
-    float kGain09 = trkErr[3*bsize+it]*temp00 + trkErr[8*bsize+it]*temp03 + trkErr[12*bsize+it]*temp06;
-    float kGain10 = trkErr[3*bsize+it]*temp01 + trkErr[8*bsize+it]*temp04 + trkErr[12*bsize+it]*temp07;
-    float kGain11 = trkErr[3*bsize+it]*temp02 + trkErr[8*bsize+it]*temp05 + trkErr[12*bsize+it]*temp08;
-    float kGain12 = trkErr[4*bsize+it]*temp00 + trkErr[9*bsize+it]*temp03 + trkErr[13*bsize+it]*temp06;
-    float kGain13 = trkErr[4*bsize+it]*temp01 + trkErr[9*bsize+it]*temp04 + trkErr[13*bsize+it]*temp07;
-    float kGain14 = trkErr[4*bsize+it]*temp02 + trkErr[9*bsize+it]*temp05 + trkErr[13*bsize+it]*temp08;
-    float kGain15 = trkErr[5*bsize+it]*temp00 + trkErr[10*bsize+it]*temp03 + trkErr[14*bsize+it]*temp06;
-    float kGain16 = trkErr[5*bsize+it]*temp01 + trkErr[10*bsize+it]*temp04 + trkErr[14*bsize+it]*temp07;
-    float kGain17 = trkErr[5*bsize+it]*temp02 + trkErr[10*bsize+it]*temp05 + trkErr[14*bsize+it]*temp08;
   
-    float xnew = xin + (kGain00*(xout-xin)) +(kGain01*(yout-yin));
-    float ynew = yin + (kGain03*(xout-xin)) +(kGain04*(yout-yin));
-    float znew = zin + (kGain06*(xout-xin)) +(kGain07*(yout-yin));
-    float ptnew = ptin + (kGain09*(xout-xin)) +(kGain10*(yout-yin));
-    float phinew = phiin + (kGain12*(xout-xin)) +(kGain13*(yout-yin));
-    float thetanew = thetain + (kGain15*(xout-xin)) +(kGain16*(yout-yin));
+    float xnew = xin + (kGain[0*bsize+it]*(xout-xin)) +(kGain[1*bsize+it]*(yout-yin));
+    float ynew = yin + (kGain[3*bsize+it]*(xout-xin)) +(kGain[4*bsize+it]*(yout-yin));
+    float znew = zin + (kGain[6*bsize+it]*(xout-xin)) +(kGain[7*bsize+it]*(yout-yin));
+    float ptnew = ptin + (kGain[9*bsize+it]*(xout-xin)) +(kGain[10*bsize+it]*(yout-yin));
+    float phinew = phiin + (kGain[12*bsize+it]*(xout-xin)) +(kGain[13*bsize+it]*(yout-yin));
+    float thetanew = thetain + (kGain[15*bsize+it]*(xout-xin)) +(kGain[16*bsize+it]*(yout-yin));
 
-    temp00 = trkErr[0*bsize+it] - (kGain00*trkErr[0*bsize+it]+kGain01*trkErr[1*bsize+it]+kGain02*trkErr[2*bsize+it]);
-
-    trkErr[0*bsize+it] = temp00;
-
-    temp00 = trkErr[1*bsize+it] - (kGain00*trkErr[1*bsize+it]+kGain01*trkErr[6*bsize+it]+kGain02*trkErr[7*bsize+it]);
-    temp01 = trkErr[2*bsize+it] - (kGain00*trkErr[2*bsize+it]+kGain01*trkErr[7*bsize+it]+kGain02*trkErr[11*bsize+it]);
-    temp02 = trkErr[3*bsize+it] - (kGain00*trkErr[3*bsize+it]+kGain01*trkErr[8*bsize+it]+kGain02*trkErr[12*bsize+it]);
-    temp03 = trkErr[4*bsize+it] - (kGain00*trkErr[4*bsize+it]+kGain01*trkErr[9*bsize+it]+kGain02*trkErr[13*bsize+it]);
-    temp04 = trkErr[5*bsize+it] - (kGain00*trkErr[5*bsize+it]+kGain01*trkErr[10*bsize+it]+kGain02*trkErr[14*bsize+it]);
+    newErr[0*bsize+it] = trkErr[0*bsize+it] - (kGain[0*bsize+it]*trkErr[0*bsize+it]+kGain[1*bsize+it]*trkErr[1*bsize+it]+kGain[2*bsize+it]*trkErr[2*bsize+it]);//0,0,1,2
+    newErr[1*bsize+it] = trkErr[1*bsize+it] - (kGain[0*bsize+it]*trkErr[1*bsize+it]+kGain[1*bsize+it]*trkErr[6*bsize+it]+kGain[2*bsize+it]*trkErr[7*bsize+it]);//1,1,6,7
+    newErr[2*bsize+it] = trkErr[2*bsize+it] - (kGain[0*bsize+it]*trkErr[2*bsize+it]+kGain[1*bsize+it]*trkErr[7*bsize+it]+kGain[2*bsize+it]*trkErr[11*bsize+it]);//2,2,7,11
+    newErr[3*bsize+it] = trkErr[3*bsize+it] - (kGain[0*bsize+it]*trkErr[3*bsize+it]+kGain[1*bsize+it]*trkErr[8*bsize+it]+kGain[2*bsize+it]*trkErr[12*bsize+it]);
+    newErr[4*bsize+it] = trkErr[4*bsize+it] - (kGain[0*bsize+it]*trkErr[4*bsize+it]+kGain[1*bsize+it]*trkErr[9*bsize+it]+kGain[2*bsize+it]*trkErr[13*bsize+it]);
+    newErr[5*bsize+it] = trkErr[5*bsize+it] - (kGain[0*bsize+it]*trkErr[5*bsize+it]+kGain[1*bsize+it]*trkErr[10*bsize+it]+kGain[2*bsize+it]*trkErr[14*bsize+it]);
   
-    temp05 = trkErr[6*bsize+it] - (kGain03*trkErr[1*bsize+it]+kGain04*trkErr[6*bsize+it]+kGain05*trkErr[7*bsize+it]);
-
-    trkErr[1*bsize+it] = temp00;
-    trkErr[6*bsize+it] = temp05;
-
-    temp00 = trkErr[7*bsize+it] - (kGain03*trkErr[2*bsize+it]+kGain04*trkErr[7*bsize+it]+kGain05*trkErr[11*bsize+it]);
-    temp05 = trkErr[8*bsize+it] - (kGain03*trkErr[3*bsize+it]+kGain04*trkErr[8*bsize+it]+kGain05*trkErr[12*bsize+it]);
-    temp06 = trkErr[9*bsize+it] - (kGain03*trkErr[4*bsize+it]+kGain04*trkErr[9*bsize+it]+kGain05*trkErr[13*bsize+it]);
-    temp07 = trkErr[10*bsize+it] - (kGain03*trkErr[5*bsize+it]+kGain04*trkErr[10*bsize+it]+kGain05*trkErr[14*bsize+it]);
+    newErr[6*bsize+it] = trkErr[6*bsize+it] - (kGain[3*bsize+it]*trkErr[1*bsize+it]+kGain[4*bsize+it]*trkErr[6*bsize+it]+kGain[5*bsize+it]*trkErr[7*bsize+it]);
+    newErr[7*bsize+it] = trkErr[7*bsize+it] - (kGain[3*bsize+it]*trkErr[2*bsize+it]+kGain[4*bsize+it]*trkErr[7*bsize+it]+kGain[5*bsize+it]*trkErr[11*bsize+it]);
+    newErr[8*bsize+it] = trkErr[8*bsize+it] - (kGain[3*bsize+it]*trkErr[3*bsize+it]+kGain[4*bsize+it]*trkErr[8*bsize+it]+kGain[5*bsize+it]*trkErr[12*bsize+it]);
+    newErr[9*bsize+it] = trkErr[9*bsize+it] - (kGain[3*bsize+it]*trkErr[4*bsize+it]+kGain[4*bsize+it]*trkErr[9*bsize+it]+kGain[5*bsize+it]*trkErr[13*bsize+it]);
+    newErr[10*bsize+it] = trkErr[10*bsize+it] - (kGain[3*bsize+it]*trkErr[5*bsize+it]+kGain[4*bsize+it]*trkErr[10*bsize+it]+kGain[5*bsize+it]*trkErr[14*bsize+it]);
   
-    temp08 = trkErr[11*bsize+it] - (kGain06*trkErr[2*bsize+it]+kGain07*trkErr[7*bsize+it]+kGain08*trkErr[11*bsize+it]);
-
-    trkErr[2*bsize+it]  = temp01;
-    trkErr[7*bsize+it]  = temp00;
-    trkErr[11*bsize+it] = temp08;
-
-    temp01 = trkErr[12*bsize+it] - (kGain06*trkErr[3*bsize+it]+kGain07*trkErr[8*bsize+it]+kGain08*trkErr[12*bsize+it]);
-    temp00 = trkErr[13*bsize+it] - (kGain06*trkErr[4*bsize+it]+kGain07*trkErr[9*bsize+it]+kGain08*trkErr[13*bsize+it]);
-    temp08 = trkErr[14*bsize+it] - (kGain06*trkErr[5*bsize+it]+kGain07*trkErr[10*bsize+it]+kGain08*trkErr[14*bsize+it]);
-    temp09 = trkErr[15*bsize+it] - (kGain09*trkErr[3*bsize+it]+kGain10*trkErr[8*bsize+it]+kGain11*trkErr[12*bsize+it]);
-
-    trkErr[3*bsize+it]  = temp02;
-    trkErr[8*bsize+it]  = temp05;
-    trkErr[12*bsize+it] = temp01;
-    trkErr[15*bsize+it] = temp09;
-
-    temp02 = trkErr[16*bsize+it] - (kGain09*trkErr[4*bsize+it]+kGain10*trkErr[9*bsize+it]+kGain11*trkErr[13*bsize+it]);
-
-    trkErr[16*bsize+it] = temp02;
-
-    temp05 = trkErr[17*bsize+it] - (kGain09*trkErr[5*bsize+it]+kGain10*trkErr[10*bsize+it]+kGain11*trkErr[14*bsize+it]);
-
-    trkErr[17*bsize+it] = temp05;
+    newErr[11*bsize+it] = trkErr[11*bsize+it] - (kGain[6*bsize+it]*trkErr[2*bsize+it]+kGain[7*bsize+it]*trkErr[7*bsize+it]+kGain[8*bsize+it]*trkErr[11*bsize+it]);
+    newErr[12*bsize+it] = trkErr[12*bsize+it] - (kGain[6*bsize+it]*trkErr[3*bsize+it]+kGain[7*bsize+it]*trkErr[8*bsize+it]+kGain[8*bsize+it]*trkErr[12*bsize+it]);
+    newErr[13*bsize+it] = trkErr[13*bsize+it] - (kGain[6*bsize+it]*trkErr[4*bsize+it]+kGain[7*bsize+it]*trkErr[9*bsize+it]+kGain[8*bsize+it]*trkErr[13*bsize+it]);
+    newErr[14*bsize+it] = trkErr[14*bsize+it] - (kGain[6*bsize+it]*trkErr[5*bsize+it]+kGain[7*bsize+it]*trkErr[10*bsize+it]+kGain[8*bsize+it]*trkErr[14*bsize+it]);
   
-    temp01 = trkErr[18*bsize+it] - (kGain12*trkErr[4*bsize+it]+kGain13*trkErr[9*bsize+it]+kGain14*trkErr[13*bsize+it]);
-
-    trkErr[4*bsize+it]  = temp03;
-    trkErr[9*bsize+it]  = temp06;
-    trkErr[13*bsize+it] = temp00;
-    trkErr[18*bsize+it] = temp01;
-
-    temp09 = trkErr[19*bsize+it] - (kGain12*trkErr[5*bsize+it]+kGain13*trkErr[10*bsize+it]+kGain14*trkErr[14*bsize+it]);
-
-    trkErr[19*bsize+it] = temp09;
-
-    temp09 = trkErr[20*bsize+it] - (kGain15*trkErr[5*bsize+it]+kGain16*trkErr[10*bsize+it]+kGain17*trkErr[14*bsize+it]);
-
-    trkErr[10*bsize+it] = temp07;
-    trkErr[5*bsize+it]  = temp04;
-    trkErr[14*bsize+it] = temp08;
-    trkErr[20*bsize+it] = temp09;
+    newErr[15*bsize+it] = trkErr[15*bsize+it] - (kGain[9*bsize+it]*trkErr[3*bsize+it]+kGain[10*bsize+it]*trkErr[8*bsize+it]+kGain[11*bsize+it]*trkErr[12*bsize+it]);
+    newErr[16*bsize+it] = trkErr[16*bsize+it] - (kGain[9*bsize+it]*trkErr[4*bsize+it]+kGain[10*bsize+it]*trkErr[9*bsize+it]+kGain[11*bsize+it]*trkErr[13*bsize+it]);
+    newErr[17*bsize+it] = trkErr[17*bsize+it] - (kGain[9*bsize+it]*trkErr[5*bsize+it]+kGain[10*bsize+it]*trkErr[10*bsize+it]+kGain[11*bsize+it]*trkErr[14*bsize+it]);
+  
+    newErr[18*bsize+it] = trkErr[18*bsize+it] - (kGain[12*bsize+it]*trkErr[4*bsize+it]+kGain[13*bsize+it]*trkErr[9*bsize+it]+kGain[14*bsize+it]*trkErr[13*bsize+it]);
+    newErr[19*bsize+it] = trkErr[19*bsize+it] - (kGain[12*bsize+it]*trkErr[5*bsize+it]+kGain[13*bsize+it]*trkErr[10*bsize+it]+kGain[14*bsize+it]*trkErr[14*bsize+it]);
+  
+    newErr[20*bsize+it] = trkErr[20*bsize+it] - (kGain[15*bsize+it]*trkErr[5*bsize+it]+kGain[16*bsize+it]*trkErr[10*bsize+it]+kGain[17*bsize+it]*trkErr[14*bsize+it]);
 
     MP6FAccessor::Set<iparX>(inPar,it, xnew);
     MP6FAccessor::Set<iparY>(inPar,it, ynew);
@@ -968,28 +927,31 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
     MP6FAccessor::Set<iparPhi>(inPar,it, phinew);
     MP6FAccessor::Set<iparTheta>(inPar,it, thetanew);
   }
+  //trkErr = newErr;
 
-  return;
 }
 
 
 
 template <size_t block_size = 1>
-void propagateToZ(const MPTRKAccessor &btracks, 
-		  const MPHITAccessor &bhits,
-                  MPTRKAccessor  &obtracks, 
-		  MP6x6FAccessor &errorPropAcc,  
-                  const size_t lid, 
-                  const size_t llid, 
-                  const size_t offset = 0) {
+void propagateToZ_mod(const MPTRKAccessor &btracks, 
+		      const MPHITAccessor &bhits,
+                      //MPTRKAccessor  &obtracks,
+                      MP6x6SFAccessor &outErrAcc,
+                      MP6FAccessor    &outParAcc, 
+		      MP6x6FAccessor  &errorPropAcc, 
+                      MP6x6FAccessor  &tempAcc, 
+                      const size_t lid, 
+                      const size_t llid, 
+                      const size_t offset = 0) {
 
   const auto inPar    = btracks.par(lid);
   const auto inChg    = btracks.q  (lid);
 
   const auto msP      = bhits.pos(llid);
 
-  auto outErr    = obtracks.cov(lid); 
-  auto outPar    = obtracks.par(lid); 
+  auto outErr    = outErrAcc(lid); 
+  auto outPar    = outParAcc(lid); 
   auto errorProp = errorPropAcc(lid);
 #pragma simd
   for (size_t it=offset;it<bsize; it += block_size) {	
@@ -1035,9 +997,9 @@ void propagateToZ(const MPTRKAccessor &btracks,
     errorProp[bsize*PosInMtrx(4,5,6) + it] = MP6FAccessor::Get<iparIpt>(inPar, it)*deltaZ*(icosT*icosTk);
   }
 
-  MultHelixPropTranspEndcap<block_size>(errorPropAcc, obtracks.cov, lid, offset);
+  MultHelixPropEndcap_mod<block_size>(errorPropAcc, btracks.cov, tempAcc, lid, offset);
+  MultHelixPropTranspEndcap_mod<block_size>(errorPropAcc, tempAcc, outErrAcc, lid, offset);//outErrAcc => trkErr
 
-  return;
 }
 
 
@@ -1072,9 +1034,10 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    
-   //MPTRK* trk    = prepareTracks(inputtrk); 
-   MPHIT* hit    = nullptr;//prepareHits(inputhit);
-   MPTRK* outtrk = nullptr;//(MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
+   MPTRK* trk = prepareTracks(inputtrk); 
+   MPHIT* hit = prepareHits(inputhit);
+
+   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
 
    auto trkNPtr = prepareTracksN(inputtrk);
    std::unique_ptr<MPTRKAccessor> trkNaccPtr(new MPTRKAccessor(*trkNPtr));
@@ -1082,11 +1045,10 @@ int main (int argc, char* argv[]) {
    auto hitNPtr = prepareHitsN(inputhit);
    std::unique_ptr<MPHITAccessor> hitNaccPtr(new MPHITAccessor(*hitNPtr));
 
-   std::unique_ptr<MPTRK> outtrkNPtr(new MPTRK(nevts*nb));
+   //std::unique_ptr<MPTRK> outtrkNPtr(new MPTRK(nevts*nb));
    std::unique_ptr<MPTRKAccessor> outtrkNaccPtr(new MPTRKAccessor(*outtrkNPtr));
-
-   std::unique_ptr<MP6x6F>  errPropPtr(new MP6x6F(nevts*nb));
-   std::unique_ptr<MP6x6FAccessor>  errorPropAccPtr(new MP6x6FAccessor(*errPropPtr));
+   auto outtrkNPtr = std::make_shared<MPTRK>(nevts*nb);
+   std::unique_ptr<MPTRKAccessor> outtrkNaccPtr(new MPTRKAccessor(*outtrkNPtr));
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -1102,6 +1064,21 @@ int main (int argc, char* argv[]) {
    constexpr size_t blk_sz = 1;
    auto policy = std::execution::par_unseq;
 
+   std::unique_ptr<MP6x6F>  errPropPtr(new MP6x6F(nevts*nb));
+   std::unique_ptr<MP6x6FAccessor>  errorPropAccPtr(new MP6x6FAccessor(*errPropPtr));
+
+   std::unique_ptr<MP6x6F>  tempPtr(new MP6x6F(nevts*nb));
+   std::unique_ptr<MP6x6FAccessor>  tempAccPtr(new MP6x6FAccessor(*tempPtr));
+
+   std::unique_ptr<MP3x3>   inverse_tempPtr(new MP3x3(nevts*nb));
+   std::unique_ptr<MP3x3Accessor>   inverse_tempAccPtr(new MP3x3Accessor(*inverse_tempPtr));
+
+   std::unique_ptr<MP3x6>   kGainPtr(new MP3x6(nevts*nb));
+   std::unique_ptr<MP3x6Accessor>   kGainAccPtr(new MP3x6Accessor(*kGainPtr));
+
+   std::unique_ptr<MP6x6SF> newErrPtr(new MP6x6SF(nevts*nb));
+   std::unique_ptr<MP6x6SFAccessor> newErrAccPtr(new MP6x6SFAccessor(*newErrPtr));
+
    for(itr=0; itr<NITER; itr++) {
 
      const int outer_loop_range = nevts*nb*blk_sz;
@@ -1112,8 +1089,14 @@ int main (int argc, char* argv[]) {
                    counting_iterator(outer_loop_range),
                    [=,  &trkNacc = *trkNaccPtr, 
 			&hitNacc = *hitNaccPtr, 
-			&outtrkNacc = *outtrkNaccPtr,
-			&errorPropAcc = *errorPropAccPtr] (auto ii) {
+			//&outtrkNacc = *outtrkNaccPtr,
+                        &outErrAcc = outtrkNaccPtr->cov, 
+                        &outParAcc = outtrkNaccPtr->par, 
+			&errorPropAcc = *errorPropAccPtr,
+			&tempAcc = *tempAccPtr,
+			&inverse_tempAcc = *inverse_tempAccPtr,
+			&kGainAcc = *kGainAccPtr,
+			&newErrAcc = *newErrAccPtr ] (auto ii) {
                    const size_t ie = ii / nbxblk_sz;
                    const size_t ibt= ii - ie*nbxblk_sz;
                    const size_t ib = ibt / blk_sz;  
@@ -1122,8 +1105,11 @@ int main (int argc, char* argv[]) {
                    for(size_t layer=0; layer<nlayer; ++layer) {
                      const size_t lii = layer+ii*nlayer;
                      //
-                     propagateToZ<blk_sz>(trkNacc, hitNacc, outtrkNacc, errorPropAcc, ii, lii, inner_loop_offset);
-                     KalmanUpdate<blk_sz>(outtrkNacc.cov, outtrkNacc.par, hitNacc, ii, lii, inner_loop_offset);
+                     //propagateToZ<blk_sz>(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+                     //&errorProp, &temp, inner_loop_offset); // vectorized function
+                     //KalmanUpdate<blk_sz>(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr, inner_loop_offset);
+                     propagateToZ_mod<blk_sz>(trkNacc, hitNacc, outErrAcc, outParAcc, errorPropAcc, tempAcc, ii, lii, inner_loop_offset);
+                     KalmanUpdate_mod<blk_sz>(outErrAcc, outParAcc, hitNacc, inverse_tempAcc, kGainAcc, newErrAcc, ii, lii, inner_loop_offset);
                    }
 
                    });
@@ -1136,9 +1122,8 @@ int main (int argc, char* argv[]) {
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, -1);
-#if 0
-   convertTracks(outtrk, outtrkNPtr.get());
-   convertHits(hit, hitNPtr.get());
+
+exit(-1);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;
@@ -1148,8 +1133,8 @@ int main (int argc, char* argv[]) {
        float x_ = x(outtrk,ie,it);
        float y_ = y(outtrk,ie,it);
        float z_ = z(outtrk,ie,it);
-       float pt_    = 1./ipt(outtrk,ie,it);
-       float phi_   = phi(outtrk,ie,it);
+       float pt_ = 1./ipt(outtrk,ie,it);
+       float phi_ = phi(outtrk,ie,it);
        float theta_ = theta(outtrk,ie,it);
        avgpt += pt_;
        avgphi += phi_;
@@ -1210,10 +1195,14 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
-
-   //free(trk);
+#ifndef __NVCOMPILER_CUDA__
+   free(trk);
    free(hit);
    free(outtrk);
+#else
+   delete [] trk;
+   delete [] hit;
+   delete [] outtrk;
 #endif
 
    return 0;
