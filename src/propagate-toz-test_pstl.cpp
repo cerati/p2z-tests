@@ -1087,8 +1087,11 @@ int main (int argc, char* argv[]) {
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
 
    auto wall_start = std::chrono::high_resolution_clock::now();
-
+#ifdef __NVCOMPILER_CUDA__
+   constexpr size_t blk_sz = bsize;
+#else
    constexpr size_t blk_sz = 1;
+#endif   
    auto policy = std::execution::par_unseq;
 
    for(itr=0; itr<NITER; itr++) {
@@ -1102,17 +1105,18 @@ int main (int argc, char* argv[]) {
                    [=,  &trkNacc = *trkNaccPtr, 
 			&hitNacc = *hitNaccPtr, 
 			&outtrkNacc = *outtrkNaccPtr,
-			&errorPropAcc = *errorPropAccPtr] (auto ii) {
-                   const size_t ie = ii / nbxblk_sz;
-                   const size_t ibt= ii - ie*nbxblk_sz;
+			&errorPropAcc = *errorPropAccPtr] (auto idx) {
+                   const size_t ie = idx / nbxblk_sz;
+                   const size_t ibt= idx - ie*nbxblk_sz;
                    const size_t ib = ibt / blk_sz;  
                    const size_t inner_loop_offset = ibt - ib*blk_sz;
-                  
+        
+	           const size_t li = ib + nb*ie; 	   
                    for(size_t layer=0; layer<nlayer; ++layer) {
-                     const size_t lii = layer+ii*nlayer;
+                     const size_t lli = layer+ii*nlayer;
                      //
-                     propagateToZ<blk_sz>(trkNacc, hitNacc, outtrkNacc, errorPropAcc, ii, lii, inner_loop_offset);
-                     KalmanUpdate<blk_sz>(outtrkNacc.cov, outtrkNacc.par, hitNacc, ii, lii, inner_loop_offset);
+                     propagateToZ<blk_sz>(trkNacc, hitNacc, outtrkNacc, errorPropAcc, li, lli, inner_loop_offset);
+                     KalmanUpdate<blk_sz>(outtrkNacc.cov, outtrkNacc.par, hitNacc, li, lli, inner_loop_offset);
                    }
 
                    });
