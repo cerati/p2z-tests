@@ -779,16 +779,17 @@ int main (int argc, char* argv[]) {
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
 
    auto wall_start = std::chrono::high_resolution_clock::now();
-
+#ifdef __NVCOMPILER_CUDA__
    constexpr size_t blk_sz = bsize;
+#else
+   constexpr size_t blk_sz = 1;
+#endif   
    auto policy = std::execution::par_unseq;
 
    for(itr=0; itr<NITER; itr++) {
 
      const int outer_loop_range = nevts*nb*blk_sz;//z,y,x
      const int nbxblk_sz        = nb*blk_sz;//y,x
-
-     printf(" %d :: %d\n", outer_loop_range, nbxblk_sz);
 
      std::for_each(policy,
                    counting_iterator(0),
