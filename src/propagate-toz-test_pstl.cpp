@@ -1113,7 +1113,7 @@ int main (int argc, char* argv[]) {
         
 	           const size_t li = ib + nb*ie; 	   
                    for(size_t layer=0; layer<nlayer; ++layer) {
-                     const size_t lli = layer+ii*nlayer;
+                     const size_t lli = layer+li*nlayer;
                      //
                      propagateToZ<blk_sz>(trkNacc, hitNacc, outtrkNacc, errorPropAcc, li, lli, inner_loop_offset);
                      KalmanUpdate<blk_sz>(outtrkNacc.cov, outtrkNacc.par, hitNacc, li, lli, inner_loop_offset);
