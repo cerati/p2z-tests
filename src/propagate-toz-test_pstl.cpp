@@ -435,9 +435,10 @@ void convertHits(MPHIT_* out, const MPHIT* inp) {
 #define N bsize 
 
 template <size_t block_size = 1>
-void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, MP6x6SFAccessor &B, const size_t lid, const size_t offset = 0) {
+void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, const MP6x6SFAccessor &B, MP6x6SFAccessor &C, const size_t lid, const size_t offset = 0) {
   const auto a = A(lid);
-  auto       b = B(lid);
+  const auto b = B(lid);
+  auto c = C(lid);  
 #pragma simd
   for (int n = offset; n < N; n += block_size)
   {
@@ -480,33 +481,33 @@ void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, MP6x6SFAccessor &B, cons
     auto temp35 = b[20*N+n];
 
     // transformation
-    b[ 0*N+n] = temp00 + temp02*a[ 2*N+n] + temp03*a[ 3*N+n] + temp04*a[ 4*N+n] + temp05*a[ 5*N+n];
-    b[ 1*N+n] = temp06 + temp08*a[ 2*N+n] + temp09*a[ 3*N+n] + temp10*a[ 4*N+n] + temp11*a[ 5*N+n];
-    b[ 2*N+n] = temp07 + temp08*a[ 8*N+n] + temp09*a[ 9*N+n] + temp10*a[10*N+n] + temp11*a[11*N+n];
-    b[ 3*N+n] = 0;
-    b[ 4*N+n] = 0;
-    b[ 5*N+n] = 0;
-    b[ 6*N+n] = temp18 + temp20*a[ 2*N+n] + temp21*a[ 3*N+n] + temp22*a[ 4*N+n] + temp23*a[ 5*N+n];
-    b[ 7*N+n] = temp19 + temp20*a[ 8*N+n] + temp21*a[ 9*N+n] + temp22*a[10*N+n] + temp23*a[11*N+n];
-    b[ 8*N+n] = 0;
-    b[ 9*N+n] = temp21;
-    b[10*N+n] = temp24 + temp26*a[ 2*N+n] + temp27*a[ 3*N+n] + temp28*a[ 4*N+n] + temp29*a[ 5*N+n];
-    b[11*N+n] = b[25*N+n] + temp26*a[ 8*N+n] + temp27*a[ 9*N+n] + temp28*a[10*N+n] + temp29*a[11*N+n];
-    b[12*N+n] = 0;
-    b[13*N+n] = temp27;
-    b[14*N+n] = temp26*a[26*N+n] + temp27*a[27*N+n] + temp28 + temp29*a[29*N+n];
-    b[15*N+n] = temp30 + temp32*a[ 2*N+n] + temp33*a[ 3*N+n] + temp34*a[ 4*N+n] + temp35*a[ 5*N+n];
-    b[16*N+n] = temp31 + temp32*a[ 8*N+n] + temp33*a[ 9*N+n] + temp34*a[10*N+n] + temp35*a[11*N+n];
-    b[17*N+n] = 0;
-    b[18*N+n] = temp33;
-    b[19*N+n] = temp32*a[26*N+n] + temp33*a[27*N+n] + temp34 + temp35*a[29*N+n];
-    b[20*N+n] = temp35;
+    c[ 0*N+n] = temp00 + temp02*a[ 2*N+n] + temp03*a[ 3*N+n] + temp04*a[ 4*N+n] + temp05*a[ 5*N+n];
+    c[ 1*N+n] = temp06 + temp08*a[ 2*N+n] + temp09*a[ 3*N+n] + temp10*a[ 4*N+n] + temp11*a[ 5*N+n];
+    c[ 2*N+n] = temp07 + temp08*a[ 8*N+n] + temp09*a[ 9*N+n] + temp10*a[10*N+n] + temp11*a[11*N+n];
+    c[ 3*N+n] = 0;
+    c[ 4*N+n] = 0;
+    c[ 5*N+n] = 0;
+    c[ 6*N+n] = temp18 + temp20*a[ 2*N+n] + temp21*a[ 3*N+n] + temp22*a[ 4*N+n] + temp23*a[ 5*N+n];
+    c[ 7*N+n] = temp19 + temp20*a[ 8*N+n] + temp21*a[ 9*N+n] + temp22*a[10*N+n] + temp23*a[11*N+n];
+    c[ 8*N+n] = 0;
+    c[ 9*N+n] = temp21;
+    c[10*N+n] = temp24 + temp26*a[ 2*N+n] + temp27*a[ 3*N+n] + temp28*a[ 4*N+n] + temp29*a[ 5*N+n];
+    c[11*N+n] = temp25 + temp26*a[ 8*N+n] + temp27*a[ 9*N+n] + temp28*a[10*N+n] + temp29*a[11*N+n];
+    c[12*N+n] = 0;
+    c[13*N+n] = temp27;
+    c[14*N+n] = temp26*a[26*N+n] + temp27*a[27*N+n] + temp28 + temp29*a[29*N+n];
+    c[15*N+n] = temp30 + temp32*a[ 2*N+n] + temp33*a[ 3*N+n] + temp34*a[ 4*N+n] + temp35*a[ 5*N+n];
+    c[16*N+n] = temp31 + temp32*a[ 8*N+n] + temp33*a[ 9*N+n] + temp34*a[10*N+n] + temp35*a[11*N+n];
+    c[17*N+n] = 0;
+    c[18*N+n] = temp33;
+    c[19*N+n] = temp32*a[26*N+n] + temp33*a[27*N+n] + temp34 + temp35*a[29*N+n];
+    c[20*N+n] = temp35;
   }
 }
 
 template<typename T>
 inline typename std::enable_if<std::is_floating_point<T>::value>::type 
-KalmanGainInv(const T* a, const T* b, std::array<T, 9> &c, const int n) {
+KalmanGainInv(const T* a, const T* b, std::array<T, 10> &c, const int n) {
   double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
@@ -552,7 +553,7 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
     const auto yout = MP3FAccessor::Get<iparY>(msP, it);
     const auto zout = MP3FAccessor::Get<iparZ>(msP, it);
 
-    std::array<float, 9> temp{0.0f};
+    std::array<float, 10> temp{0.0f};
 
     KalmanGainInv(trkErr, hitErr, temp, it); 
 
@@ -659,10 +660,10 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
 const float kfact = 100/3.8;
 
 template <size_t block_size = 1>
-void propagateToZ(const MPTRKAccessor &btracks, 
+void propagateToZ(const MPTRKAccessor &btracks,
 		  const MPHITAccessor &bhits,
-                  MPTRKAccessor  &obtracks, 
-		  MP6x6FAccessor &errorPropAcc,  
+                  MPTRKAccessor  &obtracks,
+                  MP6x6FAccessor &errorPropAcc,  
                   const size_t lid, 
                   const size_t llid, 
                   const size_t offset = 0) {
@@ -720,7 +721,7 @@ void propagateToZ(const MPTRKAccessor &btracks,
 
   }
 
-  MultHelixPropTranspEndcap<block_size>(errorPropAcc, obtracks.cov, lid, offset);
+  MultHelixPropTranspEndcap<block_size>(errorPropAcc, btracks.cov, obtracks.cov, lid, offset);
 
   return;
 }
