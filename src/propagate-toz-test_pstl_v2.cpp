@@ -50,7 +50,7 @@ using namespace tbb;
 #endif
 
 
-inline size_t PosInMtrx(size_t i, size_t j, size_t D) {
+inline constexpr size_t PosInMtrx(const size_t i, const size_t j, const size_t D) {
   return i*D+j;
 }
 
@@ -107,7 +107,7 @@ struct MPNXAccessor {
    static constexpr size_t n   = MPNTp::N;
    static constexpr size_t stride = n*bsz;
 
-   T* data_; //accessor field only for the data access, not allocated here
+   T* data_; //accessor field only for the LL data access, not allocated here
 
    MPNXAccessor() : data_(nullptr) {}
    MPNXAccessor(const MPNTp &v) : data_(const_cast<T*>(v.data.data())){
@@ -117,12 +117,10 @@ struct MPNXAccessor {
    T  operator()(const size_t i, const size_t j) const {return (data_ + stride*i)[j];}
    T  operator[](const size_t i) const {return data_[i];}
 
-   // Restricted to MP3F (x,y,z) and MP6F (x,y,z,ipt,phi,theta) fields only: 
    template <int ipar, typename AccessedFieldTp = MPNTp>
    typename std::enable_if<(std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3) or (std::is_same<AccessedFieldTp, MP6F>::value and ipar < 6), T>::type
    Get(size_t it, size_t id)  const { return (data_ + stride*id)[it + ipar*bsz]; }
 
-   // Restricted to MP3F (x,y,z) fields only:   
    template <int ipar, typename AccessedFieldTp = MPNTp> 
    typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
    Set(size_t it, float val, size_t id)    { (data_ + stride*id)[it + ipar*bsz] = val; }
@@ -505,28 +503,7 @@ void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, const MP6x6SFAccessor &B
   }
 }
 
-template<typename T>
-inline typename std::enable_if<std::is_floating_point<T>::value>::type 
-KalmanGainInv(const T* a, const T* b, std::array<T, 10> &c, const int n) {
-  double det =
-      ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
-      ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
-      ((a[2*N+n]+b[2*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n]))));
-
-  c[ 9] = 1.0 / det;
-
-  c[ 0] =  c[ 9]*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
-  c[ 1] =  -c[ 9]*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
-  c[ 2] =  c[ 9]*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
-  c[ 3] =  -c[ 9]*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])));
-  c[ 4] =  c[ 9]*(((a[ 0*N+n]+b[ 0*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[2*N+n]+b[2*N+n])));
-  c[ 5] =  -c[ 9]*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
-  c[ 6] =  c[ 9]*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n])));
-  c[ 7] =  -c[ 9]*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
-  c[ 8] =  c[ 9]*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
-}
-
-
+// Merged kernel:
 template <size_t block_size = 1>
 void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
                   MP6FAccessor &inParAcc, 
@@ -553,97 +530,122 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
     const auto yout = MP3FAccessor::Get<iparY>(msP, it);
     const auto zout = MP3FAccessor::Get<iparZ>(msP, it);
 
-    std::array<float, 10> temp{0.0f};
+    std::array<float, 10> t{0.0f};
 
-    KalmanGainInv(trkErr, hitErr, temp, it); 
+    double det = 
+      ((trkErr[0 *bsize+it] +hitErr[0*bsize+it])*(((trkErr[6 *bsize+it] +hitErr[3*bsize+it]) *(trkErr[11*bsize+it] +hitErr[5*bsize+it])) - ((trkErr[7 *bsize+it] +hitErr[4*bsize+it]) *(trkErr[7 *bsize+it] +hitErr[4*bsize+it])))) -
+      ((trkErr[1 *bsize+it] +hitErr[1*bsize+it])*(((trkErr[1 *bsize+it] +hitErr[1*bsize+it]) *(trkErr[11*bsize+it] +hitErr[5*bsize+it])) - ((trkErr[7 *bsize+it] +hitErr[4*bsize+it]) *(trkErr[2 *bsize+it] +hitErr[2*bsize+it])))) +
+      ((trkErr[2 *bsize+it] +hitErr[2*bsize+it])*(((trkErr[1 *bsize+it] +hitErr[1*bsize+it]) *(trkErr[7 *bsize+it] +hitErr[4*bsize+it])) - ((trkErr[2 *bsize+it] +hitErr[2*bsize+it]) *(trkErr[6 *bsize+it] +hitErr[3*bsize+it]))));
 
-    const auto kGain00 = trkErr[0*bsize+it]*temp[0] + trkErr[1*bsize+it]*temp[3] + trkErr[2*bsize+it]*temp[6];
-    const auto kGain01 = trkErr[0*bsize+it]*temp[1] + trkErr[1*bsize+it]*temp[4] + trkErr[2*bsize+it]*temp[7];
-    const auto kGain02 = trkErr[0*bsize+it]*temp[2] + trkErr[1*bsize+it]*temp[5] + trkErr[2*bsize+it]*temp[8];
-    const auto kGain03 = trkErr[1*bsize+it]*temp[0] + trkErr[6*bsize+it]*temp[3] + trkErr[7*bsize+it]*temp[6];
-    const auto kGain04 = trkErr[1*bsize+it]*temp[1] + trkErr[6*bsize+it]*temp[4] + trkErr[7*bsize+it]*temp[7];
-    const auto kGain05 = trkErr[1*bsize+it]*temp[2] + trkErr[6*bsize+it]*temp[5] + trkErr[7*bsize+it]*temp[8];
-    const auto kGain06 = trkErr[2*bsize+it]*temp[0] + trkErr[7*bsize+it]*temp[3] + trkErr[11*bsize+it]*temp[6];
-    const auto kGain07 = trkErr[2*bsize+it]*temp[1] + trkErr[7*bsize+it]*temp[4] + trkErr[11*bsize+it]*temp[7];
-    const auto kGain08 = trkErr[2*bsize+it]*temp[2] + trkErr[7*bsize+it]*temp[5] + trkErr[11*bsize+it]*temp[8];
-    const auto kGain09 = trkErr[3*bsize+it]*temp[0] + trkErr[8*bsize+it]*temp[3] + trkErr[12*bsize+it]*temp[6];
-    const auto kGain10 = trkErr[3*bsize+it]*temp[1] + trkErr[8*bsize+it]*temp[4] + trkErr[12*bsize+it]*temp[7];
-    const auto kGain11 = trkErr[3*bsize+it]*temp[2] + trkErr[8*bsize+it]*temp[5] + trkErr[12*bsize+it]*temp[8];
-    const auto kGain12 = trkErr[4*bsize+it]*temp[0] + trkErr[9*bsize+it]*temp[3] + trkErr[13*bsize+it]*temp[6];
-    const auto kGain13 = trkErr[4*bsize+it]*temp[1] + trkErr[9*bsize+it]*temp[4] + trkErr[13*bsize+it]*temp[7];
-    const auto kGain14 = trkErr[4*bsize+it]*temp[2] + trkErr[9*bsize+it]*temp[5] + trkErr[13*bsize+it]*temp[8];
-    const auto kGain15 = trkErr[5*bsize+it]*temp[0] + trkErr[10*bsize+it]*temp[3] + trkErr[14*bsize+it]*temp[6];
-    const auto kGain16 = trkErr[5*bsize+it]*temp[1] + trkErr[10*bsize+it]*temp[4] + trkErr[14*bsize+it]*temp[7];
-    const auto kGain17 = trkErr[5*bsize+it]*temp[2] + trkErr[10*bsize+it]*temp[5] + trkErr[14*bsize+it]*temp[8];
+    t[9] = 1.0 / det;
+
+    t[0] =  t[9]*(((trkErr[6 *bsize+it]  +hitErr[3*bsize+it]) *(trkErr[11*bsize+it] +hitErr[5*bsize+it])) - ((trkErr[7 *bsize+it] +hitErr[4*bsize+it]) *(trkErr[7 *bsize+it] +hitErr[4*bsize+it])));
+    t[1] =  -t[9]*(((trkErr[1 *bsize+it] +hitErr[1*bsize+it]) *(trkErr[11*bsize+it] +hitErr[5*bsize+it])) - ((trkErr[7 *bsize+it] +hitErr[4*bsize+it]) *(trkErr[2 *bsize+it] +hitErr[2*bsize+it])));
+    t[2] =  t[9]*(((trkErr[1 *bsize+it]  +hitErr[1*bsize+it]) *(trkErr[7 *bsize+it] +hitErr[4*bsize+it])) - ((trkErr[2 *bsize+it] +hitErr[2*bsize+it]) *(trkErr[6 *bsize+it] +hitErr[3*bsize+it])));
+
+    t[3] =  -t[9]*(((trkErr[1 *bsize+it] +hitErr[1*bsize+it]) *(trkErr[11*bsize+it] +hitErr[5*bsize+it])) - ((trkErr[2 *bsize+it] +hitErr[2*bsize+it]) *(trkErr[7 *bsize+it] +hitErr[4*bsize+it])));
+    t[4] =  t[9]*(((trkErr[0 *bsize+it]  +hitErr[0*bsize+it]) *(trkErr[11*bsize+it] +hitErr[5*bsize+it])) - ((trkErr[2 *bsize+it] +hitErr[2*bsize+it]) *(trkErr[2 *bsize+it] +hitErr[2*bsize+it])));
+    t[5] =  -t[9]*(((trkErr[0 *bsize+it] +hitErr[0*bsize+it]) *(trkErr[7 *bsize+it]  +hitErr[4*bsize+it])) - ((trkErr[2 *bsize+it] +hitErr[2*bsize+it]) *(trkErr[1 *bsize+it] +hitErr[1*bsize+it])));
+
+    t[6] =  t[9]*(((trkErr[1 *bsize+it]  +hitErr[1*bsize+it]) *(trkErr[7 *bsize+it]  +hitErr[4*bsize+it])) - ((trkErr[2 *bsize+it] +hitErr[2*bsize+it]) *(trkErr[7 *bsize+it] +hitErr[4*bsize+it])));
+    t[7] =  -t[9]*(((trkErr[0 *bsize+it] +hitErr[0*bsize+it]) *(trkErr[7 *bsize+it]  +hitErr[4*bsize+it])) - ((trkErr[2 *bsize+it] +hitErr[2*bsize+it]) *(trkErr[1 *bsize+it] +hitErr[1*bsize+it])));
+    t[8] =  t[9]*(((trkErr[0 *bsize+it]  +hitErr[0*bsize+it]) *(trkErr[6 *bsize+it]  +hitErr[3*bsize+it])) - ((trkErr[1 *bsize+it] +hitErr[1*bsize+it]) *(trkErr[1 *bsize+it] +hitErr[1*bsize+it])));
+
+
+    const auto kGain00 = trkErr[0 *bsize+it]*t[0] + trkErr[1 *bsize+it] *t[1] + trkErr[2 *bsize+it] *t[2];
+    const auto kGain01 = trkErr[0 *bsize+it]*t[3] + trkErr[1 *bsize+it] *t[4] + trkErr[2 *bsize+it] *t[5];
+    const auto kGain02 = trkErr[0 *bsize+it]*t[6] + trkErr[1 *bsize+it] *t[7] + trkErr[2 *bsize+it] *t[8];
+
+    const auto kGain03 = trkErr[1 *bsize+it]*t[0] + trkErr[6 *bsize+it] *t[1] + trkErr[7 *bsize+it] *t[2];
+    const auto kGain04 = trkErr[1 *bsize+it]*t[3] + trkErr[6 *bsize+it] *t[4] + trkErr[7 *bsize+it] *t[5];
+    const auto kGain05 = trkErr[1 *bsize+it]*t[6] + trkErr[6 *bsize+it] *t[7] + trkErr[7 *bsize+it] *t[8];
+
+    const auto kGain06 = trkErr[2 *bsize+it]*t[0] + trkErr[7 *bsize+it] *t[1] + trkErr[11*bsize+it] *t[2];
+    const auto kGain07 = trkErr[2 *bsize+it]*t[3] + trkErr[7 *bsize+it] *t[4] + trkErr[11*bsize+it] *t[5];
+    const auto kGain08 = trkErr[2 *bsize+it]*t[6] + trkErr[7 *bsize+it] *t[7] + trkErr[11*bsize+it] *t[8];
+
+    const auto kGain09 = trkErr[3 *bsize+it]*t[0] + trkErr[8 *bsize+it] *t[1] + trkErr[12*bsize+it] *t[2];
+    const auto kGain10 = trkErr[3 *bsize+it]*t[3] + trkErr[8 *bsize+it] *t[4] + trkErr[12*bsize+it] *t[5];
+    const auto kGain11 = trkErr[3 *bsize+it]*t[6] + trkErr[8 *bsize+it] *t[7] + trkErr[12*bsize+it] *t[8];
+
+    const auto kGain12 = trkErr[4 *bsize+it]*t[0] + trkErr[9 *bsize+it] *t[1] + trkErr[13*bsize+it] *t[2];
+    const auto kGain13 = trkErr[4 *bsize+it]*t[3] + trkErr[9 *bsize+it] *t[4] + trkErr[13*bsize+it] *t[5];
+    const auto kGain14 = trkErr[4 *bsize+it]*t[6] + trkErr[9 *bsize+it] *t[7] + trkErr[13*bsize+it] *t[8];
+
+    const auto kGain15 = trkErr[5 *bsize+it]*t[0] + trkErr[10*bsize+it] *t[1] + trkErr[14*bsize+it] *t[2];
+    const auto kGain16 = trkErr[5 *bsize+it]*t[3] + trkErr[10*bsize+it] *t[4] + trkErr[14*bsize+it] *t[5];
+    const auto kGain17 = trkErr[5 *bsize+it]*t[6] + trkErr[10*bsize+it] *t[7] + trkErr[14*bsize+it] *t[8];
+
+    t[1] = xout-xin;
+    t[2] = yout-yin;
+    const auto xnew     = xin     + (kGain00*t[1]) +(kGain01*t[2]);
+    const auto ynew     = yin     + (kGain03*t[1]) +(kGain04*t[2]);
+    const auto znew     = zin     + (kGain06*t[1]) +(kGain07*t[2]);
+    const auto ptnew    = ptin    + (kGain09*t[1]) +(kGain10*t[2]);
+    const auto phinew   = phiin   + (kGain12*t[1]) +(kGain13*t[2]);
+    const auto thetanew = thetain + (kGain15*t[1]) +(kGain16*t[2]);
+
+    t[0] = trkErr[0*bsize+it] - (kGain00*trkErr[0*bsize+it]+kGain01*trkErr[1*bsize+it]+kGain02*trkErr[2*bsize+it]);
+
+    trkErr[0*bsize+it] = t[0];
+
+    t[0] = trkErr[1*bsize+it] - (kGain00*trkErr[1*bsize+it]+kGain01*trkErr[6*bsize+it]+kGain02*trkErr[7*bsize+it]);
+    t[1] = trkErr[2*bsize+it] - (kGain00*trkErr[2*bsize+it]+kGain01*trkErr[7*bsize+it]+kGain02*trkErr[11*bsize+it]);
+    t[2] = trkErr[3*bsize+it] - (kGain00*trkErr[3*bsize+it]+kGain01*trkErr[8*bsize+it]+kGain02*trkErr[12*bsize+it]);
+    t[3] = trkErr[4*bsize+it] - (kGain00*trkErr[4*bsize+it]+kGain01*trkErr[9*bsize+it]+kGain02*trkErr[13*bsize+it]);
+    t[4] = trkErr[5*bsize+it] - (kGain00*trkErr[5*bsize+it]+kGain01*trkErr[10*bsize+it]+kGain02*trkErr[14*bsize+it]);
   
-    const auto xnew     = xin     + (kGain00*(xout-xin)) +(kGain01*(yout-yin));
-    const auto ynew     = yin     + (kGain03*(xout-xin)) +(kGain04*(yout-yin));
-    const auto znew     = zin     + (kGain06*(xout-xin)) +(kGain07*(yout-yin));
-    const auto ptnew    = ptin    + (kGain09*(xout-xin)) +(kGain10*(yout-yin));
-    const auto phinew   = phiin   + (kGain12*(xout-xin)) +(kGain13*(yout-yin));
-    const auto thetanew = thetain + (kGain15*(xout-xin)) +(kGain16*(yout-yin));
+    t[5] = trkErr[6*bsize+it] - (kGain03*trkErr[1*bsize+it]+kGain04*trkErr[6*bsize+it]+kGain05*trkErr[7*bsize+it]);
 
-    temp[0] = trkErr[0*bsize+it] - (kGain00*trkErr[0*bsize+it]+kGain01*trkErr[1*bsize+it]+kGain02*trkErr[2*bsize+it]);
+    trkErr[1*bsize+it] = t[0];
+    trkErr[6*bsize+it] = t[5];
 
-    trkErr[0*bsize+it] = temp[0];
-
-    temp[0] = trkErr[1*bsize+it] - (kGain00*trkErr[1*bsize+it]+kGain01*trkErr[6*bsize+it]+kGain02*trkErr[7*bsize+it]);
-    temp[1] = trkErr[2*bsize+it] - (kGain00*trkErr[2*bsize+it]+kGain01*trkErr[7*bsize+it]+kGain02*trkErr[11*bsize+it]);
-    temp[2] = trkErr[3*bsize+it] - (kGain00*trkErr[3*bsize+it]+kGain01*trkErr[8*bsize+it]+kGain02*trkErr[12*bsize+it]);
-    temp[3] = trkErr[4*bsize+it] - (kGain00*trkErr[4*bsize+it]+kGain01*trkErr[9*bsize+it]+kGain02*trkErr[13*bsize+it]);
-    temp[4] = trkErr[5*bsize+it] - (kGain00*trkErr[5*bsize+it]+kGain01*trkErr[10*bsize+it]+kGain02*trkErr[14*bsize+it]);
+    t[0] = trkErr[7*bsize+it] - (kGain03*trkErr[2*bsize+it]+kGain04*trkErr[7*bsize+it]+kGain05*trkErr[11*bsize+it]);
+    t[5] = trkErr[8*bsize+it] - (kGain03*trkErr[3*bsize+it]+kGain04*trkErr[8*bsize+it]+kGain05*trkErr[12*bsize+it]);
+    t[6] = trkErr[9*bsize+it] - (kGain03*trkErr[4*bsize+it]+kGain04*trkErr[9*bsize+it]+kGain05*trkErr[13*bsize+it]);
+    t[7] = trkErr[10*bsize+it] - (kGain03*trkErr[5*bsize+it]+kGain04*trkErr[10*bsize+it]+kGain05*trkErr[14*bsize+it]);
   
-    temp[5] = trkErr[6*bsize+it] - (kGain03*trkErr[1*bsize+it]+kGain04*trkErr[6*bsize+it]+kGain05*trkErr[7*bsize+it]);
+    t[8] = trkErr[11*bsize+it] - (kGain06*trkErr[2*bsize+it]+kGain07*trkErr[7*bsize+it]+kGain08*trkErr[11*bsize+it]);
 
-    trkErr[1*bsize+it] = temp[0];
-    trkErr[6*bsize+it] = temp[5];
+    trkErr[2*bsize+it]  = t[1];
+    trkErr[7*bsize+it]  = t[0];
+    trkErr[11*bsize+it] = t[8];
 
-    temp[0] = trkErr[7*bsize+it] - (kGain03*trkErr[2*bsize+it]+kGain04*trkErr[7*bsize+it]+kGain05*trkErr[11*bsize+it]);
-    temp[5] = trkErr[8*bsize+it] - (kGain03*trkErr[3*bsize+it]+kGain04*trkErr[8*bsize+it]+kGain05*trkErr[12*bsize+it]);
-    temp[6] = trkErr[9*bsize+it] - (kGain03*trkErr[4*bsize+it]+kGain04*trkErr[9*bsize+it]+kGain05*trkErr[13*bsize+it]);
-    temp[7] = trkErr[10*bsize+it] - (kGain03*trkErr[5*bsize+it]+kGain04*trkErr[10*bsize+it]+kGain05*trkErr[14*bsize+it]);
+    t[1] = trkErr[12*bsize+it] - (kGain06*trkErr[3*bsize+it]+kGain07*trkErr[8*bsize+it]+kGain08*trkErr[12*bsize+it]);
+    t[0] = trkErr[13*bsize+it] - (kGain06*trkErr[4*bsize+it]+kGain07*trkErr[9*bsize+it]+kGain08*trkErr[13*bsize+it]);
+    t[8] = trkErr[14*bsize+it] - (kGain06*trkErr[5*bsize+it]+kGain07*trkErr[10*bsize+it]+kGain08*trkErr[14*bsize+it]);
+    t[9] = trkErr[15*bsize+it] - (kGain09*trkErr[3*bsize+it]+kGain10*trkErr[8*bsize+it]+kGain11*trkErr[12*bsize+it]);
+
+    trkErr[3*bsize+it]  = t[2];
+    trkErr[8*bsize+it]  = t[5];
+    trkErr[12*bsize+it] = t[1];
+    trkErr[15*bsize+it] = t[9];
+
+    t[2] = trkErr[16*bsize+it] - (kGain09*trkErr[4*bsize+it]+kGain10*trkErr[9*bsize+it]+kGain11*trkErr[13*bsize+it]);
+
+    trkErr[16*bsize+it] = t[2];
+
+    t[5] = trkErr[17*bsize+it] - (kGain09*trkErr[5*bsize+it]+kGain10*trkErr[10*bsize+it]+kGain11*trkErr[14*bsize+it]);
+
+    trkErr[17*bsize+it] = t[5];
   
-    temp[8] = trkErr[11*bsize+it] - (kGain06*trkErr[2*bsize+it]+kGain07*trkErr[7*bsize+it]+kGain08*trkErr[11*bsize+it]);
+    t[1] = trkErr[18*bsize+it] - (kGain12*trkErr[4*bsize+it]+kGain13*trkErr[9*bsize+it]+kGain14*trkErr[13*bsize+it]);
 
-    trkErr[2*bsize+it]  = temp[1];
-    trkErr[7*bsize+it]  = temp[0];
-    trkErr[11*bsize+it] = temp[8];
+    trkErr[4*bsize+it]  = t[3];
+    trkErr[9*bsize+it]  = t[6];
+    trkErr[13*bsize+it] = t[0];
+    trkErr[18*bsize+it] = t[1];
 
-    temp[1] = trkErr[12*bsize+it] - (kGain06*trkErr[3*bsize+it]+kGain07*trkErr[8*bsize+it]+kGain08*trkErr[12*bsize+it]);
-    temp[0] = trkErr[13*bsize+it] - (kGain06*trkErr[4*bsize+it]+kGain07*trkErr[9*bsize+it]+kGain08*trkErr[13*bsize+it]);
-    temp[8] = trkErr[14*bsize+it] - (kGain06*trkErr[5*bsize+it]+kGain07*trkErr[10*bsize+it]+kGain08*trkErr[14*bsize+it]);
-    temp[9] = trkErr[15*bsize+it] - (kGain09*trkErr[3*bsize+it]+kGain10*trkErr[8*bsize+it]+kGain11*trkErr[12*bsize+it]);
+    t[9] = trkErr[19*bsize+it] - (kGain12*trkErr[5*bsize+it]+kGain13*trkErr[10*bsize+it]+kGain14*trkErr[14*bsize+it]);
 
-    trkErr[3*bsize+it]  = temp[2];
-    trkErr[8*bsize+it]  = temp[5];
-    trkErr[12*bsize+it] = temp[1];
-    trkErr[15*bsize+it] = temp[9];
+    trkErr[19*bsize+it] = t[9];
 
-    temp[2] = trkErr[16*bsize+it] - (kGain09*trkErr[4*bsize+it]+kGain10*trkErr[9*bsize+it]+kGain11*trkErr[13*bsize+it]);
+    t[9] = trkErr[20*bsize+it] - (kGain15*trkErr[5*bsize+it]+kGain16*trkErr[10*bsize+it]+kGain17*trkErr[14*bsize+it]);
 
-    trkErr[16*bsize+it] = temp[2];
-
-    temp[5] = trkErr[17*bsize+it] - (kGain09*trkErr[5*bsize+it]+kGain10*trkErr[10*bsize+it]+kGain11*trkErr[14*bsize+it]);
-
-    trkErr[17*bsize+it] = temp[5];
-  
-    temp[1] = trkErr[18*bsize+it] - (kGain12*trkErr[4*bsize+it]+kGain13*trkErr[9*bsize+it]+kGain14*trkErr[13*bsize+it]);
-
-    trkErr[4*bsize+it]  = temp[3];
-    trkErr[9*bsize+it]  = temp[6];
-    trkErr[13*bsize+it] = temp[0];
-    trkErr[18*bsize+it] = temp[1];
-
-    temp[9] = trkErr[19*bsize+it] - (kGain12*trkErr[5*bsize+it]+kGain13*trkErr[10*bsize+it]+kGain14*trkErr[14*bsize+it]);
-
-    trkErr[19*bsize+it] = temp[9];
-
-    temp[9] = trkErr[20*bsize+it] - (kGain15*trkErr[5*bsize+it]+kGain16*trkErr[10*bsize+it]+kGain17*trkErr[14*bsize+it]);
-
-    trkErr[10*bsize+it] = temp[7];
-    trkErr[5*bsize+it]  = temp[4];
-    trkErr[14*bsize+it] = temp[8];
-    trkErr[20*bsize+it] = temp[9];
+    trkErr[10*bsize+it] = t[7];
+    trkErr[5*bsize+it]  = t[4];
+    trkErr[14*bsize+it] = t[8];
+    trkErr[20*bsize+it] = t[9];
 
     MP6FAccessor::Set<iparX>(inPar,it, xnew);
     MP6FAccessor::Set<iparY>(inPar,it, ynew);

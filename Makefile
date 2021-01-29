@@ -7,7 +7,7 @@
 #       Set macros used for the input program            #
 ##########################################################
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
-#                   ibm                                  #
+#                   ibm, nvcpp, dpcpp                    #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
 #               omp4, pstl                               #
 ##########################################################
@@ -95,9 +95,9 @@ CXX=g++
 CFLAGS1 += -O3 -I. -fopenmp -std=c++17
 CLIBS1 += -lm -lgomp -L/opt/intel/tbb-gnu9.3/lib -ltbb
 endif
-ifeq ($(COMPILER),pgi)
-CXX=pgc++
-CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
+ifeq ($(COMPILER),nvcpp)
+CXX=nvc++
+CFLAGS1 += -O2 -std=c++17 -stdpar -gpu=cc75
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
@@ -199,7 +199,7 @@ CSRCS = propagate-toz-test_CUDA.cu
 #CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread
+CFLAGS1 += -arch=sm_75 -O3 -DUSE_GPU --default-stream per-thread
 CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
@@ -209,7 +209,7 @@ ifeq ($(MODE),cudav2)
 CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
+CFLAGS1 += -arch=sm_75 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
 CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
