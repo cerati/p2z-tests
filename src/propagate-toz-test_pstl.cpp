@@ -37,18 +37,87 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define nlayer 20
 #endif
 
-#ifdef __NVCOMPILER_CUDA__
+//BACKEND selector
+#if defined(__NVCOMPILER_CUDA__)
 
 #include <thrust/iterator/counting_iterator.h>
 using namespace thrust;
 
-#else //X86
+#else
+
+#if defined(__INTEL_COMPILER)
+#include <malloc.h>
+#else
+#include <mm_malloc.h>
+#endif
 
 #include <tbb/tbb.h>
 using namespace tbb;
 
+constexpr int alloc_align  = (2*1024*1024);
+
+#endif //BACKEND selector
+
+   template<typename Tp>
+   struct AlignedAllocator {
+     public:
+
+       typedef Tp value_type;
+
+       AlignedAllocator () {};
+
+       AlignedAllocator(const AlignedAllocator&) { }
+
+       template<typename Tp1> constexpr AlignedAllocator(const AlignedAllocator<Tp1>&) { }
+
+       ~AlignedAllocator() { }
+
+       Tp* address(Tp& x) const { return &x; }
+
+       std::size_t  max_size() const throw() { return size_t(-1) / sizeof(Tp); }
+
+       [[nodiscard]] Tp* allocate(std::size_t n){
+
+         Tp* ptr = nullptr;
+#ifdef __NVCOMPILER_CUDA__
+         auto err = cudaMallocManaged((void **)&ptr,n*sizeof(Tp));
+
+         if( err != cudaSuccess ) {
+           ptr = (Tp *) NULL;
+           std::cerr << " cudaMallocManaged failed for " << n*sizeof(Tp) << " bytes " <<cudaGetErrorString(err)<< std::endl;
+           assert(0);
+         }
+#elif !defined(DPCPP_BACKEND)
+         //ptr = (Tp*)aligned_malloc(alloc_align, n*sizeof(Tp));
+#if defined(__INTEL_COMPILER)
+         ptr = (Tp*)malloc(bytes);
+#else
+         ptr = (Tp*)_mm_malloc(n*sizeof(Tp),alloc_align);
+#endif
+         if(!ptr) throw std::bad_alloc();
 #endif
 
+         return ptr;
+       }
+
+      void deallocate( Tp* p, std::size_t n) noexcept {
+#ifdef __NVCOMPILER_CUDA__
+         cudaFree((void *)p);
+#elif !defined(DPCPP_BACKEND)
+
+#if defined(__INTEL_COMPILER)
+         free((void*)p);
+#else
+         _mm_free((void *)p);
+#endif
+
+#endif
+       }
+     };
+
+
+using IAllocator = AlignedAllocator<int>;
+using FAllocator = AlignedAllocator<float>;
 
 inline size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -75,28 +144,28 @@ constexpr int iparIpt   = 3;
 constexpr int iparPhi   = 4;
 constexpr int iparTheta = 5;
 
-template <typename T, int n, int bSize>
+template <typename T, typename Allocator, int n, int bSize>
 struct MPNX {
    using DataType = T;
 
    static constexpr int N    = n;
    static constexpr int BS   = bSize;
 
-   std::vector<T> data;
+   std::vector<T, Allocator> data;
 
    MPNX()                           : data(n*bSize){}
    MPNX(const size_t els)           : data(n*bSize*els){}
-   MPNX(const std::vector<T> data_) : data(data_){}
+   MPNX(const std::vector<T, Allocator> data_) : data(data_){}
 };
 
-using MP1I    = MPNX<int,   1 , bsize>;
-using MP3F    = MPNX<float, 3 , bsize>;
-using MP6F    = MPNX<float, 6 , bsize>;
-using MP3x3   = MPNX<float, 9 , bsize>;
-using MP3x6   = MPNX<float, 18, bsize>;
-using MP3x3SF = MPNX<float, 6 , bsize>;
-using MP6x6SF = MPNX<float, 21, bsize>;
-using MP6x6F  = MPNX<float, 36, bsize>;
+using MP1I    = MPNX<int,  IAllocator, 1 , bsize>;
+using MP3F    = MPNX<float,FAllocator, 3 , bsize>;
+using MP6F    = MPNX<float,FAllocator, 6 , bsize>;
+using MP3x3   = MPNX<float,FAllocator, 9 , bsize>;
+using MP3x6   = MPNX<float,FAllocator, 18, bsize>;
+using MP3x3SF = MPNX<float,FAllocator, 6 , bsize>;
+using MP6x6SF = MPNX<float,FAllocator, 21, bsize>;
+using MP6x6F  = MPNX<float,FAllocator, 36, bsize>;
 
 
 template <typename MPNTp>
