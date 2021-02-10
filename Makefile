@@ -104,8 +104,9 @@ CXX=icc
 CFLAGS1 += -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
 endif
 ifeq ($(COMPILER),llvm)
-CXX=clang
-CFLAGS1 += -Wall -O3 -I. -fopenmp -fopenmp-targets=x86_64 -lm
+CSRCS = propagate-toz-test_pstl_dpcpp.cpp	
+CXX=dpcpp
+CFLAGS1 += -std=c++17 -O2
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -lm
 endif
 ifeq ($(COMPILER),ibm)
