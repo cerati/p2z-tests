@@ -26,9 +26,9 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 #endif
 
-#define nb    ntrks/bsize
+#define nb    (ntrks/bsize)
 #ifdef _OPENARC_
-#pragma openarc #define nb    ntrks/bsize
+#pragma openarc #define nb    (ntrks/bsize)
 #endif
 
 #ifndef nevts

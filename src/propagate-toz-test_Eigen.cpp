@@ -21,7 +21,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3 -I/mnt/data1/dsr
 #define ntrks 9600
 #endif
 
-#define nb    ntrks/bsize
+#define nb    (ntrks/bsize)
 #ifndef nevts
 #define nevts 100
 #endif
