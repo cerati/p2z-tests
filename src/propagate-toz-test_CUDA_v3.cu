@@ -12,14 +12,22 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <chrono>
 #include <iomanip>
 
+#define DUMP_OUTPUT
 #define FIXED_RSEED
 //#define EXPLICIT_STRUCT_MEMBER_BINDING
+#ifdef EXPLICIT_STRUCT_MEMBER_BINDING
+#define USE_ASYNC
+#endif
+#define USE_ASYNC
+#ifndef USE_ASYNC
+#define num_streams 1
+#endif
 
 #ifndef nevts
 #define nevts 100
 #endif
 #ifndef bsize
-#define bsize 128
+#define bsize 32
 #endif
 #ifndef ntrks
 #define ntrks 9600 //122880
@@ -39,13 +47,13 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef threadsperblockx
-#define threadsperblockx 2
+#define threadsperblockx bsize
 #endif
 //#define threadsperblocky 1024/threadsperblockx
 //#define threadsperblocky 512/threadsperblockx
-#define threadsperblocky 32/threadsperblockx
+#define threadsperblocky bsize/threadsperblockx
 #ifndef blockspergrid
-#define blockspergrid 40
+#define blockspergrid nevts*nb/num_streams
 #endif
 
 #define HOSTDEV __host__ __device__
@@ -299,9 +307,15 @@ HOSTDEV float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, e
 
 #define N bsize
 __forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
-  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
-  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
-  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
+  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
+  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
+  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
+  if( threadIdx.x == 0 ) {
+    a = A->data; //ASSUME_ALIGNED(a, 64);
+    b = B->data; //ASSUME_ALIGNED(b, 64);
+    c = C->data;       //ASSUME_ALIGNED(c, 64);
+  }
+  __syncthreads();
   for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -341,12 +355,19 @@ __forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6
     c[34*N+n] = b[19*N+n];
     c[35*N+n] = b[20*N+n];
   }
+  __syncthreads();
 }
 
 __forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
-  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
-  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
-  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
+  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
+  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
+  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
+  if( threadIdx.x == 0 ) {
+    a = A->data; //ASSUME_ALIGNED(a, 64);
+    b = B->data; //ASSUME_ALIGNED(b, 64);
+    c = C->data;       //ASSUME_ALIGNED(c, 64);
+  }
+  __syncthreads();
   for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -371,15 +392,22 @@ __forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, 
     c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
     c[20*N+n] = b[35*N+n];
   }
+  __syncthreads();
 }
 
 __forceinline__ __device__ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
   // k = P Ht(HPHt + R)^-1
   // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
   // This calculates the inverse of HpHt +R
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
+  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
+  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
+  if( threadIdx.x == 0 ) {
+    a = (*A).data; //ASSUME_ALIGNED(a, 64);
+    b = (*B).data; //ASSUME_ALIGNED(b, 64);
+    c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+  }
+  __syncthreads();
   for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
     double det =
@@ -398,16 +426,22 @@ __forceinline__ __device__ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B
     c[ 7*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
     c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
   }
-  //__syncthreads(); 
+  __syncthreads(); 
 }
 
 __forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
   // k = P Ht(HPHt + R)^-1
   // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
   // This calculates the kalman gain 
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
+  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
+  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
+  if( threadIdx.x == 0 ) {
+    a = (*A).data; //ASSUME_ALIGNED(a, 64);
+    b = (*B).data; //ASSUME_ALIGNED(b, 64);
+    c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+  }
+  __syncthreads();
   for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
@@ -429,18 +463,15 @@ __forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3
     c[ 16*N+n] = a[5*N+n]*b[1*N+n] + a[10*N+n]*b[4*N+n] + a[14*N+n]*b[7*N+n];
     c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
   }
- // __syncthreads(); 
+   __syncthreads(); 
 }
 
 __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
-  MP3x3 inverse_temp;
-  MP3x6 kGain;
-  MP6x6SF newErr;
- // __syncthreads(); 
+  __shared__ MP3x3 inverse_temp;
+  __shared__ MP3x6 kGain;
+  __shared__ MP6x6SF newErr;
   KalmanGainInv(trkErr,hitErr,&inverse_temp);
- // __syncthreads(); 
   KalmanGain(trkErr,&inverse_temp,&kGain);
- // __syncthreads(); 
 
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     const float xin = x(inPar,it);
@@ -495,6 +526,7 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
     settheta(inPar,it, thetanew);
   }
   __syncthreads(); 
+  //[DEBUG on Feb. 15, 2021] below assignment does not have any effect since trkErr is a local variable.
   trkErr = &newErr;
 }
 
@@ -555,7 +587,6 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
   }
   __syncthreads(); 
   MultHelixPropEndcap(errorProp, inErr, temp);
-  __syncthreads(); 
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }
 
@@ -568,40 +599,70 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
    //ie_range = (int)(nevts/num_streams);
   //if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
   //else{ie_range = (int)(nevts/num_streams);}
-        /*__shared__*/ struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
-  for (size_t ie = blockIdx.x; ie<ie_range; ie+=gridDim.x){
-    for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
-      const MPTRK* btracks = bTk(trk,ie,ib);
-      MPTRK* obtracks = bTk(outtrk,ie,ib);
+      __shared__ struct MP6x6F errorProp, temp;
+      const MPTRK* __shared__ btracks;
+      MPTRK* __shared__ obtracks;
+      const MPHIT* __shared__ bhits;
+//      __shared__ unsigned ie;
+//      __shared__ unsigned ib;
+      __shared__ int ie;
+      __shared__ int ib;
+      int ti;
+      int lnb = nb;
+  for (ti = blockIdx.x; ti<ie_range*nb; ti+=gridDim.x){
+      ie = ti/lnb;
+      ib = ti%lnb;
+      __syncthreads();
+      if(threadIdx.x == 0) {
+/*
+          if((ti == 29999) || (ti == 10000)) {
+              printf("ie_range*nb = %d, ti = %d, nb = %d, ie = ti/nb = %d, ib = modulo(ti,nb) = %d\n", ie_range*nb, ti, nb, ie, ib);
+          }
+*/
+          btracks = bTk(trk,ie,ib);
+          obtracks = bTk(outtrk,ie,ib);
+      }
+      //__syncthreads();
       for (int layer=0;layer<nlayer;++layer){	
-        const MPHIT* bhits = bHit(hit,ie,ib,layer);
+        if(threadIdx.x == 0) {
+            bhits = bHit(hit,ie,ib,layer);
+        }
+        __syncthreads();
+     
         propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
                      &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
  //       __syncthreads();
         KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
       }
-    }
   }
 }
+//[DEBUG on Jan. 19, 2021] Temporarily disabled due to too much shared data problem.
 __global__ void GPUsequenceR(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
   //const int ie_range = (int)(nevts%num_streams);
   //if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
   //else{ie_range = (int)(nevts/num_streams);}
-  for (size_t ie = blockIdx.x; ie<ie_rangeR; ie+=gridDim.x){
-    for(size_t ib = threadIdx.y; ib <nb; ib+=blockDim.y){
-      const MPTRK* btracks = bTk(trk,ie,ib);
-      MPTRK* obtracks = bTk(outtrk,ie,ib);
+      __shared__ struct MP6x6F errorProp, temp;
+      const MPTRK* __shared__ btracks;
+      MPTRK* __shared__ obtracks;
+      const MPHIT* __shared__ bhits;
+      size_t ie;
+      size_t ib;
+  for (size_t ti = blockIdx.x; ti<ie_rangeR*nb; ti+=gridDim.x){
+      ie = ti/nb;
+      ib = ti%nb;
+      __syncthreads();
+      btracks = bTk(trk,ie,ib);
+      obtracks = bTk(outtrk,ie,ib);
       for (int layer=0;layer<nlayer;++layer){	
-        const MPHIT* bhits = bHit(hit,ie,ib,layer);
-        /*__shared__*/ struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
+        bhits = bHit(hit,ie,ib,layer);
+        __syncthreads();
         propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
                      &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
-       // __syncthreads();
         KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
       }
-    }
   }
 }
+
 inline void transferAsyncTrk(MPTRK* trk, MPTRK* trk_dev, cudaStream_t stream){
 
   cudaMemcpyAsync(trk_dev, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyHostToDevice, stream);
@@ -657,7 +718,11 @@ inline void transfer_back(MPTRK* trk, MPTRK* trk_host){
 
 int main (int argc, char* argv[]) {
 
-  printf("RUNNING CUDA!!\n");
+#ifdef USE_ASYNC
+  printf("RUNNING CUDA Async Version!!\n");
+#else
+  printf("RUNNING CUDA Sync Version!!\n");
+#endif
   printf("Streams: %d, blocks: %d, threads(x,y): (%d,%d)\n",num_streams,blockspergrid,threadsperblockx,threadsperblocky);
   int itr;
   ATRK inputtrk = {
@@ -690,9 +755,9 @@ int main (int argc, char* argv[]) {
   //[DEBUG by Seyong on Dec. 28, 2020] add an explicit srand(1) call to generate fixed inputs for better debugging.
   srand(1);
 #endif
-//  cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
-  cudaFuncSetCacheConfig(GPUsequence,cudaFuncCachePreferL1);
-  cudaFuncSetCacheConfig(GPUsequenceR,cudaFuncCachePreferL1);
+  cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+//  cudaFuncSetCacheConfig(GPUsequence,cudaFuncCachePreferL1);
+//  cudaFuncSetCacheConfig(GPUsequenceR,cudaFuncCachePreferL1);
   MPTRK* trk = prepareTracks(inputtrk);
   MPHIT* hit = prepareHits(inputhit);
   //cudaHostRegister((void**)&trk,nevts*nb*sizeof(MPTRK),cudaHostRegisterDefault);
@@ -735,8 +800,12 @@ int main (int argc, char* argv[]) {
   for(itr=0; itr<NITER; itr++){
     //  transfer(trk,hit, trk_dev,hit_dev);
     for (int s = 0; s<num_streams;s++){
+#ifdef USE_ASYNC
 //      transferAsyncTrk(trk, trk_dev,streams[s]);
       cudaMemcpyAsync(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[s]);
+#else
+      cudaMemcpy(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice);
+#endif
 //[DEBUG by Seyong on Dec. 22, 2020] We don't need explicit struct-member-binding for struct-of-arrays.
 #ifdef EXPLICIT_STRUCT_MEMBER_BINDING
       cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->par, &(trk+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyHostToDevice, streams[s]);
@@ -747,7 +816,11 @@ int main (int argc, char* argv[]) {
       cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->q).data), &(((trk+(s*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[s]);
 #endif
       
+#ifdef USE_ASYNC
       cudaMemcpyAsync(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[s]);
+#else
+      cudaMemcpy(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice);
+#endif
 #ifdef EXPLICIT_STRUCT_MEMBER_BINDING
       cudaMemcpyAsync(&(hit_dev+(s*stream_chunk*nlayer))->pos,&(hit+(s*stream_chunk*nlayer))->pos,sizeof(MP3F), cudaMemcpyHostToDevice, streams[s]);
       cudaMemcpyAsync(&((hit_dev+(s*stream_chunk*nlayer))->pos).data,&((hit+(s*stream_chunk*nlayer))->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
@@ -756,7 +829,11 @@ int main (int argc, char* argv[]) {
 #endif
     }  
     if(stream_remainder != 0){
+#ifdef USE_ASYNC
       cudaMemcpyAsync(trk_dev+(num_streams*stream_chunk), trk+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[num_streams]);
+#else
+      cudaMemcpy(trk_dev+(num_streams*stream_chunk), trk+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyHostToDevice);
+#endif
 #ifdef EXPLICIT_STRUCT_MEMBER_BINDING
       cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->par, &(trk+(num_streams*stream_chunk))->par, sizeof(MP6F), cudaMemcpyHostToDevice, streams[num_streams]);
       cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->par).data), &(((trk+(num_streams*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
@@ -766,7 +843,11 @@ int main (int argc, char* argv[]) {
       cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->q).data), &(((trk+(num_streams*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[num_streams]);
 #endif
       
+#ifdef USE_ASYNC
       cudaMemcpyAsync(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[num_streams]);
+#else
+      cudaMemcpy(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice);
+#endif
 #ifdef EXPLICIT_STRUCT_MEMBER_BINDING
       cudaMemcpyAsync(&(hit_dev+(num_streams*stream_chunk*nlayer))->pos,&(hit+(num_streams*stream_chunk*nlayer))->pos,sizeof(MP3F), cudaMemcpyHostToDevice, streams[num_streams]);
       cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->pos).data,&((hit+(num_streams*stream_chunk*nlayer))->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
@@ -775,17 +856,29 @@ int main (int argc, char* argv[]) {
 #endif
     }
 
-	  //cudaDeviceSynchronize(); 
+	//cudaDeviceSynchronize(); 
     for (int s = 0; s<num_streams;++s){
+      //printf("stream = %d, grid (%d, %d, %d), block(%d, %d, %d), stream_chunk = %d\n",s, grid.x, grid.y, grid.z, block.x, block.y, block.z, stream_chunk);
+#ifdef USE_ASYNC
   	  GPUsequence<<<grid,block,0,streams[s]>>>(trk_dev+(s*stream_chunk),hit_dev+(s*stream_chunk*nlayer),outtrk_dev+(s*stream_chunk),s);
+#else
+  	  GPUsequence<<<grid,block,0,0>>>(trk_dev+(s*stream_chunk),hit_dev+(s*stream_chunk*nlayer),outtrk_dev+(s*stream_chunk),s);
+#endif
     }  
     if(stream_remainder != 0){
+#ifdef USE_ASYNC
   	  GPUsequenceR<<<grid,block,0,streams[num_streams]>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streams*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
+#else
+  	  GPUsequenceR<<<grid,block,0,0>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streams*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
+#endif
     }
-	  //cudaDeviceSynchronize(); 
 //     // transfer_back(outtrk_dev,outtrk); 
     for (int s = 0; s<num_streams;s++){
+#ifdef USE_ASYNC
       cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
+#else
+      cudaMemcpy(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost);
+#endif
 #ifdef EXPLICIT_STRUCT_MEMBER_BINDING
       cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->par, &(outtrk_dev+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[s]);
       cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->par).data), &(((outtrk_dev+(s*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[s]);
@@ -796,7 +889,11 @@ int main (int argc, char* argv[]) {
 #endif
     }
     if(stream_remainder != 0){
+#ifdef USE_ASYNC
       cudaMemcpyAsync(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[num_streams]);
+#else
+      cudaMemcpy(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost);
+#endif
 #ifdef EXPLICIT_STRUCT_MEMBER_BINDING
       cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->par, &(outtrk_dev+(num_streams*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[num_streams]);
       cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->par).data), &(((outtrk_dev+(num_streams*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[num_streams]);
@@ -806,10 +903,21 @@ int main (int argc, char* argv[]) {
       cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->q).data), &(((outtrk_dev+(num_streams*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[num_streams]);
 #endif
     }
+#ifdef USE_ASYNC
+	//[DEBUG on Feb. 15, 2021] Enable below synchronization if the body of the outermost itr loop is the main computation
+	//to measure and the itr loop is used for averaging purpose.
+	//If the itr loop is the main computation to measure, we can minimize unnecessary synchronization overhead for the whole itr loop
+	//by deferring the device synchronzation to after the itr loop.
+	//cudaDeviceSynchronize(); 
+#endif
 
   } //end itr loop
   
-  cudaDeviceSynchronize(); 
+#ifdef USE_ASYNC
+	//[DEBUG on Feb. 15, 2021] If the itr loop is the main computation to measure, we can minimize unnecessary synchronization overhead 
+	//for the whole itr loop by putting the device synchronization here, instead of the above one.
+	cudaDeviceSynchronize(); 
+#endif
   auto wall_stop = std::chrono::high_resolution_clock::now();
 
   for (int s = 0; s<stream_range;s++){
@@ -821,6 +929,15 @@ int main (int argc, char* argv[]) {
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, num_streams);
+#ifdef DUMP_OUTPUT
+   FILE *fp_x;
+   FILE *fp_y;
+   FILE *fp_z;
+   fp_x = fopen("output_x.txt", "w");
+   fp_y = fopen("output_y.txt", "w");
+   fp_z = fopen("output_z.txt", "w");
+#endif
+
 
 
    float avgx = 0, avgy = 0, avgz = 0;
@@ -834,6 +951,11 @@ int main (int argc, char* argv[]) {
        float pt_ = 1./ipt(outtrk,ie,it);
        float phi_ = phi(outtrk,ie,it);
        float theta_ = theta(outtrk,ie,it);
+#ifdef DUMP_OUTPUT
+       fprintf(fp_x, "ie=%d, it=%d, %f\n",ie, it, x_);
+       fprintf(fp_y, "%f\n", y_);
+       fprintf(fp_z, "%f\n", z_);
+#endif
        //if(x_ ==0 || y_==0||z_==0){
        //printf("x: %f,y: %f,z: %f, ie: %d, it: %f\n",x_,y_,z_,ie,it);
        //continue;
@@ -853,6 +975,14 @@ int main (int argc, char* argv[]) {
        avgdz += (z_-hz_)/z_;
      }
    }
+#ifdef DUMP_OUTPUT
+   fclose(fp_x);
+   fclose(fp_y);
+   fclose(fp_z);
+   fp_x = fopen("input_x.txt", "w");
+   fp_y = fopen("input_y.txt", "w");
+   fp_z = fopen("input_z.txt", "w");
+#endif
    avgpt = avgpt/float(nevts*ntrks);
    avgphi = avgphi/float(nevts*ntrks);
    avgtheta = avgtheta/float(nevts*ntrks);
@@ -879,8 +1009,21 @@ int main (int argc, char* argv[]) {
        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
+#ifdef DUMP_OUTPUT
+       x_ = x(trk,ie,it);
+       y_ = y(trk,ie,it);
+       z_ = z(trk,ie,it);
+       fprintf(fp_x, "%f\n", x_);
+       fprintf(fp_y, "%f\n", y_);
+       fprintf(fp_z, "%f\n", z_);
+#endif
      }
    }
+#ifdef DUMP_OUTPUT
+   fclose(fp_x);
+   fclose(fp_y);
+   fclose(fp_z);
+#endif
 
    stdx = sqrtf(stdx/float(nevts*ntrks));
    stdy = sqrtf(stdy/float(nevts*ntrks));
