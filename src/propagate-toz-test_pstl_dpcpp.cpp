@@ -30,7 +30,8 @@ using oneapi::dpl::counting_iterator;
 #define ntrks 9600
 #endif
 
-#define nb    ntrks/bsize
+#define nb    (ntrks/bsize)
+
 #ifndef nevts
 #define nevts 100
 #endif
