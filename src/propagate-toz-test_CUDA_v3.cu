@@ -12,7 +12,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <chrono>
 #include <iomanip>
 
-#define DUMP_OUTPUT
+//#define DUMP_OUTPUT
 #define FIXED_RSEED
 //#define EXPLICIT_STRUCT_MEMBER_BINDING
 #ifdef EXPLICIT_STRUCT_MEMBER_BINDING
