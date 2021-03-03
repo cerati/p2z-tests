@@ -116,6 +116,7 @@ constexpr int alloc_align  = (2*1024*1024);
        }
      };
 
+#define LET_LAYOUT
 
 using IntAllocator   = AlignedAllocator<int>;
 using FloatAllocator = AlignedAllocator<float>;
@@ -184,25 +185,25 @@ struct MPNXAccessor {
 	}
 
    T* operator()(const size_t i = 0) const {return (data_ + stride*i);}
-   T  operator()(const size_t i, const size_t j) const {return (data_ + stride*i)[j];}
-   T  operator[](const size_t i) const {return data_[i];}
+   T& operator()(const size_t i, const size_t j) const {return (data_ + stride*i)[j];}
+   T& operator[](const size_t i) const {return data_[i];}
 
-   // Restricted to MP3F (x,y,z) and MP6F (x,y,z,ipt,phi,theta) fields only: 
+   // Restricted to MP3F (x,y,z) and MP6F (x,y,z,ipt,phi,theta) fields only:
    template <int ipar, typename AccessedFieldTp = MPNTp>
-   typename std::enable_if<(std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3) or (std::is_same<AccessedFieldTp, MP6F>::value and ipar < 6), T>::type
+   typename std::enable_if<(std::is_same<AccessedFieldTp, MP3F>::value or std::is_same<AccessedFieldTp, MP6F>::value) and (ipar < n), T>::type
    Get(size_t it, size_t id)  const { return (data_ + stride*id)[it + ipar*bsz]; }
 
-   // Restricted to MP3F (x,y,z) fields only:   
-   template <int ipar, typename AccessedFieldTp = MPNTp> 
+   // Restricted to MP3F (x,y,z) fields only:
+   template <int ipar, typename AccessedFieldTp = MPNTp>
    typename std::enable_if<std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3, void>::type
    Set(size_t it, float val, size_t id)    { (data_ + stride*id)[it + ipar*bsz] = val; }
 
    // same as above but with a (shifted) raw pointer (and more generic)
    template <int ipar>
-   static T Get(const T* local_data, size_t it)  { return local_data[it + ipar*bsz]; }  
+   static T Get(const T* local_data, size_t it)  { return local_data[it + ipar*bsz]; }
 
    template <int ipar>
-   static void Set(T* local_data, size_t it, T val)     { local_data[it + ipar*bsz] = val; }  
+   static void Set(T* local_data, size_t it, T val)     { local_data[it + ipar*bsz] = val; }
 
 };
 
@@ -253,7 +254,7 @@ struct MPHITAccessor {
   MPHITAccessor(const MPHIT &in) : pos(in.pos), cov(in.cov) {}
 };
 
-//Pure host version: 
+//Pure static array versions:
 
 template <typename T, int N, int bSize>
 struct MPNX_ {
@@ -291,11 +292,11 @@ float randn(float mu, float sigma) {
     U2 = -1 + ((float) rand () / RAND_MAX) * 2;
     W = pow (U1, 2) + pow (U2, 2);
   }
-  while (W >= 1 || W == 0); 
+  while (W >= 1 || W == 0);
   mult = sqrt ((-2 * log (W)) / W);
   X1 = U1 * mult;
-  X2 = U2 * mult; 
-  call = !call; 
+  X2 = U2 * mult;
+  call = !call;
   return (mu + sigma * (float) X1);
 }
 
@@ -378,25 +379,25 @@ inline float z(const MPHIT_* hits, size_t ev, size_t tk)    { return pos(hits, e
 std::shared_ptr<MPTRK> prepareTracksN(struct ATRK inputtrk) {
 
   auto result = std::make_shared<MPTRK>(nevts*nb);
+  //create an accessor field:
+  std::unique_ptr<MPTRKAccessor> rA(new MPTRKAccessor(*result));
 
   // store in element order for bunches of bsize matrices (a la matriplex)
-  const size_t stride_par = bsize*6;
-  const size_t stride_cov = bsize*21;
-  const size_t stride_q   = bsize*1;
+
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
-      const int l = ib + nb*ie; 
+      const int l = ib + nb*ie;
       for (size_t it=0;it<bsize;++it) {
-    	//par
-    	for (size_t ip=0;ip<6;++ip) {
-    	  result->par.data[l*stride_par + ip*bsize + it] = (1+smear*randn(0,1))*inputtrk.par[ip];
-    	}
-    	//cov
-    	for (size_t ip=0;ip<21;++ip) {
-    	  result->cov.data[l*stride_cov + ip*bsize + it] = (1+smear*randn(0,1))*inputtrk.cov[ip];
-    	}
-    	//q
-    	result->q.data[l*stride_q + it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+    	  //par
+    	  for (size_t ip=0;ip<6;++ip) {
+          rA->par(l)[ip*bsize + it] = (1+smear*randn(0,1))*inputtrk.par[ip];
+    	  }
+    	  //cov
+    	  for (size_t ip=0;ip<21;++ip) {
+          rA->cov(l)[ip*bsize + it] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+    	  }
+    	  //q
+        rA->q(l)[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);
       }
     }
   }
@@ -404,6 +405,30 @@ std::shared_ptr<MPTRK> prepareTracksN(struct ATRK inputtrk) {
 }
 
 void convertTracks(MPTRK_* out,  const MPTRK* inp) {
+  //create an accessor field:
+  std::unique_ptr<MPTRKAccessor> inpA(new MPTRKAccessor(*inp));
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      const int l = ib + nb*ie;
+      for (size_t it=0;it<bsize;++it) {
+    	  //par
+    	  for (size_t ip=0;ip<6;++ip) {
+    	    out[ib + nb*ie].par.data[it + ip*bsize] = inpA->par(l)[ip*bsize + it];
+    	  }
+    	  //cov
+    	  for (size_t ip=0;ip<21;++ip) {
+    	    out[ib + nb*ie].cov.data[it + ip*bsize] = inpA->cov(l)[ip*bsize + it];
+    	  }
+    	  //q
+    	  out[ib + nb*ie].q.data[it] = inpA->q(l)[it];//fixme check
+      }
+    }
+  }
+  return;
+}
+
+void convertTracks2(MPTRK* out,  const MPTRK_* inp) {
   // store in element order for bunches of bsize matrices (a la matriplex)
   const size_t stride_par = bsize*6;
   const size_t stride_cov = bsize*21;
@@ -415,14 +440,105 @@ void convertTracks(MPTRK_* out,  const MPTRK* inp) {
       for (size_t it=0;it<bsize;++it) {
     	//par
     	for (size_t ip=0;ip<6;++ip) {
-    	  out[ib + nb*ie].par.data[it + ip*bsize] = inp->par.data[l*stride_par + ip*bsize + it];
+    	  out->par.data[l*stride_par + ip*bsize + it] = inp[ib + nb*ie].par.data[it + ip*bsize];
     	}
     	//cov
     	for (size_t ip=0;ip<21;++ip) {
-    	  out[ib + nb*ie].cov.data[it + ip*bsize] = inp->cov.data[l*stride_cov + ip*bsize + it];
+    	  out->cov.data[l*stride_cov + ip*bsize + it] = inp[ib + nb*ie].cov.data[it + ip*bsize];
     	}
     	//q
-    	out[ib + nb*ie].q.data[it] = inp->q.data[l*stride_q + it];//fixme check
+    	out->q.data[l*stride_q + it] = inp[ib + nb*ie].q.data[it];//fixme check
+      }
+    }
+  }
+  return;
+}
+
+std::shared_ptr<MPHIT> prepareHitsN(struct AHIT inputhit) {
+  auto result = std::make_shared<MPHIT>(nlayer*nevts*nb);
+  //create an accessor field:
+  std::unique_ptr<MPHITAccessor> rA(new MPHITAccessor(*result));
+
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t lay=0;lay<nlayer;++lay) {
+    for (size_t ie=0;ie<nevts;++ie) {
+      for (size_t ib=0;ib<nb;++ib) {
+        const size_t l = ib + nb*ie;
+        for (size_t it=0;it<bsize;++it) {
+        	//pos
+        	for (size_t ip=0;ip<3;++ip) {
+#ifdef LET_LAYOUT
+            rA->pos(lay+nlayer*l)[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+#else
+            rA->pos(lay*nevts*nb+l)[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+#endif
+        	}
+        	//cov
+        	for (size_t ip=0;ip<6;++ip) {
+#ifdef LET_LAYOUT
+            rA->cov(lay+nlayer*l)[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+#else
+            rA->cov(lay*nevts*nb+l)[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+#endif
+        	}
+        }
+      }
+    }
+  }
+  return std::move(result);
+}
+
+void convertHits(MPHIT_* out, const MPHIT* inp) {
+  //create an accessor field:
+  std::unique_ptr<MPHITAccessor> inpA(new MPHITAccessor(*inp));
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t lay=0;lay<nlayer;++lay) {
+    for (size_t ie=0;ie<nevts;++ie) {
+      for (size_t ib=0;ib<nb;++ib) {
+        const size_t l = ib + nb*ie;
+        for (size_t it=0;it<bsize;++it) {
+        	//pos
+        	for (size_t ip=0;ip<3;++ip) {
+#ifdef LET_LAYOUT
+            out[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = inpA->pos(lay+nlayer*l)[it + ip*bsize];
+#else
+            out[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = inpA->pos(lay*nevts*nb+l)[it + ip*bsize];
+#endif
+        	}
+        	//cov
+        	for (size_t ip=0;ip<6;++ip) {
+#ifdef LET_LAYOUT
+            out[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = inpA->cov(lay+nlayer*l)[it + ip*bsize];
+#else
+            out[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = inpA->cov(lay*nevts*nb+l)[it + ip*bsize];
+#endif
+        	}
+        }
+      }
+    }
+  }
+  return;
+}
+
+void convertHits2(MPHIT* out, const MPHIT_* inp) {
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  const size_t stride_pos = bsize*3;
+  const size_t stride_cov = bsize*6;
+
+  for (size_t lay=0;lay<nlayer;++lay) {
+    for (size_t ie=0;ie<nevts;++ie) {
+      for (size_t ib=0;ib<nb;++ib) {
+        const size_t l = ib + nb*ie;
+        for (size_t it=0;it<bsize;++it) {
+        	//pos
+        	for (size_t ip=0;ip<3;++ip) {
+        	  out->pos.data[(lay+nlayer*l)*stride_pos + ip*bsize + it] = inp[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize];
+        	}
+        	//cov
+        	for (size_t ip=0;ip<6;++ip) {
+        	  out->cov.data[(lay+nlayer*l)*stride_cov + ip*bsize +it] = inp[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize];
+        	}
+        }
       }
     }
   }
@@ -452,67 +568,15 @@ MPHIT_* prepareHits(struct AHIT inputhit) {
   return result;
 }
 
-std::shared_ptr<MPHIT> prepareHitsN(struct AHIT inputhit) {
-  auto result = std::make_shared<MPHIT>(nlayer*nevts*nb);
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  const size_t stride_pos = bsize*3;
-  const size_t stride_cov = bsize*6;
-
-  for (size_t lay=0;lay<nlayer;++lay) {
-    for (size_t ie=0;ie<nevts;++ie) {
-      for (size_t ib=0;ib<nb;++ib) {
-        const size_t l = ib + nb*ie;
-        for (size_t it=0;it<bsize;++it) {
-        	//pos
-        	for (size_t ip=0;ip<3;++ip) {
-        	  result->pos.data[(lay+nlayer*l)*stride_pos + ip*bsize + it] = (1+smear*randn(0,1))*inputhit.pos[ip];
-        	}
-        	//cov
-        	for (size_t ip=0;ip<6;++ip) {
-        	  result->cov.data[(lay+nlayer*l)*stride_cov + ip*bsize +it] = (1+smear*randn(0,1))*inputhit.cov[ip];
-        	}
-        }
-      }
-    }
-  }
-  return std::move(result);
-}
-
-void convertHits(MPHIT_* out, const MPHIT* inp) {
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  const size_t stride_pos = bsize*3;
-  const size_t stride_cov = bsize*6;
-
-  for (size_t lay=0;lay<nlayer;++lay) {
-    for (size_t ie=0;ie<nevts;++ie) {
-      for (size_t ib=0;ib<nb;++ib) {
-        const size_t l = ib + nb*ie;
-        for (size_t it=0;it<bsize;++it) {
-        	//pos
-        	for (size_t ip=0;ip<3;++ip) {
-        	  out[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = inp->pos.data[(lay+nlayer*l)*stride_pos + ip*bsize + it];
-        	}
-        	//cov
-        	for (size_t ip=0;ip<6;++ip) {
-        	  out[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = inp->cov.data[(lay+nlayer*l)*stride_cov + ip*bsize +it];
-        	}
-        }
-      }
-    }
-  }
-  return;
-}
-
-
-#define N bsize 
+#define N bsize
 
 template <size_t block_size = 1>
-void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, const MP6x6SFAccessor &B, MP6x6SFAccessor &C, const size_t lid, const size_t offset = 0) {
-  const auto a = A(lid);
+void MultHelixPropTranspEndcap(const MP6x6FAccessor &a, const MP6x6SFAccessor &B, MP6x6SFAccessor &C, const size_t lid, const size_t offset = 0) {
+
   const auto b = B(lid);
-  auto c = C(lid);  
+  auto c = C(lid);
 #pragma simd
-  for (int n = offset; n < N; n += block_size)
+  for (int n = offset; n < N; n += block_size)//??
   {
     auto temp00 = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     //auto temp01 = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
@@ -576,7 +640,7 @@ void MultHelixPropTranspEndcap(const MP6x6FAccessor &A, const MP6x6SFAccessor &B
 }
 
 template<typename T>
-inline typename std::enable_if<std::is_floating_point<T>::value>::type 
+inline typename std::enable_if<std::is_floating_point<T>::value>::type
 KalmanGainInv(const T* a, const T* b, std::array<T, 10> &c, const int n) {
   double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
@@ -599,10 +663,10 @@ KalmanGainInv(const T* a, const T* b, std::array<T, 10> &c, const int n) {
 
 template <size_t block_size = 1>
 void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
-                  MP6FAccessor &inParAcc, 
-		  const MPHITAccessor &bhits, 
-                  const size_t lid, 
-                  const size_t llid, 
+                  MP6FAccessor &inParAcc,
+		  const MPHITAccessor &bhits,
+                  const size_t lid,
+                  const size_t llid,
                   const size_t offset = 0) {
 
   const auto trkErr   = trkErrAcc(lid);
@@ -621,11 +685,10 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
     const auto thetain = MP6FAccessor::Get<iparTheta>(inPar, it);
     const auto xout = MP3FAccessor::Get<iparX>(msP, it);
     const auto yout = MP3FAccessor::Get<iparY>(msP, it);
-    const auto zout = MP3FAccessor::Get<iparZ>(msP, it);
 
     std::array<float, 10> temp{0.0f};
 
-    KalmanGainInv(trkErr, hitErr, temp, it); 
+    KalmanGainInv(trkErr, hitErr, temp, it);
 
     const auto kGain00 = trkErr[0*bsize+it]*temp[0] + trkErr[1*bsize+it]*temp[3] + trkErr[2*bsize+it]*temp[6];
     const auto kGain01 = trkErr[0*bsize+it]*temp[1] + trkErr[1*bsize+it]*temp[4] + trkErr[2*bsize+it]*temp[7];
@@ -645,7 +708,7 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
     const auto kGain15 = trkErr[5*bsize+it]*temp[0] + trkErr[10*bsize+it]*temp[3] + trkErr[14*bsize+it]*temp[6];
     const auto kGain16 = trkErr[5*bsize+it]*temp[1] + trkErr[10*bsize+it]*temp[4] + trkErr[14*bsize+it]*temp[7];
     const auto kGain17 = trkErr[5*bsize+it]*temp[2] + trkErr[10*bsize+it]*temp[5] + trkErr[14*bsize+it]*temp[8];
-  
+
     const auto xnew     = xin     + (kGain00*(xout-xin)) +(kGain01*(yout-yin));
     const auto ynew     = yin     + (kGain03*(xout-xin)) +(kGain04*(yout-yin));
     const auto znew     = zin     + (kGain06*(xout-xin)) +(kGain07*(yout-yin));
@@ -662,7 +725,7 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
     temp[2] = trkErr[3*bsize+it] - (kGain00*trkErr[3*bsize+it]+kGain01*trkErr[8*bsize+it]+kGain02*trkErr[12*bsize+it]);
     temp[3] = trkErr[4*bsize+it] - (kGain00*trkErr[4*bsize+it]+kGain01*trkErr[9*bsize+it]+kGain02*trkErr[13*bsize+it]);
     temp[4] = trkErr[5*bsize+it] - (kGain00*trkErr[5*bsize+it]+kGain01*trkErr[10*bsize+it]+kGain02*trkErr[14*bsize+it]);
-  
+
     temp[5] = trkErr[6*bsize+it] - (kGain03*trkErr[1*bsize+it]+kGain04*trkErr[6*bsize+it]+kGain05*trkErr[7*bsize+it]);
 
     trkErr[1*bsize+it] = temp[0];
@@ -672,7 +735,7 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
     temp[5] = trkErr[8*bsize+it] - (kGain03*trkErr[3*bsize+it]+kGain04*trkErr[8*bsize+it]+kGain05*trkErr[12*bsize+it]);
     temp[6] = trkErr[9*bsize+it] - (kGain03*trkErr[4*bsize+it]+kGain04*trkErr[9*bsize+it]+kGain05*trkErr[13*bsize+it]);
     temp[7] = trkErr[10*bsize+it] - (kGain03*trkErr[5*bsize+it]+kGain04*trkErr[10*bsize+it]+kGain05*trkErr[14*bsize+it]);
-  
+
     temp[8] = trkErr[11*bsize+it] - (kGain06*trkErr[2*bsize+it]+kGain07*trkErr[7*bsize+it]+kGain08*trkErr[11*bsize+it]);
 
     trkErr[2*bsize+it]  = temp[1];
@@ -696,7 +759,7 @@ void KalmanUpdate(MP6x6SFAccessor  &trkErrAcc,
     temp[5] = trkErr[17*bsize+it] - (kGain09*trkErr[5*bsize+it]+kGain10*trkErr[10*bsize+it]+kGain11*trkErr[14*bsize+it]);
 
     trkErr[17*bsize+it] = temp[5];
-  
+
     temp[1] = trkErr[18*bsize+it] - (kGain12*trkErr[4*bsize+it]+kGain13*trkErr[9*bsize+it]+kGain14*trkErr[13*bsize+it]);
 
     trkErr[4*bsize+it]  = temp[3];
@@ -731,27 +794,28 @@ const float kfact = 100/3.8;
 
 template <size_t block_size = 1>
 void propagateToZ(const MPTRKAccessor &btracks,
-		  const MPHITAccessor &bhits,
+		              const MPHITAccessor &bhits,
                   MPTRKAccessor  &obtracks,
-                  MP6x6FAccessor &errorPropAcc,  
-                  const size_t lid, 
-                  const size_t llid, 
+                  const size_t lid,
+                  const size_t llid,
                   const size_t offset = 0) {
 
   const auto inPar    = btracks.par(lid);
   const auto inChg    = btracks.q  (lid);
+  const auto inErr    = btracks.cov(lid);
 
   const auto msP      = bhits.pos(llid);
 
-  auto outErr    = obtracks.cov(lid); 
-  auto outPar    = obtracks.par(lid); 
-  auto errorProp = errorPropAcc(lid);
+  auto outErr    = obtracks.cov(lid);
+  auto outPar    = obtracks.par(lid);
+
+
 #pragma simd
-  for (size_t it=offset;it<bsize; it += block_size) {	
+  for (size_t it=offset;it<bsize; it += block_size) {
     const float zout = MP3FAccessor::Get<iparZ>(msP, it);
     const float k    = inChg[it]*kfact;//100/3.8;
     const float deltaZ = zout - MP6FAccessor::Get<iparZ>(inPar, it);
-    const float pt   = 1. / MP6FAccessor::Get<iparIpt>(inPar, it);
+    const float pt   = 1.0f / MP6FAccessor::Get<iparIpt>(inPar, it);
     const float cosP = cosf(MP6FAccessor::Get<iparPhi>(inPar, it));
     const float sinP = sinf(MP6FAccessor::Get<iparPhi>(inPar, it));
     const float cosT = cosf(MP6FAccessor::Get<iparTheta>(inPar, it));
@@ -759,7 +823,7 @@ void propagateToZ(const MPTRKAccessor &btracks,
 
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float icosT = 1.0/cosT;
+    const float icosT = 1.0f/cosT;
     const float icosTk = icosT/k;
     const float alpha = deltaZ*sinT*MP6FAccessor::Get<iparIpt>(inPar, it)*icosTk;
 
@@ -771,27 +835,65 @@ void propagateToZ(const MPTRKAccessor &btracks,
     MP6FAccessor::Set<iparIpt>(outPar,it, MP6FAccessor::Get<iparIpt>(inPar, it));
     MP6FAccessor::Set<iparPhi>(outPar,it, MP6FAccessor::Get<iparPhi>(inPar, it)+alpha );
     MP6FAccessor::Set<iparTheta>(outPar,it, MP6FAccessor::Get<iparTheta>(inPar, it) );
-    
+
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
-#pragma unroll    
-    for (size_t i=0;i<6;++i) errorProp[bsize*PosInMtrx(i,i,6) + it] = 1.;
 
-    errorProp[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
-    errorProp[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
-    errorProp[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
-    errorProp[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
-    errorProp[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
-    errorProp[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
-    errorProp[bsize*PosInMtrx(4,2,6) + it] = -MP6FAccessor::Get<iparIpt>(inPar, it)*sinT*(icosTk);
-    errorProp[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
-    errorProp[bsize*PosInMtrx(4,5,6) + it] = MP6FAccessor::Get<iparIpt>(inPar, it)*deltaZ*(icosT*icosTk);
+    auto errorProp2  = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
+    auto errorProp3  = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
+    auto errorProp4  = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
+    auto errorProp5  = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
+    auto errorProp8  = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
+    auto errorProp9  = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
+    auto errorProp10 = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    auto errorProp11 = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
+    auto errorProp26 = -MP6FAccessor::Get<iparIpt>(inPar, it)*sinT*(icosTk);
+    auto errorProp27 = sinT*deltaZ*(icosTk);
+    auto errorProp29 = MP6FAccessor::Get<iparIpt>(inPar, it)*deltaZ*(icosT*icosTk);
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    auto temp00 = inErr[ 0*N+it] + errorProp2 *inErr[ 3*N+it] + errorProp3 *inErr[ 6*N+it] + errorProp4 *inErr[10*N+it] + errorProp5 *inErr[15*N+it];
+    auto temp02 = inErr[ 3*N+it] + errorProp2 *inErr[ 5*N+it] + errorProp3 *inErr[ 8*N+it] + errorProp4 *inErr[12*N+it] + errorProp5 *inErr[17*N+it];
+    auto temp03 = inErr[ 6*N+it] + errorProp2 *inErr[ 8*N+it] + errorProp3 *inErr[ 9*N+it] + errorProp4 *inErr[13*N+it] + errorProp5 *inErr[18*N+it];
+    auto temp04 = inErr[10*N+it] + errorProp2 *inErr[12*N+it] + errorProp3 *inErr[13*N+it] + errorProp4 *inErr[14*N+it] + errorProp5 *inErr[19*N+it];
+    auto temp05 = inErr[15*N+it] + errorProp2 *inErr[17*N+it] + errorProp3 *inErr[18*N+it] + errorProp4 *inErr[19*N+it] + errorProp5 *inErr[20*N+it];
+    auto temp06 = inErr[ 1*N+it] + errorProp8 *inErr[ 3*N+it] + errorProp9 *inErr[ 6*N+it] + errorProp10 *inErr[10*N+it] + errorProp11 *inErr[15*N+it];
+    auto temp07 = inErr[ 2*N+it] + errorProp8 *inErr[ 4*N+it] + errorProp9 *inErr[ 7*N+it] + errorProp10 *inErr[11*N+it] + errorProp11 *inErr[16*N+it];
+    auto temp08 = inErr[ 4*N+it] + errorProp8 *inErr[ 5*N+it] + errorProp9 *inErr[ 8*N+it] + errorProp10 *inErr[12*N+it] + errorProp11 *inErr[17*N+it];
+    auto temp09 = inErr[ 7*N+it] + errorProp8 *inErr[ 8*N+it] + errorProp9 *inErr[ 9*N+it] + errorProp10 *inErr[13*N+it] + errorProp11 *inErr[18*N+it];
+    auto temp10 = inErr[11*N+it] + errorProp8 *inErr[12*N+it] + errorProp9 *inErr[13*N+it] + errorProp10 *inErr[14*N+it] + errorProp11 *inErr[19*N+it];
+    auto temp11 = inErr[16*N+it] + errorProp8 *inErr[17*N+it] + errorProp9 *inErr[18*N+it] + errorProp10 *inErr[19*N+it] + errorProp11 *inErr[20*N+it];
+
+    auto temp24 = errorProp26 *inErr[ 3*N+it] + errorProp27 *inErr[ 6*N+it] + inErr[10*N+it] + errorProp29 *inErr[15*N+it];
+    auto temp25 = errorProp26 *inErr[ 4*N+it] + errorProp27 *inErr[ 7*N+it] + inErr[11*N+it] + errorProp29 *inErr[16*N+it];
+    auto temp26 = errorProp26 *inErr[ 5*N+it] + errorProp27 *inErr[ 8*N+it] + inErr[12*N+it] + errorProp29 *inErr[17*N+it];
+    auto temp27 = errorProp26 *inErr[ 8*N+it] + errorProp27 *inErr[ 9*N+it] + inErr[13*N+it] + errorProp29 *inErr[18*N+it];
+    auto temp28 = errorProp26 *inErr[12*N+it] + errorProp27 *inErr[13*N+it] + inErr[14*N+it] + errorProp29 *inErr[19*N+it];
+    auto temp29 = errorProp26 *inErr[17*N+it] + errorProp27 *inErr[18*N+it] + inErr[19*N+it] + errorProp29 *inErr[20*N+it];
+
+    outErr[ 0*N+it] = temp00 + temp02*errorProp2 + temp03*errorProp3 + temp04*errorProp4 + temp05*errorProp5;
+    outErr[ 1*N+it] = temp06 + temp08*errorProp2 + temp09*errorProp3 + temp10*errorProp4 + temp11*errorProp5;
+    outErr[ 2*N+it] = temp07 + temp08*errorProp8 + temp09*errorProp9 + temp10*errorProp10 + temp11*errorProp11;
+    outErr[ 3*N+it] = 0.0f;
+    outErr[ 4*N+it] = 0.0f;
+    outErr[ 5*N+it] = 0.0f;
+    outErr[ 6*N+it] = inErr[ 6*N+it] + inErr[ 8*N+it]*errorProp2 + inErr[ 9*N+it]*errorProp3 + inErr[13*N+it]*errorProp4 + inErr[18*N+it]*errorProp5;
+    outErr[ 7*N+it] = inErr[ 7*N+it] + inErr[ 8*N+it]*errorProp8 + inErr[ 9*N+it]*errorProp9 + inErr[13*N+it]*errorProp10 + inErr[18*N+it]*errorProp11;
+    outErr[ 8*N+it] = 0.0f;
+    outErr[ 9*N+it] = inErr[ 9*N+it];
+    outErr[10*N+it] = temp24 + temp26*errorProp2 + temp27*errorProp3 + temp28*errorProp4 + temp29*errorProp5;
+    outErr[11*N+it] = temp25 + temp26*errorProp8 + temp27*errorProp9 + temp28*errorProp10 + temp29*errorProp11;
+    outErr[12*N+it] = 0.0f;
+    outErr[13*N+it] = temp27;
+    outErr[14*N+it] = temp26*errorProp26 + temp27*errorProp27 + temp28 + temp29*errorProp29;
+    outErr[15*N+it] = inErr[15*N+it] + inErr[17*N+it]*errorProp2 + inErr[18*N+it]*errorProp3 + inErr[19*N+it]*errorProp4 + inErr[20*N+it]*errorProp5;
+    outErr[16*N+it] = inErr[16*N+it] + inErr[17*N+it]*errorProp8 + inErr[18*N+it]*errorProp9 + inErr[19*N+it]*errorProp10 + inErr[20*N+it]*errorProp11;
+    outErr[17*N+it] = 0.0f;
+    outErr[18*N+it] = inErr[18*N+it];
+    outErr[19*N+it] = inErr[17*N+it]*errorProp26 + inErr[18*N+it]*errorProp27 + inErr[19*N+it] + inErr[20*N+it]*errorProp29;
+    outErr[20*N+it] = inErr[20*N+it];
   }
-
-  MultHelixPropTranspEndcap<block_size>(errorPropAcc, btracks.cov, obtracks.cov, lid, offset);
 
   return;
 }
@@ -818,16 +920,19 @@ int main (int argc, char* argv[]) {
 	                                       inputtrk.cov[SymOffsets66[PosInMtrx(1,1,6)]],
 	                                       inputtrk.cov[SymOffsets66[PosInMtrx(2,2,6)]]);
    printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
-   
+
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
-   
+
    long setup_start, setup_stop;
    struct timeval timecheck;
 
+   MPHIT_* hit    = prepareHits(inputhit);
+   MPTRK_* outtrk = (MPTRK_*) malloc(nevts*nb*sizeof(MPTRK_));
+
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-   
+
    auto trkNPtr = prepareTracksN(inputtrk);
    std::unique_ptr<MPTRKAccessor> trkNaccPtr(new MPTRKAccessor(*trkNPtr));
 
@@ -837,24 +942,26 @@ int main (int argc, char* argv[]) {
    std::unique_ptr<MPTRK> outtrkNPtr(new MPTRK(nevts*nb));
    std::unique_ptr<MPTRKAccessor> outtrkNaccPtr(new MPTRKAccessor(*outtrkNPtr));
 
-   std::unique_ptr<MP6x6F>  errPropPtr(new MP6x6F(nevts*nb));
-   std::unique_ptr<MP6x6FAccessor>  errorPropAccPtr(new MP6x6FAccessor(*errPropPtr));
-
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
-   
+
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
+
+#if defined(__NVCOMPILER_CUDA__) //initial copy
+   convertTracks(outtrk, outtrkNPtr.get());
+   convertHits(hit, hitNPtr.get());
+#endif
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 #ifdef __NVCOMPILER_CUDA__
    constexpr size_t blk_sz = bsize;
 #else
    constexpr size_t blk_sz = 1;
-#endif   
+#endif
    auto policy = std::execution::par_unseq;
 
    for(itr=0; itr<NITER; itr++) {
@@ -865,23 +972,31 @@ int main (int argc, char* argv[]) {
      std::for_each(policy,
                    counting_iterator(0),
                    counting_iterator(outer_loop_range),
-                   [=,  &trkNacc = *trkNaccPtr, 
-			&hitNacc = *hitNaccPtr, 
-			&outtrkNacc = *outtrkNaccPtr,
-			&errorPropAcc = *errorPropAccPtr] (auto ii) {
+                   [=,&trkNacc = *trkNaccPtr,
+                      &hitNacc = *hitNaccPtr,
+                      &outtrkNacc = *outtrkNaccPtr] (auto ii) {
                    const size_t ie                = ii / nbxblk_sz;//z
                    const size_t ibt               = ii - ie*nbxblk_sz;//
-                   const size_t ib                = ibt / blk_sz;//y  
+                   const size_t ib                = ibt / blk_sz;//y
                    const size_t inner_loop_offset = ibt - ib*blk_sz;//x
                    const size_t li  = ib+nb*ie;
                    for(size_t layer=0; layer<nlayer; ++layer) {
-                     const size_t lli = layer+li*nlayer;
+#ifdef LET_LAYOUT
+                     const size_t lli = layer+li*nlayer;//t
+#else //ETL_LAYOUT
+                     const size_t lli = nevts*nb*layer+li;
+#endif
                      //
-                     propagateToZ<blk_sz>(trkNacc, hitNacc, outtrkNacc, errorPropAcc, li, lli, inner_loop_offset);
+                     propagateToZ<blk_sz>(trkNacc, hitNacc, outtrkNacc, li, lli, inner_loop_offset);
                      KalmanUpdate<blk_sz>(outtrkNacc.cov, outtrkNacc.par, hitNacc, li, lli, inner_loop_offset);
                    }
 
                    });
+#if defined(__NVCOMPILER_CUDA__) //artificial refresh pstl containers
+      //convertTracks(outtrk, outtrkNPtr.get());
+      //convertHits(hit, hitNPtr.get());
+#endif
+
    } //end of itr loop
 
    auto wall_stop = std::chrono::high_resolution_clock::now();
@@ -893,9 +1008,6 @@ int main (int argc, char* argv[]) {
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, -1);
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-   MPHIT_* hit    = prepareHits(inputhit);
-   MPTRK_* outtrk = (MPTRK_*) malloc(nevts*nb*sizeof(MPTRK_));
 
    convertTracks(outtrk, outtrkNPtr.get());
    convertHits(hit, hitNPtr.get());
