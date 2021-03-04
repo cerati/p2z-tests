@@ -184,8 +184,8 @@ struct MPNXAccessor {
 	}
 
    T* operator()(const size_t i = 0) const {return (data_ + stride*i);}
-   T  operator()(const size_t i, const size_t j) const {return (data_ + stride*i)[j];}
-   T  operator[](const size_t i) const {return data_[i];}
+   T& operator()(const size_t i, const size_t j) const {return (data_ + stride*i)[j];}
+   T& operator[](const size_t i) const {return data_[i];}
 
    // Restricted to MP3F (x,y,z) and MP6F (x,y,z,ipt,phi,theta) fields only: 
    template <int ipar, typename AccessedFieldTp = MPNTp>

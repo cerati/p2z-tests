@@ -114,8 +114,8 @@ struct MPNXAccessor {
 	}
 
    T* operator()(const size_t i = 0) const {return (data_ + stride*i);}
-   T  operator()(const size_t i, const size_t j) const {return (data_ + stride*i)[j];}
-   T  operator[](const size_t i) const {return data_[i];}
+   T& operator()(const size_t i, const size_t j) const {return (data_ + stride*i)[j];}
+   T& operator[](const size_t i) const {return data_[i];}
 
    template <int ipar, typename AccessedFieldTp = MPNTp>
    typename std::enable_if<(std::is_same<AccessedFieldTp, MP3F>::value and ipar < 3) or (std::is_same<AccessedFieldTp, MP6F>::value and ipar < 6), T>::type
