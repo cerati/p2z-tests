@@ -822,6 +822,9 @@ int main (int argc, char* argv[]) {
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
    
+   MPHIT_* hit    = prepareHits(inputhit);
+   MPTRK_* outtrk = (MPTRK_*) malloc(nevts*nb*sizeof(MPTRK_));   
+
    long setup_start, setup_stop;
    struct timeval timecheck;
 
@@ -882,6 +885,9 @@ int main (int argc, char* argv[]) {
                    }
 
                    });
+#if defined(__NVCOMPILER_CUDA__) //artificial refresh pstl containers
+      convertTracks(outtrk, outtrkNPtr.get());
+#endif     
    } //end of itr loop
 
    auto wall_stop = std::chrono::high_resolution_clock::now();
@@ -894,10 +900,6 @@ int main (int argc, char* argv[]) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-   MPHIT_* hit    = prepareHits(inputhit);
-   MPTRK_* outtrk = (MPTRK_*) malloc(nevts*nb*sizeof(MPTRK_));
-
-   convertTracks(outtrk, outtrkNPtr.get());
    convertHits(hit, hitNPtr.get());
 
    float avgx = 0, avgy = 0, avgz = 0;
