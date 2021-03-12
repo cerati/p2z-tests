@@ -18,7 +18,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <execution>
 
 #ifndef bsize
-#define bsize 1//128
+#define bsize 128
 #endif
 #ifndef ntrks
 #define ntrks 9600
@@ -397,7 +397,7 @@ inline float z(const MPHIT_* hits, size_t ev, size_t tk)    { return pos(hits, e
 template<FieldOrder order>
 std::shared_ptr<MPTRK> prepareTracksN(struct ATRK inputtrk) {
 
-  auto result = std::make_shared<MPTRK>(nb, nevts);
+  auto result = std::make_shared<MPTRK>(ntrks, nevts);
   //create an accessor field:
   std::unique_ptr<MPTRKAccessor<order>> rA(new MPTRKAccessor<order>(*result));
 
@@ -451,7 +451,7 @@ void convertTracks(MPTRK_* out,  const MPTRK* inp) {
 
 template<FieldOrder order>
 std::shared_ptr<MPHIT> prepareHitsN(struct AHIT inputhit) {
-  auto result = std::make_shared<MPHIT>(nb, nevts, nlayer);
+  auto result = std::make_shared<MPHIT>(ntrks, nevts, nlayer);
   //create an accessor field:
   std::unique_ptr<MPHITAccessor<order>> rA(new MPHITAccessor<order>(*result));
 
@@ -705,7 +705,7 @@ void propagateToZ(MPTRKAccessors       &obtracks,
 #pragma simd
   for (size_t it=0;it<block_size; it++) {
     const float zout = msP(iparZ, tid, it, lay);
-    const float k    = inChg[it + tid]*kfact;//100/3.8;
+    const float k    = inChg[it + block_size*tid]*kfact;//100/3.8;
     const float deltaZ = zout - inPar(iparZ, tid, it);
     const float pt     = inPar(iparIpt, tid, it);
     const float cosP   = cosf(inPar(iparPhi, tid, it));//inPar(iparPhi, tid, it)
@@ -823,6 +823,9 @@ int main (int argc, char* argv[]) {
 
    constexpr auto order = FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER;
 
+   using MPTRKAccessorTp = MPTRKAccessor<order>;
+   using MPHITAccessorTp = MPHITAccessor<order>;
+
    MPHIT_* hit    = prepareHits(inputhit);
    MPTRK_* outtrk = (MPTRK_*) malloc(nevts*nb*sizeof(MPTRK_));
 
@@ -830,13 +833,13 @@ int main (int argc, char* argv[]) {
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    auto trkNPtr = prepareTracksN<order>(inputtrk);
-   std::unique_ptr<MPTRKAccessor<order>> trkNaccPtr(new MPTRKAccessor<order>(*trkNPtr));
+   std::unique_ptr<MPTRKAccessorTp> trkNaccPtr(new MPTRKAccessorTp(*trkNPtr));
 
    auto hitNPtr = prepareHitsN<order>(inputhit);
-   std::unique_ptr<MPHITAccessor<order>> hitNaccPtr(new MPHITAccessor<order>(*hitNPtr));
+   std::unique_ptr<MPHITAccessorTp> hitNaccPtr(new MPHITAccessorTp(*hitNPtr));
 
-   std::unique_ptr<MPTRK> outtrkNPtr(new MPTRK(nevts,nb));
-   std::unique_ptr<MPTRKAccessor<order>> outtrkNaccPtr(new MPTRKAccessor<order>(*outtrkNPtr));
+   std::unique_ptr<MPTRK> outtrkNPtr(new MPTRK(nevts,ntrks));
+   std::unique_ptr<MPTRKAccessorTp> outtrkNaccPtr(new MPTRKAccessorTp(*outtrkNPtr));
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -867,8 +870,8 @@ int main (int argc, char* argv[]) {
                       &hitNacc = *hitNaccPtr,
                       &outtrkNacc = *outtrkNaccPtr] (const auto i) {
                      for(int layer=0; layer<nlayer; ++layer) {
-                       propagateToZ<MPTRKAccessor<order>, MPHITAccessor<order>, bsize>(outtrkNacc, trkNacc, hitNacc, i, layer);
-                       KalmanUpdate<MPTRKAccessor<order>, MPHITAccessor<order>, bsize>(outtrkNacc, hitNacc, i, layer);
+                       propagateToZ<MPTRKAccessorTp, MPHITAccessorTp, bsize>(outtrkNacc, trkNacc, hitNacc, i, layer);
+                       KalmanUpdate<MPTRKAccessorTp, MPHITAccessorTp, bsize>(outtrkNacc, hitNacc, i, layer);
                      }
 
                    });
