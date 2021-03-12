@@ -18,7 +18,11 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <execution>
 
 #ifndef bsize
+#if defined(__NVCOMPILER_CUDA__)
+#define bsize 1
+#else
 #define bsize 128
+#endif//__NVCOMPILER_CUDA__
 #endif
 #ifndef ntrks
 #define ntrks 9600
@@ -120,8 +124,7 @@ constexpr int alloc_align  = (2*1024*1024);
 
 enum class FieldOrder{P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER,
                       P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER,
-                      P2Z_MATIDX_TRACKBLK_EVENT_LAYER_ORDER,
-                      P2Z_MATIDX_TRACKBLK_LAYER_EVENT_ORDER};
+                      P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER};
 
 using IntAllocator   = AlignedAllocator<int>;
 using FloatAllocator = AlignedAllocator<float>;
@@ -187,7 +190,7 @@ using MP3x3SF = MPNX<float,FloatAllocator, 6 , bsize>;
 using MP6x6SF = MPNX<float,FloatAllocator, 21, bsize>;
 using MP6x6F  = MPNX<float,FloatAllocator, 36, bsize>;
 
-template <typename MPNTp, FieldOrder Order>
+template <typename MPNTp, FieldOrder Order = FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER>
 struct MPNXAccessor {
    typedef typename MPNTp::DataType T;
 
@@ -210,7 +213,8 @@ struct MPNXAccessor {
         nEvts(v.nEvts),
         nLayers(v.nLayers),
         NevtsNtbBsz(nEvts*nTrkB*bsz),
-        stride(Order == FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER ? bsz*nTrkB*nEvts*nLayers  : (Order == FieldOrder::P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER ? bsz*nTrkB*nEvts*n : 0)),
+        stride(Order == FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER ? bsz*nTrkB*nEvts*nLayers  :
+              (Order == FieldOrder::P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER ? bsz*nTrkB*nEvts*n : n*bsz*nlayer)),
         data_(const_cast<T*>(v.data.data())){
 	 }
 
@@ -218,9 +222,11 @@ struct MPNXAccessor {
 
    T& operator()(const int lid, const int tid, const int b = 0, const int layer = 0) const {
      if      constexpr (Order == FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER)
-       return data_[lid*stride + layer*NevtsNtbBsz+tid*bsz+b];//using defualt order batch id (the fastest) > track id > event id > layer id (the slowest)
+       return data_[lid*stride + layer*NevtsNtbBsz + tid*bsz + b];//using defualt order batch id (the fastest) > track id > event id > layer id (the slowest)
      else if constexpr (Order == FieldOrder::P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER)
-       return data_[layer*stride + lid*NevtsNtbBsz+tid*bsz+b];
+       return data_[layer*stride + lid*NevtsNtbBsz + tid*bsz + b];
+     else if constexpr (Order == FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER)
+       return data_[tid*n*bsz*nlayer+layer*n*bsz+lid*bsz+b];
    }//i is the internal dof index
 
 };
@@ -564,7 +570,7 @@ void KalmanUpdate(MPTRKAccessors       &obtracks,
   MP6FAccessor_     &inPar  = obtracks.par;
 
 #pragma simd
-  for (size_t it=0; it<block_size; it++) {
+  for (int it = 0; it < block_size; it++) {
     const auto xin     = inPar(iparX, tid, it);
     const auto yin     = inPar(iparY, tid, it);
     const auto zin     = inPar(iparZ, tid, it);
@@ -703,9 +709,9 @@ void propagateToZ(MPTRKAccessors       &obtracks,
 
 
 #pragma simd
-  for (size_t it=0;it<block_size; it++) {
+  for (int it = 0;it < block_size; it++) {
     const float zout = msP(iparZ, tid, it, lay);
-    const float k    = inChg[it + block_size*tid]*kfact;//100/3.8;
+    const float k    = inChg(0, tid, it)*kfact;//100/3.8;
     const float deltaZ = zout - inPar(iparZ, tid, it);
     const float pt     = inPar(iparIpt, tid, it);
     const float cosP   = cosf(inPar(iparPhi, tid, it));//inPar(iparPhi, tid, it)
@@ -820,9 +826,11 @@ int main (int argc, char* argv[]) {
 
    long setup_start, setup_stop;
    struct timeval timecheck;
-
+#if defined(__NVCOMPILER_CUDA__)
    constexpr auto order = FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER;
-
+#else
+   constexpr auto order = FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER;
+#endif
    using MPTRKAccessorTp = MPTRKAccessor<order>;
    using MPHITAccessorTp = MPHITAccessor<order>;
 
@@ -838,7 +846,7 @@ int main (int argc, char* argv[]) {
    auto hitNPtr = prepareHitsN<order>(inputhit);
    std::unique_ptr<MPHITAccessorTp> hitNaccPtr(new MPHITAccessorTp(*hitNPtr));
 
-   std::unique_ptr<MPTRK> outtrkNPtr(new MPTRK(nevts,ntrks));
+   std::unique_ptr<MPTRK> outtrkNPtr(new MPTRK(ntrks, nevts));
    std::unique_ptr<MPTRKAccessorTp> outtrkNaccPtr(new MPTRKAccessorTp(*outtrkNPtr));
 
    gettimeofday(&timecheck, NULL);
