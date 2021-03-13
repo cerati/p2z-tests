@@ -120,7 +120,26 @@ constexpr int alloc_align  = (2*1024*1024);
        }
      };
 
-#define LET_LAYOUT
+float randn(float mu, float sigma) {
+   float U1, U2, W, mult;
+   static float X1, X2;
+   static int call = 0;
+
+   if (call == 1) {
+     call = !call;
+     return (mu + sigma * (float) X2);
+   } do {
+     U1 = -1 + ((float) rand () / RAND_MAX) * 2;
+     U2 = -1 + ((float) rand () / RAND_MAX) * 2;
+     W = pow (U1, 2) + pow (U2, 2);
+   }
+   while (W >= 1 || W == 0);
+   mult = sqrt ((-2 * log (W)) / W);
+   X1 = U1 * mult;
+   X2 = U2 * mult;
+   call = !call;
+   return (mu + sigma * (float) X1);
+}
 
 enum class FieldOrder{P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER,
                       P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER,
@@ -207,7 +226,7 @@ struct MPNXAccessor {
 
    T* data_; //accessor field only for the data access, not allocated here
 
-   MPNXAccessor() : nTrkB(0), nEvts(0), nLayers(0), NevtsNb(0), stride(0), data_(nullptr){}
+   MPNXAccessor() : nTrkB(0), nEvts(0), nLayers(0), NevtsNtbBsz(0), stride(0), data_(nullptr){}
    MPNXAccessor(const MPNTp &v) :
         nTrkB(v.nTrks / bsz),
         nEvts(v.nEvts),
@@ -256,6 +275,34 @@ struct MPTRKAccessor {
   MPTRKAccessor(const MPTRK &in) : par(in.par), cov(in.cov), q(in.q) {}
 };
 
+template<FieldOrder order>
+std::shared_ptr<MPTRK> prepareTracksN(struct ATRK inputtrk) {
+
+  auto result = std::make_shared<MPTRK>(ntrks, nevts);
+  //create an accessor field:
+  std::unique_ptr<MPTRKAccessor<order>> rA(new MPTRKAccessor<order>(*result));
+
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      for (size_t it=0;it<bsize;++it) {
+        //const int l = it+ib*bsize+ie*nb*bsize;
+        const int tid = ib+ie*nb;
+    	  //par
+    	  for (size_t ip=0;ip<6;++ip) {
+          rA->par(ip, tid, it) = (1+smear*randn(0,1))*inputtrk.par[ip];
+    	  }
+    	  //cov
+    	  for (size_t ip=0;ip<21;++ip) {
+          rA->cov(ip, tid, it) = (1+smear*randn(0,1))*inputtrk.cov[ip];
+    	  }
+    	  //q
+        rA->q(0, tid, it) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);
+      }
+    }
+  }
+  return std::move(result);
+}
 
 struct MPHIT {
   MP3F    pos;
@@ -277,6 +324,36 @@ struct MPHITAccessor {
   MPHITAccessor() : pos(), cov() {}
   MPHITAccessor(const MPHIT &in) : pos(in.pos), cov(in.cov) {}
 };
+
+template<FieldOrder order>
+std::shared_ptr<MPHIT> prepareHitsN(struct AHIT inputhit) {
+  auto result = std::make_shared<MPHIT>(ntrks, nevts, nlayer);
+  //create an accessor field:
+  std::unique_ptr<MPHITAccessor<order>> rA(new MPHITAccessor<order>(*result));
+
+  // store in element order for bunches of bsize matrices (a la matriplex)
+  for (size_t lay=0;lay<nlayer;++lay) {
+    for (size_t ie=0;ie<nevts;++ie) {
+      for (size_t ib=0;ib<nb;++ib) {
+        for (size_t it=0;it<bsize;++it) {
+          //const int l = it + ib*bsize + ie*nb*bsize + lay*nb*bsize*nevts;
+          const int tid = ib + ie*nb;
+        	//pos
+        	for (size_t ip=0;ip<3;++ip) {
+            rA->pos(ip, tid, it, lay) = (1+smear*randn(0,1))*inputhit.pos[ip];
+        	}
+        	//cov
+        	for (size_t ip=0;ip<6;++ip) {
+            rA->cov(ip, tid, it, lay) = (1+smear*randn(0,1))*inputhit.cov[ip];
+        	}
+        }
+      }
+    }
+  }
+  return std::move(result);
+}
+
+
 
 //Pure host version:
 
@@ -303,26 +380,6 @@ struct MPHIT_ {
   MP3x3SF_ cov;
 };
 
-
-float randn(float mu, float sigma) {
-  float U1, U2, W, mult;
-  static float X1, X2;
-  static int call = 0;
-  if (call == 1) {
-    call = !call;
-    return (mu + sigma * (float) X2);
-  } do {
-    U1 = -1 + ((float) rand () / RAND_MAX) * 2;
-    U2 = -1 + ((float) rand () / RAND_MAX) * 2;
-    W = pow (U1, 2) + pow (U2, 2);
-  }
-  while (W >= 1 || W == 0);
-  mult = sqrt ((-2 * log (W)) / W);
-  X1 = U1 * mult;
-  X2 = U2 * mult;
-  call = !call;
-  return (mu + sigma * (float) X1);
-}
 
 MPTRK_* bTk(MPTRK_* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
@@ -401,35 +458,6 @@ inline float y(const MPHIT_* hits, size_t ev, size_t tk)    { return pos(hits, e
 inline float z(const MPHIT_* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
 template<FieldOrder order>
-std::shared_ptr<MPTRK> prepareTracksN(struct ATRK inputtrk) {
-
-  auto result = std::make_shared<MPTRK>(ntrks, nevts);
-  //create an accessor field:
-  std::unique_ptr<MPTRKAccessor<order>> rA(new MPTRKAccessor<order>(*result));
-
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      for (size_t it=0;it<bsize;++it) {
-        //const int l = it+ib*bsize+ie*nb*bsize;
-        const int tid = ib+ie*nb;
-    	  //par
-    	  for (size_t ip=0;ip<6;++ip) {
-          rA->par(ip, tid, it) = (1+smear*randn(0,1))*inputtrk.par[ip];
-    	  }
-    	  //cov
-    	  for (size_t ip=0;ip<21;++ip) {
-          rA->cov(ip, tid, it) = (1+smear*randn(0,1))*inputtrk.cov[ip];
-    	  }
-    	  //q
-        rA->q(0, tid, it) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);
-      }
-    }
-  }
-  return std::move(result);
-}
-
-template<FieldOrder order>
 void convertTracks(MPTRK_* out,  const MPTRK* inp) {
   //create an accessor field:
   std::unique_ptr<MPTRKAccessor<order>> inpA(new MPTRKAccessor<order>(*inp));
@@ -453,34 +481,6 @@ void convertTracks(MPTRK_* out,  const MPTRK* inp) {
     }
   }
   return;
-}
-
-template<FieldOrder order>
-std::shared_ptr<MPHIT> prepareHitsN(struct AHIT inputhit) {
-  auto result = std::make_shared<MPHIT>(ntrks, nevts, nlayer);
-  //create an accessor field:
-  std::unique_ptr<MPHITAccessor<order>> rA(new MPHITAccessor<order>(*result));
-
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  for (size_t lay=0;lay<nlayer;++lay) {
-    for (size_t ie=0;ie<nevts;++ie) {
-      for (size_t ib=0;ib<nb;++ib) {
-        for (size_t it=0;it<bsize;++it) {
-          //const int l = it + ib*bsize + ie*nb*bsize + lay*nb*bsize*nevts;
-          const int tid = ib + ie*nb;
-        	//pos
-        	for (size_t ip=0;ip<3;++ip) {
-            rA->pos(ip, tid, it, lay) = (1+smear*randn(0,1))*inputhit.pos[ip];
-        	}
-        	//cov
-        	for (size_t ip=0;ip<6;++ip) {
-            rA->cov(ip, tid, it, lay) = (1+smear*randn(0,1))*inputhit.cov[ip];
-        	}
-        }
-      }
-    }
-  }
-  return std::move(result);
 }
 
 template<FieldOrder order>
@@ -857,11 +857,6 @@ int main (int argc, char* argv[]) {
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
-
-#if defined(__NVCOMPILER_CUDA__) //initial copy
-   convertTracks<order>(outtrk, outtrkNPtr.get());
-   convertHits<order>(hit, hitNPtr.get());
-#endif
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
