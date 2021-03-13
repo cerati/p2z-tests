@@ -233,7 +233,7 @@ struct MPNXAccessor {
         nLayers(v.nLayers),
         NevtsNtbBsz(nEvts*nTrkB*bsz),
         stride(Order == FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER ? bsz*nTrkB*nEvts*nLayers  :
-              (Order == FieldOrder::P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER ? bsz*nTrkB*nEvts*n : n*bsz*nlayer)),
+              (Order == FieldOrder::P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER ? bsz*nTrkB*nEvts*n : n*bsz*nLayers)),
         data_(const_cast<T*>(v.data.data())){
 	 }
 
@@ -245,7 +245,7 @@ struct MPNXAccessor {
      else if constexpr (Order == FieldOrder::P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER)
        return data_[layer*stride + lid*NevtsNtbBsz + tid*bsz + b];
      else if constexpr (Order == FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER)
-       return data_[tid*n*bsz*nlayer+layer*n*bsz+lid*bsz+b];
+       return data_[tid*stride+layer*n*bsz+lid*bsz+b];
    }//i is the internal dof index
 
 };
