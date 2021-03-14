@@ -239,14 +239,34 @@ struct MPNXAccessor {
 
    T& operator[](const int idx) const {return data_[idx];}
 
-   T& operator()(const int lid, const int tid, const int b = 0, const int layer = 0) const {
+   T& operator()(const int lid, const int tid, const int b, const int layer) const {
      if      constexpr (Order == FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER)
        return data_[lid*stride + layer*NevtsNtbBsz + tid*bsz + b];//using defualt order batch id (the fastest) > track id > event id > layer id (the slowest)
      else if constexpr (Order == FieldOrder::P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER)
        return data_[layer*stride + lid*NevtsNtbBsz + tid*bsz + b];
-     else if constexpr (Order == FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER)
+     else //(Order == FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER)
        return data_[tid*stride+layer*n*bsz+lid*bsz+b];
    }//i is the internal dof index
+
+   T& operator()(const int lid, const int stride, const int blk_offset) const { return data_[lid*stride + blk_offset];}
+
+   int GetThreadGlobalOffset(const int tid, const int layer = 0) const {
+     if      constexpr (Order == FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER)
+       return (layer*NevtsNtbBsz + tid*bsz);//using defualt order batch id (the fastest) > track id > event id > layer id (the slowest)
+     else if constexpr (Order == FieldOrder::P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER)
+       return (layer*stride + tid*bsz);
+     else //(Order == FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER)
+       return (tid*stride+layer*n*bsz);
+   }
+
+   int GetThreadLocalStride() const {
+     if      constexpr (Order == FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER)
+       return stride;//using defualt order batch id (the fastest) > track id > event id > layer id (the slowest)
+     else if constexpr (Order == FieldOrder::P2Z_TRACKBLK_EVENT_MATIDX_LAYER_ORDER)
+       return NevtsNtbBsz;
+     else //(Order == FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER)
+       return bsz;
+   }
 
 };
 
@@ -290,14 +310,14 @@ std::shared_ptr<MPTRK> prepareTracksN(struct ATRK inputtrk) {
         const int tid = ib+ie*nb;
     	  //par
     	  for (size_t ip=0;ip<6;++ip) {
-          rA->par(ip, tid, it) = (1+smear*randn(0,1))*inputtrk.par[ip];
+          rA->par(ip, tid, it, 0) = (1+smear*randn(0,1))*inputtrk.par[ip];
     	  }
     	  //cov
     	  for (size_t ip=0;ip<21;++ip) {
-          rA->cov(ip, tid, it) = (1+smear*randn(0,1))*inputtrk.cov[ip];
+          rA->cov(ip, tid, it, 0) = (1+smear*randn(0,1))*inputtrk.cov[ip];
     	  }
     	  //q
-        rA->q(0, tid, it) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);
+        rA->q(0, tid, it, 0) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);
       }
     }
   }
@@ -469,11 +489,11 @@ void convertTracks(MPTRK_* out,  const MPTRK* inp) {
         const int tid = ib+ie*nb;
     	  //par
     	  for (size_t ip=0;ip<6;++ip) {
-    	    out[tid].par.data[it + ip*bsize] = inpA->par(ip, tid, it);
+    	    out[tid].par.data[it + ip*bsize] = inpA->par(ip, tid, it, 0);
     	  }
     	  //cov
     	  for (size_t ip=0;ip<21;++ip) {
-    	    out[tid].cov.data[it + ip*bsize] = inpA->cov(ip, tid, it);
+    	    out[tid].cov.data[it + ip*bsize] = inpA->cov(ip, tid, it, 0);
     	  }
     	  //q
     	  out[tid].q.data[it] = inpA->q(0, tid, it);//fixme check
@@ -534,23 +554,23 @@ MPHIT_* prepareHits(struct AHIT inputhit) {
 
 template<typename T, typename Accessor1, typename Accessor2>
 inline typename std::enable_if<std::is_floating_point<T>::value>::type
-KalmanGainInv(const Accessor1 &a, const Accessor2 &b, std::array<T, 10> &c, const int tid, const int it, const int lay) {
+KalmanGainInv(const Accessor1 &a, const Accessor2 &b, std::array<T, 10> &c, const int a_stride, const int a_offset, const int b_stride, const int b_offset) {
   double det =
-      ((a(0, tid, it)+b(0, tid, it, lay))*(((a(6, tid, it)+b(3, tid, it, lay)) *(a(11,tid, it)+b(5, tid, it, lay))) - ((a(7, tid, it)+b(4, tid, it, lay)) *(a(7, tid, it)+b(4, tid, it, lay))))) -
-      ((a(1, tid, it)+b(1, tid, it, lay))*(((a(1, tid, it)+b(1, tid, it, lay)) *(a(11,tid, it)+b(5, tid, it, lay))) - ((a(7, tid, it)+b(4, tid, it, lay)) *(a(2, tid, it)+b(2, tid, it, lay))))) +
-      ((a(2, tid, it)+b(2, tid, it, lay))*(((a(1, tid, it)+b(1, tid, it, lay)) *(a(7, tid, it)+b(4, tid, it, lay))) - ((a(2, tid, it)+b(2, tid, it, lay)) *(a(6, tid, it)+b(3, tid, it, lay)))));
+      ((a(0, a_stride, a_offset)+b(0, b_stride, b_offset))*(((a(6, a_stride, a_offset)+b(3, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))))) -
+      ((a(1, a_stride, a_offset)+b(1, b_stride, b_offset))*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))))) +
+      ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset))*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset)))));
 
   c[ 9] = 1.0 / det;
 
-  c[ 0] =   c[ 9]*(((a(6, tid, it)+b(3, tid, it, lay)) *(a(11,tid, it)+b(5, tid, it, lay))) - ((a(7, tid, it)+b(4, tid, it, lay)) *(a(7, tid, it)+b(4, tid, it, lay))));
-  c[ 1] =  -c[ 9]*(((a(1, tid, it)+b(1, tid, it, lay)) *(a(11,tid, it)+b(5, tid, it, lay))) - ((a(2, tid, it)+b(2, tid, it, lay)) *(a(7, tid, it)+b(4, tid, it, lay))));
-  c[ 2] =   c[ 9]*(((a(1, tid, it)+b(1, tid, it, lay)) *(a(7, tid, it)+b(4, tid, it, lay))) - ((a(2, tid, it)+b(2, tid, it, lay)) *(a(7, tid, it)+b(4, tid, it, lay))));
-  c[ 3] =  -c[ 9]*(((a(1, tid, it)+b(1, tid, it, lay)) *(a(11,tid, it)+b(5, tid, it, lay))) - ((a(7, tid, it)+b(4, tid, it, lay)) *(a(2, tid, it)+b(2, tid, it, lay))));
-  c[ 4] =   c[ 9]*(((a(0, tid, it)+b(0, tid, it, lay)) *(a(11,tid, it)+b(5, tid, it, lay))) - ((a(2, tid, it)+b(2, tid, it, lay)) *(a(2, tid, it)+b(2, tid, it, lay))));
-  c[ 5] =  -c[ 9]*(((a(0, tid, it)+b(0, tid, it, lay)) *(a(7, tid, it)+b(4, tid, it, lay))) - ((a(2, tid, it)+b(2, tid, it, lay)) *(a(1, tid, it)+b(1, tid, it, lay))));
-  c[ 6] =   c[ 9]*(((a(1, tid, it)+b(1, tid, it, lay)) *(a(7, tid, it)+b(4, tid, it, lay))) - ((a(2, tid, it)+b(2, tid, it, lay)) *(a(6, tid, it)+b(3, tid, it, lay))));
-  c[ 7] =  -c[ 9]*(((a(0, tid, it)+b(0, tid, it, lay)) *(a(7, tid, it)+b(4, tid, it, lay))) - ((a(2, tid, it)+b(2, tid, it, lay)) *(a(1, tid, it)+b(1, tid, it, lay))));
-  c[ 8] =   c[ 9]*(((a(0, tid, it)+b(0, tid, it, lay)) *(a(6, tid, it)+b(3, tid, it, lay))) - ((a(1, tid, it)+b(1, tid, it, lay)) *(a(1, tid, it)+b(1, tid, it, lay))));
+  c[ 0] =   c[ 9]*(((a(6, a_stride, a_offset)+b(3, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))));
+  c[ 1] =  -c[ 9]*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))));
+  c[ 2] =   c[ 9]*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))));
+  c[ 3] =  -c[ 9]*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))));
+  c[ 4] =   c[ 9]*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))));
+  c[ 5] =  -c[ 9]*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(1, a_stride, a_offset)+b(1, b_stride, b_offset))));
+  c[ 6] =   c[ 9]*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset))));
+  c[ 7] =  -c[ 9]*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(1, a_stride, a_offset)+b(1, b_stride, b_offset))));
+  c[ 8] =   c[ 9]*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset))) - ((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(1, a_stride, a_offset)+b(1, b_stride, b_offset))));
 }
 
 template <class MPTRKAccessors, class MPHITAccessors, size_t block_size = 1>
@@ -558,50 +578,63 @@ void KalmanUpdate(MPTRKAccessors       &obtracks,
 		              const MPHITAccessors &bhits,
                   const int tid,
                   const int lay) {
-  using MP6FAccessor_    = typename MPTRKAccessors::MP6FAccessor;
-  using MP6x6SFAccessor_ = typename MPTRKAccessors::MP6x6SFAccessor;
-  using MP3x3SFAccessor_ = typename MPHITAccessors::MP3x3SFAccessor;
-  using MP3FAccessor_    = typename MPHITAccessors::MP3FAccessor;
+  using MP6Faccessor    = typename MPTRKAccessors::MP6FAccessor;
+  using MP6x6SFaccessor = typename MPTRKAccessors::MP6x6SFAccessor;
+  using MP3x3SFaccessor = typename MPHITAccessors::MP3x3SFAccessor;
+  using MP3Faccessor    = typename MPHITAccessors::MP3FAccessor;
 
-  const MP3x3SFAccessor_ &hitErr   = bhits.cov;
-  const MP3FAccessor_    &msP      = bhits.pos;
+  const MP3x3SFaccessor &hitErr   = bhits.cov;
+  const MP3Faccessor    &msP      = bhits.pos;
 
-  MP6x6SFAccessor_  &trkErr = obtracks.cov;
-  MP6FAccessor_     &inPar  = obtracks.par;
+  MP6x6SFaccessor  &trkErr = obtracks.cov;
+  MP6Faccessor     &inPar  = obtracks.par;
+
+  const auto terr_stride = trkErr.GetThreadLocalStride();
+  const auto terr_offset = trkErr.GetThreadGlobalOffset(tid);
+
+  const auto herr_stride = hitErr.GetThreadLocalStride();
+  const auto herr_offset = hitErr.GetThreadGlobalOffset(tid, lay);
+
+  const auto ipar_stride = inPar.GetThreadLocalStride();
+  const auto ipar_offset = inPar.GetThreadGlobalOffset(tid);
 
 #pragma simd
   for (int it = 0; it < block_size; it++) {
-    const auto xin     = inPar(iparX, tid, it);
-    const auto yin     = inPar(iparY, tid, it);
-    const auto zin     = inPar(iparZ, tid, it);
-    const auto ptin    = 1. / inPar(iparIpt, tid, it);
-    const auto phiin   = inPar(iparPhi, tid, it);
-    const auto thetain = inPar(iparTheta, tid, it);
+    const auto terr_blk_offset = terr_offset+it;
+    const auto herr_blk_offset = herr_offset+it;
+    const auto ipar_blk_offset = ipar_offset+it;
+
+    const auto xin     = inPar(iparX, ipar_stride, ipar_blk_offset);
+    const auto yin     = inPar(iparY, ipar_stride, ipar_blk_offset);
+    const auto zin     = inPar(iparZ, ipar_stride, ipar_blk_offset);
+    const auto ptin    = 1. / inPar(iparIpt, ipar_stride, ipar_blk_offset);
+    const auto phiin   = inPar(iparPhi, ipar_stride, ipar_blk_offset);
+    const auto thetain = inPar(iparTheta, ipar_stride, ipar_blk_offset);
     const auto xout    = msP(iparX, tid, it, lay);
     const auto yout    = msP(iparY, tid, it, lay);
 
     std::array<float, 10> temp{0.0f};
 
-    KalmanGainInv(trkErr, hitErr, temp, tid, it, lay);
+    KalmanGainInv(trkErr, hitErr, temp, terr_stride, terr_blk_offset, herr_stride, herr_blk_offset);
 
-    const auto kGain00 = trkErr(0, tid, it)*temp[0] + trkErr(1, tid, it)*temp[3] + trkErr(2, tid, it)*temp[6];
-    const auto kGain01 = trkErr(0, tid, it)*temp[1] + trkErr(1, tid, it)*temp[4] + trkErr(2, tid, it)*temp[7];
-    const auto kGain02 = trkErr(0, tid, it)*temp[2] + trkErr(1, tid, it)*temp[5] + trkErr(2, tid, it)*temp[8];
-    const auto kGain03 = trkErr(1, tid, it)*temp[0] + trkErr(6, tid, it)*temp[3] + trkErr(7, tid, it)*temp[6];
-    const auto kGain04 = trkErr(1, tid, it)*temp[1] + trkErr(6, tid, it)*temp[4] + trkErr(7, tid, it)*temp[7];
-    const auto kGain05 = trkErr(1, tid, it)*temp[2] + trkErr(6, tid, it)*temp[5] + trkErr(7, tid, it)*temp[8];
-    const auto kGain06 = trkErr(2, tid, it)*temp[0] + trkErr(7, tid, it)*temp[3] + trkErr(11, tid, it)*temp[6];
-    const auto kGain07 = trkErr(2, tid, it)*temp[1] + trkErr(7, tid, it)*temp[4] + trkErr(11, tid, it)*temp[7];
-    const auto kGain08 = trkErr(2, tid, it)*temp[2] + trkErr(7, tid, it)*temp[5] + trkErr(11, tid, it)*temp[8];
-    const auto kGain09 = trkErr(3, tid, it)*temp[0] + trkErr(8, tid, it)*temp[3] + trkErr(12, tid, it)*temp[6];
-    const auto kGain10 = trkErr(3, tid, it)*temp[1] + trkErr(8, tid, it)*temp[4] + trkErr(12, tid, it)*temp[7];
-    const auto kGain11 = trkErr(3, tid, it)*temp[2] + trkErr(8, tid, it)*temp[5] + trkErr(12, tid, it)*temp[8];
-    const auto kGain12 = trkErr(4, tid, it)*temp[0] + trkErr(9, tid, it)*temp[3] + trkErr(13, tid, it)*temp[6];
-    const auto kGain13 = trkErr(4, tid, it)*temp[1] + trkErr(9, tid, it)*temp[4] + trkErr(13, tid, it)*temp[7];
-    const auto kGain14 = trkErr(4, tid, it)*temp[2] + trkErr(9, tid, it)*temp[5] + trkErr(13, tid, it)*temp[8];
-    const auto kGain15 = trkErr(5, tid, it)*temp[0] + trkErr(10, tid, it)*temp[3] + trkErr(14, tid, it)*temp[6];
-    const auto kGain16 = trkErr(5, tid, it)*temp[1] + trkErr(10, tid, it)*temp[4] + trkErr(14, tid, it)*temp[7];
-    const auto kGain17 = trkErr(5, tid, it)*temp[2] + trkErr(10, tid, it)*temp[5] + trkErr(14, tid, it)*temp[8];
+    const auto kGain00 = trkErr(0, terr_stride, terr_blk_offset)*temp[0] + trkErr(1, terr_stride, terr_blk_offset)*temp[3] + trkErr(2, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain01 = trkErr(0, terr_stride, terr_blk_offset)*temp[1] + trkErr(1, terr_stride, terr_blk_offset)*temp[4] + trkErr(2, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain02 = trkErr(0, terr_stride, terr_blk_offset)*temp[2] + trkErr(1, terr_stride, terr_blk_offset)*temp[5] + trkErr(2, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain03 = trkErr(1, terr_stride, terr_blk_offset)*temp[0] + trkErr(6, terr_stride, terr_blk_offset)*temp[3] + trkErr(7, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain04 = trkErr(1, terr_stride, terr_blk_offset)*temp[1] + trkErr(6, terr_stride, terr_blk_offset)*temp[4] + trkErr(7, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain05 = trkErr(1, terr_stride, terr_blk_offset)*temp[2] + trkErr(6, terr_stride, terr_blk_offset)*temp[5] + trkErr(7, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain06 = trkErr(2, terr_stride, terr_blk_offset)*temp[0] + trkErr(7, terr_stride, terr_blk_offset)*temp[3] + trkErr(11, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain07 = trkErr(2, terr_stride, terr_blk_offset)*temp[1] + trkErr(7, terr_stride, terr_blk_offset)*temp[4] + trkErr(11, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain08 = trkErr(2, terr_stride, terr_blk_offset)*temp[2] + trkErr(7, terr_stride, terr_blk_offset)*temp[5] + trkErr(11, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain09 = trkErr(3, terr_stride, terr_blk_offset)*temp[0] + trkErr(8, terr_stride, terr_blk_offset)*temp[3] + trkErr(12, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain10 = trkErr(3, terr_stride, terr_blk_offset)*temp[1] + trkErr(8, terr_stride, terr_blk_offset)*temp[4] + trkErr(12, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain11 = trkErr(3, terr_stride, terr_blk_offset)*temp[2] + trkErr(8, terr_stride, terr_blk_offset)*temp[5] + trkErr(12, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain12 = trkErr(4, terr_stride, terr_blk_offset)*temp[0] + trkErr(9, terr_stride, terr_blk_offset)*temp[3] + trkErr(13, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain13 = trkErr(4, terr_stride, terr_blk_offset)*temp[1] + trkErr(9, terr_stride, terr_blk_offset)*temp[4] + trkErr(13, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain14 = trkErr(4, terr_stride, terr_blk_offset)*temp[2] + trkErr(9, terr_stride, terr_blk_offset)*temp[5] + trkErr(13, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain15 = trkErr(5, terr_stride, terr_blk_offset)*temp[0] + trkErr(10, terr_stride, terr_blk_offset)*temp[3] + trkErr(14, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain16 = trkErr(5, terr_stride, terr_blk_offset)*temp[1] + trkErr(10, terr_stride, terr_blk_offset)*temp[4] + trkErr(14, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain17 = trkErr(5, terr_stride, terr_blk_offset)*temp[2] + trkErr(10, terr_stride, terr_blk_offset)*temp[5] + trkErr(14, terr_stride, terr_blk_offset)*temp[8];
 
     const auto xnew     = xin     + (kGain00*(xout-xin)) +(kGain01*(yout-yin));
     const auto ynew     = yin     + (kGain03*(xout-xin)) +(kGain04*(yout-yin));
@@ -610,74 +643,74 @@ void KalmanUpdate(MPTRKAccessors       &obtracks,
     const auto phinew   = phiin   + (kGain12*(xout-xin)) +(kGain13*(yout-yin));
     const auto thetanew = thetain + (kGain15*(xout-xin)) +(kGain16*(yout-yin));
 
-    temp[0] = trkErr(0, tid, it) - (kGain00*trkErr(0, tid, it)+kGain01*trkErr(1, tid, it)+kGain02*trkErr(2, tid, it));
+    temp[0] = trkErr(0, terr_stride, terr_blk_offset) - (kGain00*trkErr(0, terr_stride, terr_blk_offset)+kGain01*trkErr(1, terr_stride, terr_blk_offset)+kGain02*trkErr(2, terr_stride, terr_blk_offset));
 
-    trkErr(0, tid, it) = temp[0];
+    trkErr(0, terr_stride, terr_blk_offset) = temp[0];
 
-    temp[0] = trkErr(1, tid, it) - (kGain00*trkErr(1, tid, it)+kGain01*trkErr(6, tid, it)+kGain02*trkErr(7, tid, it));
-    temp[1] = trkErr(2, tid, it) - (kGain00*trkErr(2, tid, it)+kGain01*trkErr(7, tid, it)+kGain02*trkErr(11, tid, it));
-    temp[2] = trkErr(3, tid, it) - (kGain00*trkErr(3, tid, it)+kGain01*trkErr(8, tid, it)+kGain02*trkErr(12, tid, it));
-    temp[3] = trkErr(4, tid, it) - (kGain00*trkErr(4, tid, it)+kGain01*trkErr(9, tid, it)+kGain02*trkErr(13, tid, it));
-    temp[4] = trkErr(5, tid, it) - (kGain00*trkErr(5, tid, it)+kGain01*trkErr(10, tid, it)+kGain02*trkErr(14, tid, it));
+    temp[0] = trkErr(1, terr_stride, terr_blk_offset) - (kGain00*trkErr(1, terr_stride, terr_blk_offset)+kGain01*trkErr(6, terr_stride, terr_blk_offset)+kGain02*trkErr(7, terr_stride, terr_blk_offset));
+    temp[1] = trkErr(2, terr_stride, terr_blk_offset) - (kGain00*trkErr(2, terr_stride, terr_blk_offset)+kGain01*trkErr(7, terr_stride, terr_blk_offset)+kGain02*trkErr(11, terr_stride, terr_blk_offset));
+    temp[2] = trkErr(3, terr_stride, terr_blk_offset) - (kGain00*trkErr(3, terr_stride, terr_blk_offset)+kGain01*trkErr(8, terr_stride, terr_blk_offset)+kGain02*trkErr(12, terr_stride, terr_blk_offset));
+    temp[3] = trkErr(4, terr_stride, terr_blk_offset) - (kGain00*trkErr(4, terr_stride, terr_blk_offset)+kGain01*trkErr(9, terr_stride, terr_blk_offset)+kGain02*trkErr(13, terr_stride, terr_blk_offset));
+    temp[4] = trkErr(5, terr_stride, terr_blk_offset) - (kGain00*trkErr(5, terr_stride, terr_blk_offset)+kGain01*trkErr(10, terr_stride, terr_blk_offset)+kGain02*trkErr(14, terr_stride, terr_blk_offset));
 
-    temp[5] = trkErr(6, tid, it) - (kGain03*trkErr(1, tid, it)+kGain04*trkErr(6, tid, it)+kGain05*trkErr(7, tid, it));
+    temp[5] = trkErr(6, terr_stride, terr_blk_offset) - (kGain03*trkErr(1, terr_stride, terr_blk_offset)+kGain04*trkErr(6, terr_stride, terr_blk_offset)+kGain05*trkErr(7, terr_stride, terr_blk_offset));
 
-    trkErr(1, tid, it) = temp[0];
-    trkErr(6, tid, it) = temp[5];
+    trkErr(1, terr_stride, terr_blk_offset) = temp[0];
+    trkErr(6, terr_stride, terr_blk_offset) = temp[5];
 
-    temp[0] = trkErr(7, tid, it) - (kGain03*trkErr(2, tid, it)+kGain04*trkErr(7, tid, it)+kGain05*trkErr(11, tid, it));
-    temp[5] = trkErr(8, tid, it) - (kGain03*trkErr(3, tid, it)+kGain04*trkErr(8, tid, it)+kGain05*trkErr(12, tid, it));
-    temp[6] = trkErr(9, tid, it) - (kGain03*trkErr(4, tid, it)+kGain04*trkErr(9, tid, it)+kGain05*trkErr(13, tid, it));
-    temp[7] = trkErr(10, tid, it) - (kGain03*trkErr(5, tid, it)+kGain04*trkErr(10, tid, it)+kGain05*trkErr(14, tid, it));
+    temp[0] = trkErr(7, terr_stride, terr_blk_offset) - (kGain03*trkErr(2, terr_stride, terr_blk_offset)+kGain04*trkErr(7, terr_stride, terr_blk_offset)+kGain05*trkErr(11, terr_stride, terr_blk_offset));
+    temp[5] = trkErr(8, terr_stride, terr_blk_offset) - (kGain03*trkErr(3, terr_stride, terr_blk_offset)+kGain04*trkErr(8, terr_stride, terr_blk_offset)+kGain05*trkErr(12, terr_stride, terr_blk_offset));
+    temp[6] = trkErr(9, terr_stride, terr_blk_offset) - (kGain03*trkErr(4, terr_stride, terr_blk_offset)+kGain04*trkErr(9, terr_stride, terr_blk_offset)+kGain05*trkErr(13, terr_stride, terr_blk_offset));
+    temp[7] = trkErr(10, terr_stride, terr_blk_offset) - (kGain03*trkErr(5, terr_stride, terr_blk_offset)+kGain04*trkErr(10, terr_stride, terr_blk_offset)+kGain05*trkErr(14, terr_stride, terr_blk_offset));
 
-    temp[8] = trkErr(11, tid, it) - (kGain06*trkErr(2, tid, it)+kGain07*trkErr(7, tid, it)+kGain08*trkErr(11, tid, it));
+    temp[8] = trkErr(11, terr_stride, terr_blk_offset) - (kGain06*trkErr(2, terr_stride, terr_blk_offset)+kGain07*trkErr(7, terr_stride, terr_blk_offset)+kGain08*trkErr(11, terr_stride, terr_blk_offset));
 
-    trkErr(2, tid, it)  = temp[1];
-    trkErr(7, tid, it)  = temp[0];
-    trkErr(11, tid, it) = temp[8];
+    trkErr(2, terr_stride, terr_blk_offset)  = temp[1];
+    trkErr(7, terr_stride, terr_blk_offset)  = temp[0];
+    trkErr(11, terr_stride, terr_blk_offset) = temp[8];
 
-    temp[1] = trkErr(12, tid, it) - (kGain06*trkErr(3, tid, it)+kGain07*trkErr(8, tid, it)+kGain08*trkErr(12, tid, it));
-    temp[0] = trkErr(13, tid, it) - (kGain06*trkErr(4, tid, it)+kGain07*trkErr(9, tid, it)+kGain08*trkErr(13, tid, it));
-    temp[8] = trkErr(14, tid, it) - (kGain06*trkErr(5, tid, it)+kGain07*trkErr(10, tid, it)+kGain08*trkErr(14, tid, it));
-    temp[9] = trkErr(15, tid, it) - (kGain09*trkErr(3, tid, it)+kGain10*trkErr(8, tid, it)+kGain11*trkErr(12, tid, it));
+    temp[1] = trkErr(12, terr_stride, terr_blk_offset) - (kGain06*trkErr(3, terr_stride, terr_blk_offset)+kGain07*trkErr(8, terr_stride, terr_blk_offset)+kGain08*trkErr(12, terr_stride, terr_blk_offset));
+    temp[0] = trkErr(13, terr_stride, terr_blk_offset) - (kGain06*trkErr(4, terr_stride, terr_blk_offset)+kGain07*trkErr(9, terr_stride, terr_blk_offset)+kGain08*trkErr(13, terr_stride, terr_blk_offset));
+    temp[8] = trkErr(14, terr_stride, terr_blk_offset) - (kGain06*trkErr(5, terr_stride, terr_blk_offset)+kGain07*trkErr(10, terr_stride, terr_blk_offset)+kGain08*trkErr(14, terr_stride, terr_blk_offset));
+    temp[9] = trkErr(15, terr_stride, terr_blk_offset) - (kGain09*trkErr(3, terr_stride, terr_blk_offset)+kGain10*trkErr(8, terr_stride, terr_blk_offset)+kGain11*trkErr(12, terr_stride, terr_blk_offset));
 
-    trkErr(3, tid, it)  = temp[2];
-    trkErr(8, tid, it)  = temp[5];
-    trkErr(12, tid, it) = temp[1];
-    trkErr(15, tid, it) = temp[9];
+    trkErr(3, terr_stride, terr_blk_offset)  = temp[2];
+    trkErr(8, terr_stride, terr_blk_offset)  = temp[5];
+    trkErr(12, terr_stride, terr_blk_offset) = temp[1];
+    trkErr(15, terr_stride, terr_blk_offset) = temp[9];
 
-    temp[2] = trkErr(16, tid, it) - (kGain09*trkErr(4, tid, it)+kGain10*trkErr(9, tid, it)+kGain11*trkErr(13, tid, it));
+    temp[2] = trkErr(16, terr_stride, terr_blk_offset) - (kGain09*trkErr(4, terr_stride, terr_blk_offset)+kGain10*trkErr(9, terr_stride, terr_blk_offset)+kGain11*trkErr(13, terr_stride, terr_blk_offset));
 
-    trkErr(16, tid, it) = temp[2];
+    trkErr(16, terr_stride, terr_blk_offset) = temp[2];
 
-    temp[5] = trkErr(17, tid, it) - (kGain09*trkErr(5, tid, it)+kGain10*trkErr(10, tid, it)+kGain11*trkErr(14, tid, it));
+    temp[5] = trkErr(17, terr_stride, terr_blk_offset) - (kGain09*trkErr(5, terr_stride, terr_blk_offset)+kGain10*trkErr(10, terr_stride, terr_blk_offset)+kGain11*trkErr(14, terr_stride, terr_blk_offset));
 
-    trkErr(17, tid, it) = temp[5];
+    trkErr(17, terr_stride, terr_blk_offset) = temp[5];
 
-    temp[1] = trkErr(18, tid, it) - (kGain12*trkErr(4, tid, it)+kGain13*trkErr(9, tid, it)+kGain14*trkErr(13, tid, it));
+    temp[1] = trkErr(18, terr_stride, terr_blk_offset) - (kGain12*trkErr(4, terr_stride, terr_blk_offset)+kGain13*trkErr(9, terr_stride, terr_blk_offset)+kGain14*trkErr(13, terr_stride, terr_blk_offset));
 
-    trkErr(4, tid, it)  = temp[3];
-    trkErr(9, tid, it)  = temp[6];
-    trkErr(13, tid, it) = temp[0];
-    trkErr(18, tid, it) = temp[1];
+    trkErr(4, terr_stride, terr_blk_offset)  = temp[3];
+    trkErr(9, terr_stride, terr_blk_offset)  = temp[6];
+    trkErr(13, terr_stride, terr_blk_offset) = temp[0];
+    trkErr(18, terr_stride, terr_blk_offset) = temp[1];
 
-    temp[9] = trkErr(19, tid, it) - (kGain12*trkErr(5, tid, it)+kGain13*trkErr(10, tid, it)+kGain14*trkErr(14, tid, it));
+    temp[9] = trkErr(19, terr_stride, terr_blk_offset) - (kGain12*trkErr(5, terr_stride, terr_blk_offset)+kGain13*trkErr(10, terr_stride, terr_blk_offset)+kGain14*trkErr(14, terr_stride, terr_blk_offset));
 
-    trkErr(19, tid, it) = temp[9];
+    trkErr(19, terr_stride, terr_blk_offset) = temp[9];
 
-    temp[9] = trkErr(20, tid, it) - (kGain15*trkErr(5, tid, it)+kGain16*trkErr(10, tid, it)+kGain17*trkErr(14, tid, it));
+    temp[9] = trkErr(20, terr_stride, terr_blk_offset) - (kGain15*trkErr(5, terr_stride, terr_blk_offset)+kGain16*trkErr(10, terr_stride, terr_blk_offset)+kGain17*trkErr(14, terr_stride, terr_blk_offset));
 
-    trkErr(10, tid, it) = temp[7];
-    trkErr(5, tid, it)  = temp[4];
-    trkErr(14, tid, it) = temp[8];
-    trkErr(20, tid, it) = temp[9];
+    trkErr(10, terr_stride, terr_blk_offset) = temp[7];
+    trkErr(5, terr_stride, terr_blk_offset)  = temp[4];
+    trkErr(14, terr_stride, terr_blk_offset) = temp[8];
+    trkErr(20, terr_stride, terr_blk_offset) = temp[9];
 
-    inPar(iparX,tid, it)     = xnew;
-    inPar(iparY,tid, it)     = ynew;
-    inPar(iparZ,tid, it)     = znew;
-    inPar(iparIpt,tid, it)   = ptnew;
-    inPar(iparPhi,tid, it)   = phinew;
-    inPar(iparTheta,tid, it) = thetanew;
+    inPar(iparX,ipar_stride, ipar_blk_offset)     = xnew;
+    inPar(iparY,ipar_stride, ipar_blk_offset)     = ynew;
+    inPar(iparZ,ipar_stride, ipar_blk_offset)     = znew;
+    inPar(iparIpt,ipar_stride, ipar_blk_offset)   = ptnew;
+    inPar(iparPhi,ipar_stride, ipar_blk_offset)   = phinew;
+    inPar(iparTheta,ipar_stride, ipar_blk_offset) = thetanew;
   }
 
   return;
@@ -693,31 +726,40 @@ void propagateToZ(MPTRKAccessors       &obtracks,
                   const int tid,
                   const int lay) {
 
-  using MP6FAccessor_    = typename MPTRKAccessors::MP6FAccessor;
-  using MP1IAccessor_    = typename MPTRKAccessors::MP1IAccessor;
-  using MP6x6SFAccessor_ = typename MPTRKAccessors::MP6x6SFAccessor;
-  using MP3FAccessor_    = typename MPHITAccessors::MP3FAccessor;
+  using MP6Faccessor    = typename MPTRKAccessors::MP6FAccessor;
+  using MP1Iaccessor    = typename MPTRKAccessors::MP1IAccessor;
+  using MP6x6SFaccessor = typename MPTRKAccessors::MP6x6SFAccessor;
+  using MP3Faccessor    = typename MPHITAccessors::MP3FAccessor;
 
-  const MP6FAccessor_ &inPar    = btracks.par;
-  const MP1IAccessor_ &inChg    = btracks.q  ;
-  const MP6x6SFAccessor_ &inErr = btracks.cov;
+  const MP6Faccessor &inPar    = btracks.par;
+  const MP1Iaccessor &inChg    = btracks.q  ;
+  const MP6x6SFaccessor &inErr = btracks.cov;
 
-  const MP3FAccessor_ &msP      = bhits.pos;
+  const MP3Faccessor &msP      = bhits.pos;
 
-  MP6x6SFAccessor_ &outErr    = obtracks.cov;
-  MP6FAccessor_    &outPar    = obtracks.par;
+  MP6x6SFaccessor &outErr    = obtracks.cov;
+  MP6Faccessor    &outPar    = obtracks.par;
 
+  const auto terr_stride = inErr.GetThreadLocalStride();
+  const auto terr_offset = inErr.GetThreadGlobalOffset(tid);
+
+  const auto par_stride = inPar.GetThreadLocalStride();
+  const auto par_offset = inPar.GetThreadGlobalOffset(tid);
 
 #pragma simd
   for (int it = 0;it < block_size; it++) {
+
+    const auto terr_blk_offset = terr_offset+it;
+    const auto par_blk_offset  = par_offset+it;
+
     const float zout = msP(iparZ, tid, it, lay);
-    const float k    = inChg(0, tid, it)*kfact;//100/3.8;
-    const float deltaZ = zout - inPar(iparZ, tid, it);
-    const float pt     = inPar(iparIpt, tid, it);
-    const float cosP   = cosf(inPar(iparPhi, tid, it));//inPar(iparPhi, tid, it)
-    const float sinP   = sinf(inPar(iparPhi, tid, it));
-    const float cosT   = cosf(inPar(iparTheta, tid, it));
-    const float sinT   = sinf(inPar(iparTheta, tid, it));
+    const float k    = inChg(0, tid, it, 0)*kfact;//100/3.8;
+    const float deltaZ = zout - inPar(iparZ, par_stride, par_blk_offset);
+    const float pt     = inPar(iparIpt, par_stride, par_blk_offset);
+    const float cosP   = cosf(inPar(iparPhi, par_stride, par_blk_offset));//inPar(iparPhi, par_stride, par_blk_offset)
+    const float sinP   = sinf(inPar(iparPhi, par_stride, par_blk_offset));
+    const float cosT   = cosf(inPar(iparTheta, par_stride, par_blk_offset));
+    const float sinT   = sinf(inPar(iparTheta, par_stride, par_blk_offset));
 
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
@@ -728,13 +770,13 @@ void propagateToZ(MPTRKAccessors       &obtracks,
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
 
-    outPar(iparX,tid, it) = inPar(iparX, tid, it) + k*(pxin*sina - pyin*(1.-cosa));
-    outPar(iparY,tid, it) = inPar(iparY, tid, it) + k*(pyin*sina + pxin*(1.-cosa));
-    outPar(iparZ,tid, it) = zout;
+    outPar(iparX,par_stride, par_blk_offset) = inPar(iparX, par_stride, par_blk_offset) + k*(pxin*sina - pyin*(1.-cosa));
+    outPar(iparY,par_stride, par_blk_offset) = inPar(iparY, par_stride, par_blk_offset) + k*(pyin*sina + pxin*(1.-cosa));
+    outPar(iparZ,par_stride, par_blk_offset) = zout;
 
-    outPar(iparIpt,tid, it)   = inPar(iparIpt, tid, it);
-    outPar(iparPhi,tid, it)   = inPar(iparPhi, tid, it) + alpha;
-    outPar(iparTheta,tid, it) = inPar(iparTheta, tid, it);
+    outPar(iparIpt,par_stride, par_blk_offset)   = inPar(iparIpt, par_stride, par_blk_offset);
+    outPar(iparPhi,par_stride, par_blk_offset)   = inPar(iparPhi, par_stride, par_blk_offset) + alpha;
+    outPar(iparTheta,par_stride, par_blk_offset) = inPar(iparTheta, par_stride, par_blk_offset);
 
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
@@ -747,52 +789,52 @@ void propagateToZ(MPTRKAccessors       &obtracks,
     auto errorProp9  = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
     auto errorProp10 = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
     auto errorProp11 = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
-    auto errorProp26 = -inPar(iparIpt, tid, it)*sinT*(icosTk);
+    auto errorProp26 = -inPar(iparIpt, par_stride, par_blk_offset)*sinT*(icosTk);
     auto errorProp27 = sinT*deltaZ*(icosTk);
-    auto errorProp29 = inPar(iparIpt, tid, it)*deltaZ*(icosT*icosTk);
+    auto errorProp29 = inPar(iparIpt, par_stride, par_blk_offset)*deltaZ*(icosT*icosTk);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    auto temp00 = inErr(0, tid, it) + errorProp2 *inErr(3, tid, it) + errorProp3 *inErr(6, tid, it) + errorProp4  *inErr(10,tid, it) + errorProp5  *inErr(15,tid, it);
-    auto temp02 = inErr(3, tid, it) + errorProp2 *inErr(5, tid, it) + errorProp3 *inErr(8, tid, it) + errorProp4  *inErr(12,tid, it) + errorProp5  *inErr(17,tid, it);
-    auto temp03 = inErr(6, tid, it) + errorProp2 *inErr(8, tid, it) + errorProp3 *inErr(9, tid, it) + errorProp4  *inErr(13,tid, it) + errorProp5  *inErr(18,tid, it);
-    auto temp04 = inErr(10,tid, it) + errorProp2 *inErr(12,tid, it) + errorProp3 *inErr(13,tid, it) + errorProp4  *inErr(14,tid, it) + errorProp5  *inErr(19,tid, it);
-    auto temp05 = inErr(15,tid, it) + errorProp2 *inErr(17,tid, it) + errorProp3 *inErr(18,tid, it) + errorProp4  *inErr(19,tid, it) + errorProp5  *inErr(20,tid, it);
-    auto temp06 = inErr(1, tid, it) + errorProp8 *inErr(3, tid, it) + errorProp9 *inErr(6, tid, it) + errorProp10 *inErr(10,tid, it) + errorProp11 *inErr(15,tid, it);
-    auto temp07 = inErr(2, tid, it) + errorProp8 *inErr(4, tid, it) + errorProp9 *inErr(7, tid, it) + errorProp10 *inErr(11,tid, it) + errorProp11 *inErr(16,tid, it);
-    auto temp08 = inErr(4, tid, it) + errorProp8 *inErr(5, tid, it) + errorProp9 *inErr(8, tid, it) + errorProp10 *inErr(12,tid, it) + errorProp11 *inErr(17,tid, it);
-    auto temp09 = inErr(7, tid, it) + errorProp8 *inErr(8, tid, it) + errorProp9 *inErr(9, tid, it) + errorProp10 *inErr(13,tid, it) + errorProp11 *inErr(18,tid, it);
-    auto temp10 = inErr(11,tid, it) + errorProp8 *inErr(12,tid, it) + errorProp9 *inErr(13,tid, it) + errorProp10 *inErr(14,tid, it) + errorProp11 *inErr(19,tid, it);
-    auto temp11 = inErr(16,tid, it) + errorProp8 *inErr(17,tid, it) + errorProp9 *inErr(18,tid, it) + errorProp10 *inErr(19,tid, it) + errorProp11 *inErr(20,tid, it);
+    auto temp00 = inErr(0, terr_stride, terr_blk_offset) + errorProp2 *inErr(3, terr_stride, terr_blk_offset) + errorProp3 *inErr(6, terr_stride, terr_blk_offset) + errorProp4  *inErr(10,terr_stride, terr_blk_offset) + errorProp5  *inErr(15,terr_stride, terr_blk_offset);
+    auto temp02 = inErr(3, terr_stride, terr_blk_offset) + errorProp2 *inErr(5, terr_stride, terr_blk_offset) + errorProp3 *inErr(8, terr_stride, terr_blk_offset) + errorProp4  *inErr(12,terr_stride, terr_blk_offset) + errorProp5  *inErr(17,terr_stride, terr_blk_offset);
+    auto temp03 = inErr(6, terr_stride, terr_blk_offset) + errorProp2 *inErr(8, terr_stride, terr_blk_offset) + errorProp3 *inErr(9, terr_stride, terr_blk_offset) + errorProp4  *inErr(13,terr_stride, terr_blk_offset) + errorProp5  *inErr(18,terr_stride, terr_blk_offset);
+    auto temp04 = inErr(10,terr_stride, terr_blk_offset) + errorProp2 *inErr(12,terr_stride, terr_blk_offset) + errorProp3 *inErr(13,terr_stride, terr_blk_offset) + errorProp4  *inErr(14,terr_stride, terr_blk_offset) + errorProp5  *inErr(19,terr_stride, terr_blk_offset);
+    auto temp05 = inErr(15,terr_stride, terr_blk_offset) + errorProp2 *inErr(17,terr_stride, terr_blk_offset) + errorProp3 *inErr(18,terr_stride, terr_blk_offset) + errorProp4  *inErr(19,terr_stride, terr_blk_offset) + errorProp5  *inErr(20,terr_stride, terr_blk_offset);
+    auto temp06 = inErr(1, terr_stride, terr_blk_offset) + errorProp8 *inErr(3, terr_stride, terr_blk_offset) + errorProp9 *inErr(6, terr_stride, terr_blk_offset) + errorProp10 *inErr(10,terr_stride, terr_blk_offset) + errorProp11 *inErr(15,terr_stride, terr_blk_offset);
+    auto temp07 = inErr(2, terr_stride, terr_blk_offset) + errorProp8 *inErr(4, terr_stride, terr_blk_offset) + errorProp9 *inErr(7, terr_stride, terr_blk_offset) + errorProp10 *inErr(11,terr_stride, terr_blk_offset) + errorProp11 *inErr(16,terr_stride, terr_blk_offset);
+    auto temp08 = inErr(4, terr_stride, terr_blk_offset) + errorProp8 *inErr(5, terr_stride, terr_blk_offset) + errorProp9 *inErr(8, terr_stride, terr_blk_offset) + errorProp10 *inErr(12,terr_stride, terr_blk_offset) + errorProp11 *inErr(17,terr_stride, terr_blk_offset);
+    auto temp09 = inErr(7, terr_stride, terr_blk_offset) + errorProp8 *inErr(8, terr_stride, terr_blk_offset) + errorProp9 *inErr(9, terr_stride, terr_blk_offset) + errorProp10 *inErr(13,terr_stride, terr_blk_offset) + errorProp11 *inErr(18,terr_stride, terr_blk_offset);
+    auto temp10 = inErr(11,terr_stride, terr_blk_offset) + errorProp8 *inErr(12,terr_stride, terr_blk_offset) + errorProp9 *inErr(13,terr_stride, terr_blk_offset) + errorProp10 *inErr(14,terr_stride, terr_blk_offset) + errorProp11 *inErr(19,terr_stride, terr_blk_offset);
+    auto temp11 = inErr(16,terr_stride, terr_blk_offset) + errorProp8 *inErr(17,terr_stride, terr_blk_offset) + errorProp9 *inErr(18,terr_stride, terr_blk_offset) + errorProp10 *inErr(19,terr_stride, terr_blk_offset) + errorProp11 *inErr(20,terr_stride, terr_blk_offset);
 
-    auto temp24 = errorProp26 *inErr(3, tid, it) + errorProp27 *inErr(6, tid, it) + inErr(10, tid, it) + errorProp29 *inErr(15, tid, it);
-    auto temp25 = errorProp26 *inErr(4, tid, it) + errorProp27 *inErr(7, tid, it) + inErr(11, tid, it) + errorProp29 *inErr(16, tid, it);
-    auto temp26 = errorProp26 *inErr(5, tid, it) + errorProp27 *inErr(8, tid, it) + inErr(12, tid, it) + errorProp29 *inErr(17, tid, it);
-    auto temp27 = errorProp26 *inErr(8, tid, it) + errorProp27 *inErr(9, tid, it) + inErr(13, tid, it) + errorProp29 *inErr(18, tid, it);
-    auto temp28 = errorProp26 *inErr(12, tid, it) + errorProp27 *inErr(13, tid, it) + inErr(14, tid, it) + errorProp29 *inErr(19, tid, it);
-    auto temp29 = errorProp26 *inErr(17, tid, it) + errorProp27 *inErr(18, tid, it) + inErr(19, tid, it) + errorProp29 *inErr(20, tid, it);
+    auto temp24 = errorProp26 *inErr(3, terr_stride, terr_blk_offset) + errorProp27 *inErr(6, terr_stride, terr_blk_offset) + inErr(10, terr_stride, terr_blk_offset) + errorProp29 *inErr(15, terr_stride, terr_blk_offset);
+    auto temp25 = errorProp26 *inErr(4, terr_stride, terr_blk_offset) + errorProp27 *inErr(7, terr_stride, terr_blk_offset) + inErr(11, terr_stride, terr_blk_offset) + errorProp29 *inErr(16, terr_stride, terr_blk_offset);
+    auto temp26 = errorProp26 *inErr(5, terr_stride, terr_blk_offset) + errorProp27 *inErr(8, terr_stride, terr_blk_offset) + inErr(12, terr_stride, terr_blk_offset) + errorProp29 *inErr(17, terr_stride, terr_blk_offset);
+    auto temp27 = errorProp26 *inErr(8, terr_stride, terr_blk_offset) + errorProp27 *inErr(9, terr_stride, terr_blk_offset) + inErr(13, terr_stride, terr_blk_offset) + errorProp29 *inErr(18, terr_stride, terr_blk_offset);
+    auto temp28 = errorProp26 *inErr(12, terr_stride, terr_blk_offset) + errorProp27 *inErr(13, terr_stride, terr_blk_offset) + inErr(14, terr_stride, terr_blk_offset) + errorProp29 *inErr(19, terr_stride, terr_blk_offset);
+    auto temp29 = errorProp26 *inErr(17, terr_stride, terr_blk_offset) + errorProp27 *inErr(18, terr_stride, terr_blk_offset) + inErr(19, terr_stride, terr_blk_offset) + errorProp29 *inErr(20, terr_stride, terr_blk_offset);
 
-    outErr(0, tid, it) = temp00 + temp02*errorProp2 + temp03*errorProp3 + temp04*errorProp4 + temp05*errorProp5;
-    outErr(1, tid, it) = temp06 + temp08*errorProp2 + temp09*errorProp3 + temp10*errorProp4 + temp11*errorProp5;
-    outErr(2, tid, it) = temp07 + temp08*errorProp8 + temp09*errorProp9 + temp10*errorProp10 + temp11*errorProp11;
-    outErr(3, tid, it) = 0.0f;
-    outErr(4, tid, it) = 0.0f;
-    outErr(5, tid, it) = 0.0f;
-    outErr(6, tid, it) = inErr(6, tid, it) + inErr(8, tid, it)*errorProp2 + inErr(9, tid, it)*errorProp3 + inErr(13, tid, it)*errorProp4 + inErr(18, tid, it)*errorProp5;
-    outErr(7, tid, it) = inErr(7, tid, it) + inErr(8, tid, it)*errorProp8 + inErr(9, tid, it)*errorProp9 + inErr(13, tid, it)*errorProp10 + inErr(18, tid, it)*errorProp11;
-    outErr(8, tid, it) = 0.0f;
-    outErr(9, tid, it) = inErr(9, tid, it);
-    outErr(10, tid, it) = temp24 + temp26*errorProp2 + temp27*errorProp3 + temp28*errorProp4 + temp29*errorProp5;
-    outErr(11, tid, it) = temp25 + temp26*errorProp8 + temp27*errorProp9 + temp28*errorProp10 + temp29*errorProp11;
-    outErr(12, tid, it) = 0.0f;
-    outErr(13, tid, it) = temp27;
-    outErr(14, tid, it) = temp26*errorProp26 + temp27*errorProp27 + temp28 + temp29*errorProp29;
-    outErr(15, tid, it) = inErr(15, tid, it) + inErr(17, tid, it)*errorProp2 + inErr(18, tid, it)*errorProp3 + inErr(19, tid, it)*errorProp4 + inErr(20, tid, it)*errorProp5;
-    outErr(16, tid, it) = inErr(16, tid, it) + inErr(17, tid, it)*errorProp8 + inErr(18, tid, it)*errorProp9 + inErr(19, tid, it)*errorProp10 + inErr(20, tid, it)*errorProp11;
-    outErr(17, tid, it) = 0.0f;
-    outErr(18, tid, it) = inErr(18, tid, it);
-    outErr(19, tid, it) = inErr(17, tid, it)*errorProp26 + inErr(18, tid, it)*errorProp27 + inErr(19, tid, it) + inErr(20, tid, it)*errorProp29;
-    outErr(20, tid, it) = inErr(20, tid, it);
+    outErr(0, terr_stride, terr_blk_offset) = temp00 + temp02*errorProp2 + temp03*errorProp3 + temp04*errorProp4 + temp05*errorProp5;
+    outErr(1, terr_stride, terr_blk_offset) = temp06 + temp08*errorProp2 + temp09*errorProp3 + temp10*errorProp4 + temp11*errorProp5;
+    outErr(2, terr_stride, terr_blk_offset) = temp07 + temp08*errorProp8 + temp09*errorProp9 + temp10*errorProp10 + temp11*errorProp11;
+    outErr(3, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(4, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(5, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(6, terr_stride, terr_blk_offset) = inErr(6, terr_stride, terr_blk_offset) + inErr(8, terr_stride, terr_blk_offset)*errorProp2 + inErr(9, terr_stride, terr_blk_offset)*errorProp3 + inErr(13, terr_stride, terr_blk_offset)*errorProp4 + inErr(18, terr_stride, terr_blk_offset)*errorProp5;
+    outErr(7, terr_stride, terr_blk_offset) = inErr(7, terr_stride, terr_blk_offset) + inErr(8, terr_stride, terr_blk_offset)*errorProp8 + inErr(9, terr_stride, terr_blk_offset)*errorProp9 + inErr(13, terr_stride, terr_blk_offset)*errorProp10 + inErr(18, terr_stride, terr_blk_offset)*errorProp11;
+    outErr(8, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(9, terr_stride, terr_blk_offset) = inErr(9, terr_stride, terr_blk_offset);
+    outErr(10, terr_stride, terr_blk_offset) = temp24 + temp26*errorProp2 + temp27*errorProp3 + temp28*errorProp4 + temp29*errorProp5;
+    outErr(11, terr_stride, terr_blk_offset) = temp25 + temp26*errorProp8 + temp27*errorProp9 + temp28*errorProp10 + temp29*errorProp11;
+    outErr(12, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(13, terr_stride, terr_blk_offset) = temp27;
+    outErr(14, terr_stride, terr_blk_offset) = temp26*errorProp26 + temp27*errorProp27 + temp28 + temp29*errorProp29;
+    outErr(15, terr_stride, terr_blk_offset) = inErr(15, terr_stride, terr_blk_offset) + inErr(17, terr_stride, terr_blk_offset)*errorProp2 + inErr(18, terr_stride, terr_blk_offset)*errorProp3 + inErr(19, terr_stride, terr_blk_offset)*errorProp4 + inErr(20, terr_stride, terr_blk_offset)*errorProp5;
+    outErr(16, terr_stride, terr_blk_offset) = inErr(16, terr_stride, terr_blk_offset) + inErr(17, terr_stride, terr_blk_offset)*errorProp8 + inErr(18, terr_stride, terr_blk_offset)*errorProp9 + inErr(19, terr_stride, terr_blk_offset)*errorProp10 + inErr(20, terr_stride, terr_blk_offset)*errorProp11;
+    outErr(17, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(18, terr_stride, terr_blk_offset) = inErr(18, terr_stride, terr_blk_offset);
+    outErr(19, terr_stride, terr_blk_offset) = inErr(17, terr_stride, terr_blk_offset)*errorProp26 + inErr(18, terr_stride, terr_blk_offset)*errorProp27 + inErr(19, terr_stride, terr_blk_offset) + inErr(20, terr_stride, terr_blk_offset)*errorProp29;
+    outErr(20, terr_stride, terr_blk_offset) = inErr(20, terr_stride, terr_blk_offset);
   }
 
   return;
