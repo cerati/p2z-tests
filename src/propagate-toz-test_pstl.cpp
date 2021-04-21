@@ -875,6 +875,13 @@ void propagateToZ(MPTRKAccessors       &obtracks,
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
 
+    errorProp[PosInMtrx<block_size>(0,0,6) + it] = 1.0f;
+    errorProp[PosInMtrx<block_size>(1,1,6) + it] = 1.0f;
+    errorProp[PosInMtrx<block_size>(2,2,6) + it] = 1.0f;
+    errorProp[PosInMtrx<block_size>(3,3,6) + it] = 1.0f;
+    errorProp[PosInMtrx<block_size>(4,4,6) + it] = 1.0f;
+    errorProp[PosInMtrx<block_size>(5,5,6) + it] = 1.0f;
+
     errorProp[PosInMtrx<block_size>(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;//2
     errorProp[PosInMtrx<block_size>(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);//3
     errorProp[PosInMtrx<block_size>(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));//4
