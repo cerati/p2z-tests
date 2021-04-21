@@ -375,11 +375,14 @@ std::shared_ptr<MPHIT> prepareHitsN(struct AHIT inputhit) {
 
 
 
-//Pure host version:
+//Pure static version:
 
 template <typename T, int N, int bSize>
 struct MPNX_ {
    std::array<T,N*bSize> data;
+   //basic accessors
+   const T& operator[](const int idx) const {return data[idx];}
+   T& operator[](const int idx) {return data[idx];}
 };
 
 using MP1I_    = MPNX_<int,   1 , bsize>;
@@ -387,6 +390,7 @@ using MP3F_    = MPNX_<float, 3 , bsize>;
 using MP6F_    = MPNX_<float, 6 , bsize>;
 using MP3x3SF_ = MPNX_<float, 6 , bsize>;
 using MP6x6SF_ = MPNX_<float, 21, bsize>;
+using MP6x6F_  = MPNX_<float, 36, bsize>;
 
 struct MPTRK_ {
   MP6F_    par;
@@ -400,6 +404,7 @@ struct MPHIT_ {
   MP3x3SF_ cov;
 };
 
+// HOST methods and routines
 
 MPTRK_* bTk(MPTRK_* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
@@ -725,7 +730,7 @@ constexpr size_t PosInMtrx(const size_t &&i, const size_t &&j, const size_t &&D)
 }
 
 template<typename MP6x6SFAccessor_, size_t block_size = 1>
-inline void MultHelixPropEndcap(const std::array<float, 36*block_size> &A, const MP6x6SFAccessor_ &B, std::array<float, 36*block_size> &C, const int tid) {
+inline void MultHelixPropEndcap(const MP6x6F_ &A, const MP6x6SFAccessor_ &B, MP6x6F_ &C, const int tid) {
 
   const auto stride = B.GetThreadStride();
   const auto offset = B.GetThreadOffset(tid);
@@ -780,7 +785,7 @@ inline void MultHelixPropEndcap(const std::array<float, 36*block_size> &A, const
 }
 
 template<typename MP6x6SFAccessor_, size_t block_size = 1>
-inline void MultHelixPropTranspEndcap(const std::array<float, 36*block_size> &A, const std::array<float, 36*block_size> &B, MP6x6SFAccessor_ &C, const int tid) {
+inline void MultHelixPropTranspEndcap(const MP6x6F_ &A, const MP6x6F_ &B, MP6x6SFAccessor_ &C, const int tid) {
 
   const auto stride = C.GetThreadStride();
   const auto offset = C.GetThreadOffset(tid);
@@ -839,8 +844,8 @@ void propagateToZ(MPTRKAccessors       &obtracks,
   const auto par_stride = inPar.GetThreadStride();
   const auto par_offset = inPar.GetThreadOffset(tid);
 
-  std::array<float, 36*block_size> temp{0.0f};
-  std::array<float, 36*block_size> errorProp{0.0f};
+  MP6x6F_ temp;
+  MP6x6F_ errorProp;
 
 #pragma simd
   for (int it = 0;it < block_size; it++) {
