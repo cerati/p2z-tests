@@ -724,97 +724,6 @@ constexpr size_t PosInMtrx(const size_t &&i, const size_t &&j, const size_t &&D)
   return block_size*(i*D+j);
 }
 
-template<typename MP6x6SFAccessor_, size_t block_size = 1>
-inline void MultHelixPropEndcap(const std::array<float, 36*block_size> &A, const MP6x6SFAccessor_ &B, std::array<float, 36*block_size> &C, const int tid) {
-
-  const auto stride = B.GetThreadStride();
-  const auto offset = B.GetThreadOffset(tid);
-
-  #pragma simd
-  for (int it = 0;it < block_size; it++) {
-
-    const auto blk_offset = offset+it;
-
-    C[ 0*block_size + it] = B(0, stride, blk_offset) + A[PosInMtrx<block_size>(0,2,6) + it] *B(3, stride, blk_offset) + A[PosInMtrx<block_size>(0,3,6) + it] *B(6, stride, blk_offset) + A[PosInMtrx<block_size>(0,4,6) + it]  *B(10,stride, blk_offset) + A[PosInMtrx<block_size>(0,5,6) + it]  *B(15,stride, blk_offset);
-    C[ 1*block_size + it] = B(1, stride, blk_offset) + A[PosInMtrx<block_size>(0,2,6) + it] *B(4, stride, blk_offset) + A[PosInMtrx<block_size>(0,3,6) + it] *B(7, stride, blk_offset) + A[PosInMtrx<block_size>(0,4,6) + it]  *B(11,stride, blk_offset) + A[PosInMtrx<block_size>(0,5,6) + it]  *B(16,stride, blk_offset);
-    C[ 2*block_size + it] = B(3, stride, blk_offset) + A[PosInMtrx<block_size>(0,2,6) + it] *B(5, stride, blk_offset) + A[PosInMtrx<block_size>(0,3,6) + it] *B(8, stride, blk_offset) + A[PosInMtrx<block_size>(0,4,6) + it]  *B(12,stride, blk_offset) + A[PosInMtrx<block_size>(0,5,6) + it]  *B(17,stride, blk_offset);
-    C[ 3*block_size + it] = B(6, stride, blk_offset) + A[PosInMtrx<block_size>(0,2,6) + it] *B(8, stride, blk_offset) + A[PosInMtrx<block_size>(0,3,6) + it] *B(9, stride, blk_offset) + A[PosInMtrx<block_size>(0,4,6) + it]  *B(13,stride, blk_offset) + A[PosInMtrx<block_size>(0,5,6) + it]  *B(18,stride, blk_offset);
-    C[ 4*block_size + it] = B(10,stride, blk_offset) + A[PosInMtrx<block_size>(0,2,6) + it] *B(12,stride, blk_offset) + A[PosInMtrx<block_size>(0,3,6) + it] *B(13,stride, blk_offset) + A[PosInMtrx<block_size>(0,4,6) + it]  *B(14,stride, blk_offset) + A[PosInMtrx<block_size>(0,5,6) + it]  *B(19,stride, blk_offset);
-    C[ 5*block_size + it] = B(15,stride, blk_offset) + A[PosInMtrx<block_size>(0,2,6) + it] *B(17,stride, blk_offset) + A[PosInMtrx<block_size>(0,3,6) + it] *B(18,stride, blk_offset) + A[PosInMtrx<block_size>(0,4,6) + it]  *B(19,stride, blk_offset) + A[PosInMtrx<block_size>(0,5,6) + it]  *B(20,stride, blk_offset);
-    C[ 6*block_size + it] = B(1, stride, blk_offset) + A[PosInMtrx<block_size>(1,2,6) + it] *B(3, stride, blk_offset) + A[PosInMtrx<block_size>(1,3,6) + it] *B(6, stride, blk_offset) + A[PosInMtrx<block_size>(1,4,6) + it] *B(10,stride, blk_offset) + A[PosInMtrx<block_size>(1,5,6) + it] *B(15,stride, blk_offset);
-    C[ 7*block_size + it] = B(2, stride, blk_offset) + A[PosInMtrx<block_size>(1,2,6) + it] *B(4, stride, blk_offset) + A[PosInMtrx<block_size>(1,3,6) + it] *B(7, stride, blk_offset) + A[PosInMtrx<block_size>(1,4,6) + it] *B(11,stride, blk_offset) + A[PosInMtrx<block_size>(1,5,6) + it] *B(16,stride, blk_offset);
-    C[ 8*block_size + it] = B(4, stride, blk_offset) + A[PosInMtrx<block_size>(1,2,6) + it] *B(5, stride, blk_offset) + A[PosInMtrx<block_size>(1,3,6) + it] *B(8, stride, blk_offset) + A[PosInMtrx<block_size>(1,4,6) + it] *B(12,stride, blk_offset) + A[PosInMtrx<block_size>(1,5,6) + it] *B(17,stride, blk_offset);
-    C[ 9*block_size + it] = B(7, stride, blk_offset) + A[PosInMtrx<block_size>(1,2,6) + it] *B(8, stride, blk_offset) + A[PosInMtrx<block_size>(1,3,6) + it] *B(9, stride, blk_offset) + A[PosInMtrx<block_size>(1,4,6) + it] *B(13,stride, blk_offset) + A[PosInMtrx<block_size>(1,5,6) + it] *B(18,stride, blk_offset);
-    C[10*block_size + it] = B(11,stride, blk_offset) + A[PosInMtrx<block_size>(1,2,6) + it] *B(12,stride, blk_offset) + A[PosInMtrx<block_size>(1,3,6) + it] *B(13,stride, blk_offset) + A[PosInMtrx<block_size>(1,4,6) + it] *B(14,stride, blk_offset) + A[PosInMtrx<block_size>(1,5,6) + it] *B(19,stride, blk_offset);
-    C[11*block_size + it] = B(16,stride, blk_offset) + A[PosInMtrx<block_size>(1,2,6) + it] *B(17,stride, blk_offset) + A[PosInMtrx<block_size>(1,3,6) + it] *B(18,stride, blk_offset) + A[PosInMtrx<block_size>(1,4,6) + it] *B(19,stride, blk_offset) + A[PosInMtrx<block_size>(1,5,6) + it] *B(20,stride, blk_offset);
-
-    C[12*block_size + it] = 0.0f;
-    C[13*block_size + it] = 0.0f;
-    C[14*block_size + it] = 0.0f;
-    C[15*block_size + it] = 0.0f;
-    C[16*block_size + it] = 0.0f;
-    C[17*block_size + it] = 0.0f;
-    C[18*block_size + it] = B(6,stride, blk_offset);
-    C[19*block_size + it] = B(7,stride, blk_offset);
-    C[20*block_size + it] = B(8,stride, blk_offset);
-    C[21*block_size + it] = B(9,stride, blk_offset);
-    C[22*block_size + it] = B(13,stride, blk_offset);
-    C[23*block_size + it] = B(18,stride, blk_offset);
-
-
-    C[24*block_size + it] = A[PosInMtrx<block_size>(4,2,6) + it] *B(3, stride, blk_offset) + A[PosInMtrx<block_size>(4,3,6) + it] *B(6, stride, blk_offset) + B(10, stride, blk_offset) + A[PosInMtrx<block_size>(4,5,6) + it] *B(15, stride, blk_offset);
-    C[25*block_size + it] = A[PosInMtrx<block_size>(4,2,6) + it] *B(4, stride, blk_offset) + A[PosInMtrx<block_size>(4,3,6) + it] *B(7, stride, blk_offset) + B(11, stride, blk_offset) + A[PosInMtrx<block_size>(4,5,6) + it] *B(16, stride, blk_offset);
-    C[26*block_size + it] = A[PosInMtrx<block_size>(4,2,6) + it] *B(5, stride, blk_offset) + A[PosInMtrx<block_size>(4,3,6) + it] *B(8, stride, blk_offset) + B(12, stride, blk_offset) + A[PosInMtrx<block_size>(4,5,6) + it] *B(17, stride, blk_offset);
-    C[27*block_size + it] = A[PosInMtrx<block_size>(4,2,6) + it] *B(8, stride, blk_offset) + A[PosInMtrx<block_size>(4,3,6) + it] *B(9, stride, blk_offset) + B(13, stride, blk_offset) + A[PosInMtrx<block_size>(4,5,6) + it] *B(18, stride, blk_offset);
-    C[28*block_size + it] = A[PosInMtrx<block_size>(4,2,6) + it] *B(12, stride, blk_offset) + A[PosInMtrx<block_size>(4,3,6) + it] *B(13, stride, blk_offset) + B(14, stride, blk_offset) + A[PosInMtrx<block_size>(4,5,6) + it] *B(19, stride, blk_offset);
-    C[29*block_size + it] = A[PosInMtrx<block_size>(4,2,6) + it] *B(17, stride, blk_offset) + A[PosInMtrx<block_size>(4,3,6) + it] *B(18, stride, blk_offset) + B(19, stride, blk_offset) + A[PosInMtrx<block_size>(4,5,6) + it] *B(20, stride, blk_offset);
-
-    C[30*block_size + it] = B(15,stride, blk_offset);
-    C[31*block_size + it] = B(16,stride, blk_offset);
-    C[32*block_size + it] = B(17,stride, blk_offset);
-    C[33*block_size + it] = B(18,stride, blk_offset);
-    C[34*block_size + it] = B(19,stride, blk_offset);
-    C[35*block_size + it] = B(20,stride, blk_offset);
-  }
-  return;
-}
-
-template<typename MP6x6SFAccessor_, size_t block_size = 1>
-inline void MultHelixPropTranspEndcap(const std::array<float, 36*block_size> &A, const std::array<float, 36*block_size> &B, MP6x6SFAccessor_ &C, const int tid) {
-
-  const auto stride = C.GetThreadStride();
-  const auto offset = C.GetThreadOffset(tid);
-
-  #pragma simd
-  for (int it = 0;it < block_size; it++) {
-    const auto blk_offset = offset+it;
-
-    C(0, stride, blk_offset) = B[0*block_size + it] + B[2*block_size + it]*A[PosInMtrx<block_size>(0,2,6) + it] + B[3*block_size + it]*A[PosInMtrx<block_size>(0,3,6) + it] + B[4*block_size + it]*A[PosInMtrx<block_size>(0,4,6) + it] + B[5*block_size + it]*A[PosInMtrx<block_size>(0,5,6) + it];
-    C(1, stride, blk_offset) = B[6*block_size + it] + B[8*block_size + it]*A[PosInMtrx<block_size>(0,2,6) + it] + B[9*block_size + it]*A[PosInMtrx<block_size>(0,3,6) + it] + B[10*block_size + it]*A[PosInMtrx<block_size>(0,4,6) + it] + B[11*block_size + it]*A[PosInMtrx<block_size>(0,5,6) + it];
-    C(2, stride, blk_offset) = B[7*block_size + it] + B[8*block_size + it]*A[PosInMtrx<block_size>(1,2,6) + it] + B[9*block_size + it]*A[PosInMtrx<block_size>(1,3,6) + it] + B[10*block_size + it]*A[PosInMtrx<block_size>(1,4,6) + it] + B[11*block_size + it]*A[PosInMtrx<block_size>(1,5,6) + it];
-    C(3, stride, blk_offset) = 0.0f;
-    C(4, stride, blk_offset) = 0.0f;
-    C(5, stride, blk_offset) = 0.0f;
-    C(6, stride, blk_offset) = B[18*block_size + it] + B[20*block_size + it]*A[PosInMtrx<block_size>(0,2,6) + it] + B[21*block_size + it]*A[PosInMtrx<block_size>(0,3,6) + it] + B[22*block_size + it]*A[PosInMtrx<block_size>(0,4,6) + it] + B[23*block_size + it]*A[PosInMtrx<block_size>(0,5,6) + it];
-    C(7, stride, blk_offset) = B[19*block_size + it] + B[20*block_size + it]*A[PosInMtrx<block_size>(1,2,6) + it] + B[21*block_size + it]*A[PosInMtrx<block_size>(1,3,6) + it] + B[22*block_size + it]*A[PosInMtrx<block_size>(1,4,6) + it] + B[23*block_size + it]*A[PosInMtrx<block_size>(1,5,6) + it];
-    C(8, stride, blk_offset) = 0.0f;
-    C(9, stride, blk_offset) = B[21*block_size + it];
-    C(10, stride, blk_offset) = B[24*block_size + it] + B[26*block_size + it]*A[PosInMtrx<block_size>(0,2,6) + it] + B[27*block_size + it]*A[PosInMtrx<block_size>(0,3,6) + it] + B[28*block_size + it]*A[PosInMtrx<block_size>(0,4,6) + it] + B[29*block_size + it]*A[PosInMtrx<block_size>(0,5,6) + it];
-    C(11, stride, blk_offset) = B[25*block_size + it] + B[26*block_size + it]*A[PosInMtrx<block_size>(1,2,6) + it] + B[27*block_size + it]*A[PosInMtrx<block_size>(1,3,6) + it] + B[28*block_size + it]*A[PosInMtrx<block_size>(1,4,6) + it] + B[29*block_size + it]*A[PosInMtrx<block_size>(1,5,6) + it];
-    C(12, stride, blk_offset) = 0.0f;
-    C(13, stride, blk_offset) = B[27*block_size + it];
-    C(14, stride, blk_offset) = B[26*block_size + it]*A[PosInMtrx<block_size>(4,2,6) + it] + B[27*block_size + it]*A[PosInMtrx<block_size>(4,3,6) + it] + B[28*block_size + it] + B[29*block_size + it]*A[PosInMtrx<block_size>(4,5,6) + it];
-    C(15, stride, blk_offset) = B[30*block_size + it] + B[32*block_size + it]*A[PosInMtrx<block_size>(0,2,6) + it] + B[33*block_size + it]*A[PosInMtrx<block_size>(0,3,6) + it] + B[34*block_size + it]*A[PosInMtrx<block_size>(0,4,6) + it] + B[35*block_size + it]*A[PosInMtrx<block_size>(0,5,6) + it];
-    C(16, stride, blk_offset) = B[31*block_size + it] + B[32*block_size + it]*A[PosInMtrx<block_size>(1,2,6) + it] + B[33*block_size + it]*A[PosInMtrx<block_size>(1,3,6) + it] + B[34*block_size + it]*A[PosInMtrx<block_size>(1,4,6) + it] + B[35*block_size + it]*A[PosInMtrx<block_size>(1,5,6) + it];
-    C(17, stride, blk_offset) = 0.0f;
-    C(18, stride, blk_offset) = B[33*block_size + it];
-    C(19, stride, blk_offset) = B[32*block_size + it]*A[PosInMtrx<block_size>(4,2,6) + it] + B[33*block_size + it]*A[PosInMtrx<block_size>(4,3,6) + it] + B[34*block_size + it] + B[35*block_size + it]*A[PosInMtrx<block_size>(4,5,6) + it];
-    C(20, stride, blk_offset) = B[35*block_size + it];
-
-  }
-  return;
-}
-
 template <class MPTRKAccessors, class MPHITAccessors, size_t block_size = 1>
 void propagateToZ(MPTRKAccessors       &obtracks,
                   const MPTRKAccessors &btracks,
@@ -836,14 +745,19 @@ void propagateToZ(MPTRKAccessors       &obtracks,
   MP6x6SFaccessor &outErr    = obtracks.cov;
   MP6Faccessor    &outPar    = obtracks.par;
 
+  const auto terr_stride = inErr.GetThreadStride();
+  const auto terr_offset = inErr.GetThreadOffset(tid);
+
   const auto par_stride = inPar.GetThreadStride();
   const auto par_offset = inPar.GetThreadOffset(tid);
 
-  std::array<float, 36*block_size> temp{0.0f};
-  std::array<float, 36*block_size> errorProp{0.0f};
-
+  std::array<float, 36*block_size> _temp{0.0f};
+  //std::array<float, 36*block_size> errorProp{0.0f};
+  float errorProp[36*block_size] = {0.0f};
 #pragma simd
   for (int it = 0;it < block_size; it++) {
+
+    const auto terr_blk_offset = terr_offset+it;
     const auto par_blk_offset  = par_offset+it;
 
     const float zout = msP(iparZ, tid, it, lay);
@@ -886,10 +800,50 @@ void propagateToZ(MPTRKAccessors       &obtracks,
     errorProp[PosInMtrx<block_size>(4,2,6) + it] = -inPar(iparIpt, par_stride, par_blk_offset)*sinT*(icosTk);//26
     errorProp[PosInMtrx<block_size>(4,3,6) + it] = sinT*deltaZ*(icosTk);//27
     errorProp[PosInMtrx<block_size>(4,5,6) + it] = inPar(iparIpt, par_stride, par_blk_offset)*deltaZ*(icosT*icosTk);//29
-  }
 
-  MultHelixPropEndcap<MP6x6SFaccessor, block_size>(errorProp, inErr, temp, tid);
-  MultHelixPropTranspEndcap<MP6x6SFaccessor, block_size>(errorProp, temp, outErr, tid);
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    auto temp00 = inErr(0, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,2,6) + it] *inErr(3, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,3,6) + it] *inErr(6, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,4,6) + it]  *inErr(10,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,5,6) + it]  *inErr(15,terr_stride, terr_blk_offset);
+    auto temp02 = inErr(3, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,2,6) + it] *inErr(5, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,3,6) + it] *inErr(8, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,4,6) + it]  *inErr(12,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,5,6) + it]  *inErr(17,terr_stride, terr_blk_offset);
+    auto temp03 = inErr(6, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,2,6) + it] *inErr(8, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,3,6) + it] *inErr(9, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,4,6) + it]  *inErr(13,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,5,6) + it]  *inErr(18,terr_stride, terr_blk_offset);
+    auto temp04 = inErr(10,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,2,6) + it] *inErr(12,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,3,6) + it] *inErr(13,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,4,6) + it]  *inErr(14,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,5,6) + it]  *inErr(19,terr_stride, terr_blk_offset);
+    auto temp05 = inErr(15,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,2,6) + it] *inErr(17,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,3,6) + it] *inErr(18,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,4,6) + it]  *inErr(19,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(0,5,6) + it]  *inErr(20,terr_stride, terr_blk_offset);
+    auto temp06 = inErr(1, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,2,6) + it] *inErr(3, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,3,6) + it] *inErr(6, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,4,6) + it] *inErr(10,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,5,6) + it] *inErr(15,terr_stride, terr_blk_offset);
+    auto temp07 = inErr(2, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,2,6) + it] *inErr(4, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,3,6) + it] *inErr(7, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,4,6) + it] *inErr(11,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,5,6) + it] *inErr(16,terr_stride, terr_blk_offset);
+    auto temp08 = inErr(4, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,2,6) + it] *inErr(5, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,3,6) + it] *inErr(8, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,4,6) + it] *inErr(12,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,5,6) + it] *inErr(17,terr_stride, terr_blk_offset);
+    auto temp09 = inErr(7, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,2,6) + it] *inErr(8, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,3,6) + it] *inErr(9, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,4,6) + it] *inErr(13,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,5,6) + it] *inErr(18,terr_stride, terr_blk_offset);
+    auto temp10 = inErr(11,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,2,6) + it] *inErr(12,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,3,6) + it] *inErr(13,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,4,6) + it] *inErr(14,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,5,6) + it] *inErr(19,terr_stride, terr_blk_offset);
+    auto temp11 = inErr(16,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,2,6) + it] *inErr(17,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,3,6) + it] *inErr(18,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,4,6) + it] *inErr(19,terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(1,5,6) + it] *inErr(20,terr_stride, terr_blk_offset);
+
+    auto temp24 = errorProp[PosInMtrx<block_size>(4,2,6) + it] *inErr(3, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,3,6) + it] *inErr(6, terr_stride, terr_blk_offset) + inErr(10, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,5,6) + it] *inErr(15, terr_stride, terr_blk_offset);
+    auto temp25 = errorProp[PosInMtrx<block_size>(4,2,6) + it] *inErr(4, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,3,6) + it] *inErr(7, terr_stride, terr_blk_offset) + inErr(11, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,5,6) + it] *inErr(16, terr_stride, terr_blk_offset);
+    auto temp26 = errorProp[PosInMtrx<block_size>(4,2,6) + it] *inErr(5, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,3,6) + it] *inErr(8, terr_stride, terr_blk_offset) + inErr(12, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,5,6) + it] *inErr(17, terr_stride, terr_blk_offset);
+    auto temp27 = errorProp[PosInMtrx<block_size>(4,2,6) + it] *inErr(8, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,3,6) + it] *inErr(9, terr_stride, terr_blk_offset) + inErr(13, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,5,6) + it] *inErr(18, terr_stride, terr_blk_offset);
+    auto temp28 = errorProp[PosInMtrx<block_size>(4,2,6) + it] *inErr(12, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,3,6) + it] *inErr(13, terr_stride, terr_blk_offset) + inErr(14, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,5,6) + it] *inErr(19, terr_stride, terr_blk_offset);
+    auto temp29 = errorProp[PosInMtrx<block_size>(4,2,6) + it] *inErr(17, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,3,6) + it] *inErr(18, terr_stride, terr_blk_offset) + inErr(19, terr_stride, terr_blk_offset) + errorProp[PosInMtrx<block_size>(4,5,6) + it] *inErr(20, terr_stride, terr_blk_offset);
+
+    outErr(0, terr_stride, terr_blk_offset) = temp00 + temp02*errorProp[PosInMtrx<block_size>(0,2,6) + it] + temp03*errorProp[PosInMtrx<block_size>(0,3,6) + it] + temp04*errorProp[PosInMtrx<block_size>(0,4,6) + it] + temp05*errorProp[PosInMtrx<block_size>(0,5,6) + it];
+    outErr(1, terr_stride, terr_blk_offset) = temp06 + temp08*errorProp[PosInMtrx<block_size>(0,2,6) + it] + temp09*errorProp[PosInMtrx<block_size>(0,3,6) + it] + temp10*errorProp[PosInMtrx<block_size>(0,4,6) + it] + temp11*errorProp[PosInMtrx<block_size>(0,5,6) + it];
+    outErr(2, terr_stride, terr_blk_offset) = temp07 + temp08*errorProp[PosInMtrx<block_size>(1,2,6) + it] + temp09*errorProp[PosInMtrx<block_size>(1,3,6) + it] + temp10*errorProp[PosInMtrx<block_size>(1,4,6) + it] + temp11*errorProp[PosInMtrx<block_size>(1,5,6) + it];
+    outErr(3, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(4, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(5, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(6, terr_stride, terr_blk_offset) = inErr(6, terr_stride, terr_blk_offset) + inErr(8, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(0,2,6) + it] + inErr(9, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(0,3,6) + it] + inErr(13, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(0,4,6) + it] + inErr(18, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(0,5,6) + it];
+    outErr(7, terr_stride, terr_blk_offset) = inErr(7, terr_stride, terr_blk_offset) + inErr(8, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(1,2,6) + it] + inErr(9, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(1,3,6) + it] + inErr(13, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(1,4,6) + it] + inErr(18, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(1,5,6) + it];
+    outErr(8, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(9, terr_stride, terr_blk_offset) = inErr(9, terr_stride, terr_blk_offset);
+    outErr(10, terr_stride, terr_blk_offset) = temp24 + temp26*errorProp[PosInMtrx<block_size>(0,2,6) + it] + temp27*errorProp[PosInMtrx<block_size>(0,3,6) + it] + temp28*errorProp[PosInMtrx<block_size>(0,4,6) + it] + temp29*errorProp[PosInMtrx<block_size>(0,5,6) + it];
+    outErr(11, terr_stride, terr_blk_offset) = temp25 + temp26*errorProp[PosInMtrx<block_size>(1,2,6) + it] + temp27*errorProp[PosInMtrx<block_size>(1,3,6) + it] + temp28*errorProp[PosInMtrx<block_size>(1,4,6) + it] + temp29*errorProp[PosInMtrx<block_size>(1,5,6) + it];
+    outErr(12, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(13, terr_stride, terr_blk_offset) = temp27;
+    outErr(14, terr_stride, terr_blk_offset) = temp26*errorProp[PosInMtrx<block_size>(4,2,6) + it] + temp27*errorProp[PosInMtrx<block_size>(4,3,6) + it] + temp28 + temp29*errorProp[PosInMtrx<block_size>(4,5,6) + it];
+    outErr(15, terr_stride, terr_blk_offset) = inErr(15, terr_stride, terr_blk_offset) + inErr(17, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(0,2,6) + it] + inErr(18, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(0,3,6) + it] + inErr(19, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(0,4,6) + it] + inErr(20, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(0,5,6) + it];
+    outErr(16, terr_stride, terr_blk_offset) = inErr(16, terr_stride, terr_blk_offset) + inErr(17, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(1,2,6) + it] + inErr(18, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(1,3,6) + it] + inErr(19, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(1,4,6) + it] + inErr(20, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(1,5,6) + it];
+    outErr(17, terr_stride, terr_blk_offset) = 0.0f;
+    outErr(18, terr_stride, terr_blk_offset) = inErr(18, terr_stride, terr_blk_offset);
+    outErr(19, terr_stride, terr_blk_offset) = inErr(17, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(4,2,6) + it] + inErr(18, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(4,3,6) + it] + inErr(19, terr_stride, terr_blk_offset) + inErr(20, terr_stride, terr_blk_offset)*errorProp[PosInMtrx<block_size>(4,5,6) + it];
+    outErr(20, terr_stride, terr_blk_offset) = inErr(20, terr_stride, terr_blk_offset);
+  }
 
   return;
 }
