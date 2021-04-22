@@ -559,8 +559,218 @@ MPHIT_* prepareHits(struct AHIT inputhit) {
   return result;
 }
 
-//Main (sub)routines
+template<typename T, typename Accessor1, typename Accessor2>
+inline typename std::enable_if<std::is_floating_point<T>::value>::type
+KalmanGainInv(const Accessor1 &a, const Accessor2 &b, std::array<float, 9> c, const int a_stride, const int a_offset, const int b_stride, const int b_offset) {
+  double det =
+      ((a(0, a_stride, a_offset)+b(0, b_stride, b_offset))*(((a(6, a_stride, a_offset)+b(3, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))))) -
+      ((a(1, a_stride, a_offset)+b(1, b_stride, b_offset))*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))))) +
+      ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset))*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset)))));
 
+  T invdet = 1.0 / det;
+
+  c[ 0] =   invdet*(((a(6, a_stride, a_offset)+b(3, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))));
+  c[ 1] =  -invdet*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))));
+  c[ 2] =   invdet*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))));
+  c[ 3] =  -invdet*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))));
+  c[ 4] =   invdet*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))));
+  c[ 5] =  -invdet*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(1, a_stride, a_offset)+b(1, b_stride, b_offset))));
+  c[ 6] =   invdet*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset))));
+  c[ 7] =  -invdet*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(1, a_stride, a_offset)+b(1, b_stride, b_offset))));
+  c[ 8] =   invdet*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset))) - ((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(1, a_stride, a_offset)+b(1, b_stride, b_offset))));
+}
+
+/*
+template<typename T, typename Accessor1, typename Accessor2, size_t block_size>
+inline typename std::enable_if<std::is_floating_point<T>::value>::type
+KalmanGainInv(const Accessor1 &a, const Accessor2 &b, std::array<T, 10> &c, const int tid, const int lay) {
+  const auto a_stride  = a.GetThreadStride();
+  const auto a_offset_ = a.GetThreadOffset(tid);
+
+  const auto b_stride  = b.GetThreadStride();
+  const auto b_offset_ = b.GetThreadOffset(tid, lay);
+#pragma omp simd
+  for (int it = 0; it < block_size; ++it)
+  {
+    const auto a_offset = a_offset_+it;
+    const auto b_offset = b_offset_+it;
+
+    double det =
+        ((a(0, a_stride, a_offset)+b(0, b_stride, b_offset))*(((a(6, a_stride, a_offset)+b(3, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))))) -
+        ((a(1, a_stride, a_offset)+b(1, b_stride, b_offset))*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))))) +
+        ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset))*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset)))));
+
+
+    double invdet = 1.0/det;
+
+    c[ 0*N+n] =  invdet*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
+    c[ 1*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
+    c[ 2*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
+    c[ 3*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])));
+    c[ 4*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[2*N+n]+b[2*N+n])));
+    c[ 5*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
+    c[ 6*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n])));
+    c[ 7*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
+    c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
+  }
+}
+*/
+template <class MPTRKAccessors, class MPHITAccessors, size_t block_size = 1>
+void KalmanUpdate(MPTRKAccessors       &obtracks,
+		              const MPHITAccessors &bhits,
+                  const int tid,
+                  const int lay) {
+  using MP6Faccessor    = typename MPTRKAccessors::MP6FAccessor;
+  using MP6x6SFaccessor = typename MPTRKAccessors::MP6x6SFAccessor;
+  using MP3x3SFaccessor = typename MPHITAccessors::MP3x3SFAccessor;
+  using MP3Faccessor    = typename MPHITAccessors::MP3FAccessor;
+
+  const MP3x3SFaccessor &hitErr   = bhits.cov;
+  const MP3Faccessor    &msP      = bhits.pos;
+
+  MP6x6SFaccessor  &trkErr = obtracks.cov;
+  MP6Faccessor     &inPar  = obtracks.par;
+
+  const auto terr_stride = trkErr.GetThreadStride();
+  const auto terr_offset = trkErr.GetThreadOffset(tid);
+
+  const auto herr_stride = hitErr.GetThreadStride();
+  const auto herr_offset = hitErr.GetThreadOffset(tid, lay);
+
+  const auto ipar_stride = inPar.GetThreadStride();
+  const auto ipar_offset = inPar.GetThreadOffset(tid);
+
+  std::array<float, 9> temp{0.0f};
+  //MP3x3_ temp;
+
+  MP3x3_ inverse_temp_;
+  MP3x6_ kGain_;
+
+#pragma simd
+  for (int it = 0; it < block_size; it++) {
+    const auto terr_blk_offset = terr_offset+it;
+    const auto herr_blk_offset = herr_offset+it;
+    const auto ipar_blk_offset = ipar_offset+it;
+
+    const auto xin     = inPar(iparX, ipar_stride, ipar_blk_offset);
+    const auto yin     = inPar(iparY, ipar_stride, ipar_blk_offset);
+    const auto zin     = inPar(iparZ, ipar_stride, ipar_blk_offset);
+    const auto ptin    = 1. / inPar(iparIpt, ipar_stride, ipar_blk_offset);
+    const auto phiin   = inPar(iparPhi, ipar_stride, ipar_blk_offset);
+    const auto thetain = inPar(iparTheta, ipar_stride, ipar_blk_offset);
+    const auto xout    = msP(iparX, tid, it, lay);
+    const auto yout    = msP(iparY, tid, it, lay);
+
+    KalmanGainInv(trkErr, hitErr, temp, terr_stride, terr_blk_offset, herr_stride, herr_blk_offset);
+
+    const auto kGain00 = trkErr(0, terr_stride, terr_blk_offset)*temp[0] + trkErr(1, terr_stride, terr_blk_offset)*temp[3] + trkErr(2, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain01 = trkErr(0, terr_stride, terr_blk_offset)*temp[1] + trkErr(1, terr_stride, terr_blk_offset)*temp[4] + trkErr(2, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain02 = trkErr(0, terr_stride, terr_blk_offset)*temp[2] + trkErr(1, terr_stride, terr_blk_offset)*temp[5] + trkErr(2, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain03 = trkErr(1, terr_stride, terr_blk_offset)*temp[0] + trkErr(6, terr_stride, terr_blk_offset)*temp[3] + trkErr(7, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain04 = trkErr(1, terr_stride, terr_blk_offset)*temp[1] + trkErr(6, terr_stride, terr_blk_offset)*temp[4] + trkErr(7, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain05 = trkErr(1, terr_stride, terr_blk_offset)*temp[2] + trkErr(6, terr_stride, terr_blk_offset)*temp[5] + trkErr(7, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain06 = trkErr(2, terr_stride, terr_blk_offset)*temp[0] + trkErr(7, terr_stride, terr_blk_offset)*temp[3] + trkErr(11, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain07 = trkErr(2, terr_stride, terr_blk_offset)*temp[1] + trkErr(7, terr_stride, terr_blk_offset)*temp[4] + trkErr(11, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain08 = trkErr(2, terr_stride, terr_blk_offset)*temp[2] + trkErr(7, terr_stride, terr_blk_offset)*temp[5] + trkErr(11, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain09 = trkErr(3, terr_stride, terr_blk_offset)*temp[0] + trkErr(8, terr_stride, terr_blk_offset)*temp[3] + trkErr(12, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain10 = trkErr(3, terr_stride, terr_blk_offset)*temp[1] + trkErr(8, terr_stride, terr_blk_offset)*temp[4] + trkErr(12, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain11 = trkErr(3, terr_stride, terr_blk_offset)*temp[2] + trkErr(8, terr_stride, terr_blk_offset)*temp[5] + trkErr(12, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain12 = trkErr(4, terr_stride, terr_blk_offset)*temp[0] + trkErr(9, terr_stride, terr_blk_offset)*temp[3] + trkErr(13, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain13 = trkErr(4, terr_stride, terr_blk_offset)*temp[1] + trkErr(9, terr_stride, terr_blk_offset)*temp[4] + trkErr(13, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain14 = trkErr(4, terr_stride, terr_blk_offset)*temp[2] + trkErr(9, terr_stride, terr_blk_offset)*temp[5] + trkErr(13, terr_stride, terr_blk_offset)*temp[8];
+    const auto kGain15 = trkErr(5, terr_stride, terr_blk_offset)*temp[0] + trkErr(10, terr_stride, terr_blk_offset)*temp[3] + trkErr(14, terr_stride, terr_blk_offset)*temp[6];
+    const auto kGain16 = trkErr(5, terr_stride, terr_blk_offset)*temp[1] + trkErr(10, terr_stride, terr_blk_offset)*temp[4] + trkErr(14, terr_stride, terr_blk_offset)*temp[7];
+    const auto kGain17 = trkErr(5, terr_stride, terr_blk_offset)*temp[2] + trkErr(10, terr_stride, terr_blk_offset)*temp[5] + trkErr(14, terr_stride, terr_blk_offset)*temp[8];
+
+    const auto xnew     = xin     + (kGain00*(xout-xin)) +(kGain01*(yout-yin));
+    const auto ynew     = yin     + (kGain03*(xout-xin)) +(kGain04*(yout-yin));
+    const auto znew     = zin     + (kGain06*(xout-xin)) +(kGain07*(yout-yin));
+    const auto ptnew    = ptin    + (kGain09*(xout-xin)) +(kGain10*(yout-yin));
+    const auto phinew   = phiin   + (kGain12*(xout-xin)) +(kGain13*(yout-yin));
+    const auto thetanew = thetain + (kGain15*(xout-xin)) +(kGain16*(yout-yin));
+
+    temp[0] = trkErr(0, terr_stride, terr_blk_offset) - (kGain00*trkErr(0, terr_stride, terr_blk_offset)+kGain01*trkErr(1, terr_stride, terr_blk_offset)+kGain02*trkErr(2, terr_stride, terr_blk_offset));
+
+    trkErr(0, terr_stride, terr_blk_offset) = temp[0];
+
+    temp[0] = trkErr(1, terr_stride, terr_blk_offset) - (kGain00*trkErr(1, terr_stride, terr_blk_offset)+kGain01*trkErr(6, terr_stride, terr_blk_offset)+kGain02*trkErr(7, terr_stride, terr_blk_offset));
+    temp[1] = trkErr(2, terr_stride, terr_blk_offset) - (kGain00*trkErr(2, terr_stride, terr_blk_offset)+kGain01*trkErr(7, terr_stride, terr_blk_offset)+kGain02*trkErr(11, terr_stride, terr_blk_offset));
+    temp[2] = trkErr(3, terr_stride, terr_blk_offset) - (kGain00*trkErr(3, terr_stride, terr_blk_offset)+kGain01*trkErr(8, terr_stride, terr_blk_offset)+kGain02*trkErr(12, terr_stride, terr_blk_offset));
+    temp[3] = trkErr(4, terr_stride, terr_blk_offset) - (kGain00*trkErr(4, terr_stride, terr_blk_offset)+kGain01*trkErr(9, terr_stride, terr_blk_offset)+kGain02*trkErr(13, terr_stride, terr_blk_offset));
+    temp[4] = trkErr(5, terr_stride, terr_blk_offset) - (kGain00*trkErr(5, terr_stride, terr_blk_offset)+kGain01*trkErr(10, terr_stride, terr_blk_offset)+kGain02*trkErr(14, terr_stride, terr_blk_offset));
+
+    temp[5] = trkErr(6, terr_stride, terr_blk_offset) - (kGain03*trkErr(1, terr_stride, terr_blk_offset)+kGain04*trkErr(6, terr_stride, terr_blk_offset)+kGain05*trkErr(7, terr_stride, terr_blk_offset));
+
+    trkErr(1, terr_stride, terr_blk_offset) = temp[0];
+    trkErr(6, terr_stride, terr_blk_offset) = temp[5];
+
+    temp[0] = trkErr(7, terr_stride, terr_blk_offset) - (kGain03*trkErr(2, terr_stride, terr_blk_offset)+kGain04*trkErr(7, terr_stride, terr_blk_offset)+kGain05*trkErr(11, terr_stride, terr_blk_offset));
+    temp[5] = trkErr(8, terr_stride, terr_blk_offset) - (kGain03*trkErr(3, terr_stride, terr_blk_offset)+kGain04*trkErr(8, terr_stride, terr_blk_offset)+kGain05*trkErr(12, terr_stride, terr_blk_offset));
+    temp[6] = trkErr(9, terr_stride, terr_blk_offset) - (kGain03*trkErr(4, terr_stride, terr_blk_offset)+kGain04*trkErr(9, terr_stride, terr_blk_offset)+kGain05*trkErr(13, terr_stride, terr_blk_offset));
+    temp[7] = trkErr(10, terr_stride, terr_blk_offset) - (kGain03*trkErr(5, terr_stride, terr_blk_offset)+kGain04*trkErr(10, terr_stride, terr_blk_offset)+kGain05*trkErr(14, terr_stride, terr_blk_offset));
+
+    temp[8] = trkErr(11, terr_stride, terr_blk_offset) - (kGain06*trkErr(2, terr_stride, terr_blk_offset)+kGain07*trkErr(7, terr_stride, terr_blk_offset)+kGain08*trkErr(11, terr_stride, terr_blk_offset));
+
+    trkErr(2, terr_stride, terr_blk_offset)  = temp[1];
+    trkErr(7, terr_stride, terr_blk_offset)  = temp[0];
+    trkErr(11, terr_stride, terr_blk_offset) = temp[8];
+
+    temp[1] = trkErr(12, terr_stride, terr_blk_offset) - (kGain06*trkErr(3, terr_stride, terr_blk_offset)+kGain07*trkErr(8, terr_stride, terr_blk_offset)+kGain08*trkErr(12, terr_stride, terr_blk_offset));
+    temp[0] = trkErr(13, terr_stride, terr_blk_offset) - (kGain06*trkErr(4, terr_stride, terr_blk_offset)+kGain07*trkErr(9, terr_stride, terr_blk_offset)+kGain08*trkErr(13, terr_stride, terr_blk_offset));
+    temp[8] = trkErr(14, terr_stride, terr_blk_offset) - (kGain06*trkErr(5, terr_stride, terr_blk_offset)+kGain07*trkErr(10, terr_stride, terr_blk_offset)+kGain08*trkErr(14, terr_stride, terr_blk_offset));
+    //!temp[9] = trkErr(15, terr_stride, terr_blk_offset) - (kGain09*trkErr(3, terr_stride, terr_blk_offset)+kGain10*trkErr(8, terr_stride, terr_blk_offset)+kGain11*trkErr(12, terr_stride, terr_blk_offset));
+
+    trkErr(3, terr_stride, terr_blk_offset)  = temp[2];
+    trkErr(8, terr_stride, terr_blk_offset)  = temp[5];
+    trkErr(12, terr_stride, terr_blk_offset) = temp[1];
+    //!trkErr(15, terr_stride, terr_blk_offset) = temp[9];
+
+    temp[2] = trkErr(16, terr_stride, terr_blk_offset) - (kGain09*trkErr(4, terr_stride, terr_blk_offset)+kGain10*trkErr(9, terr_stride, terr_blk_offset)+kGain11*trkErr(13, terr_stride, terr_blk_offset));
+
+    trkErr(16, terr_stride, terr_blk_offset) = temp[2];
+
+    temp[5] = trkErr(17, terr_stride, terr_blk_offset) - (kGain09*trkErr(5, terr_stride, terr_blk_offset)+kGain10*trkErr(10, terr_stride, terr_blk_offset)+kGain11*trkErr(14, terr_stride, terr_blk_offset));
+
+    trkErr(17, terr_stride, terr_blk_offset) = temp[5];
+
+    temp[1] = trkErr(18, terr_stride, terr_blk_offset) - (kGain12*trkErr(4, terr_stride, terr_blk_offset)+kGain13*trkErr(9, terr_stride, terr_blk_offset)+kGain14*trkErr(13, terr_stride, terr_blk_offset));
+
+    trkErr(4, terr_stride, terr_blk_offset)  = temp[3];
+    trkErr(9, terr_stride, terr_blk_offset)  = temp[6];
+    trkErr(13, terr_stride, terr_blk_offset) = temp[0];
+    trkErr(18, terr_stride, terr_blk_offset) = temp[1];
+
+    //!temp[9] = trkErr(19, terr_stride, terr_blk_offset) - (kGain12*trkErr(5, terr_stride, terr_blk_offset)+kGain13*trkErr(10, terr_stride, terr_blk_offset)+kGain14*trkErr(14, terr_stride, terr_blk_offset));
+
+    trkErr(19, terr_stride, terr_blk_offset) = temp[9];
+
+    //!temp[9] = trkErr(20, terr_stride, terr_blk_offset) - (kGain15*trkErr(5, terr_stride, terr_blk_offset)+kGain16*trkErr(10, terr_stride, terr_blk_offset)+kGain17*trkErr(14, terr_stride, terr_blk_offset));
+
+    trkErr(10, terr_stride, terr_blk_offset) = temp[7];
+    trkErr(5, terr_stride, terr_blk_offset)  = temp[4];
+    trkErr(14, terr_stride, terr_blk_offset) = temp[8];
+    //!trkErr(20, terr_stride, terr_blk_offset) = temp[9];
+
+    inPar(iparX,ipar_stride, ipar_blk_offset)     = xnew;
+    inPar(iparY,ipar_stride, ipar_blk_offset)     = ynew;
+    inPar(iparZ,ipar_stride, ipar_blk_offset)     = znew;
+    inPar(iparIpt,ipar_stride, ipar_blk_offset)   = ptnew;
+    inPar(iparPhi,ipar_stride, ipar_blk_offset)   = phinew;
+    inPar(iparTheta,ipar_stride, ipar_blk_offset) = thetanew;
+  }
+
+  return;
+}
+
+
+const float kfact = 100/3.8;
+
+/*
+template <size_t block_size = 1>
+constexpr size_t PosInMtrx(const size_t &&i, const size_t &&j, const size_t &&D) {
+  return block_size*(i*D+j);
+}
+*/
 auto PosInMtrx = [](const size_t &&i, const size_t &&j, const size_t &&D, const size_t block_size = 1) constexpr {return block_size*(i*D+j);};
 
 template<typename MP6x6SFAccessor_, size_t block_size = 1>
@@ -628,16 +838,16 @@ inline void MultHelixPropTranspEndcap(const MP6x6F_ &a, const MP6x6F_ &b, MP6x6S
   for (int it = 0;it < block_size; it++) {
     const auto blk_offset = offset+it;
 
-    c( 0, stride, blk_offset) = b[0*block_size + it] + b[2*block_size + it]*a[PosInMtrx(0,2,6, block_size) + it] + b[3*block_size + it]*a[PosInMtrx(0,3,6, block_size) + it] + b[4*block_size + it]*a[PosInMtrx(0,4,6, block_size) + it] + b[5*block_size + it]*a[PosInMtrx(0,5,6, block_size) + it];
-    c( 1, stride, blk_offset) = b[6*block_size + it] + b[8*block_size + it]*a[PosInMtrx(0,2,6, block_size) + it] + b[9*block_size + it]*a[PosInMtrx(0,3,6, block_size) + it] + b[10*block_size + it]*a[PosInMtrx(0,4,6, block_size) + it] + b[11*block_size + it]*a[PosInMtrx(0,5,6, block_size) + it];
-    c( 2, stride, blk_offset) = b[7*block_size + it] + b[8*block_size + it]*a[PosInMtrx(1,2,6, block_size) + it] + b[9*block_size + it]*a[PosInMtrx(1,3,6, block_size) + it] + b[10*block_size + it]*a[PosInMtrx(1,4,6, block_size) + it] + b[11*block_size + it]*a[PosInMtrx(1,5,6, block_size) + it];
-    c( 3, stride, blk_offset) = 0.0f;
-    c( 4, stride, blk_offset) = 0.0f;
-    c( 5, stride, blk_offset) = 0.0f;
-    c( 6, stride, blk_offset) = b[18*block_size + it] + b[20*block_size + it]*a[PosInMtrx(0,2,6, block_size) + it] + b[21*block_size + it]*a[PosInMtrx(0,3,6, block_size) + it] + b[22*block_size + it]*a[PosInMtrx(0,4,6, block_size) + it] + b[23*block_size + it]*a[PosInMtrx(0,5,6, block_size) + it];
-    c( 7, stride, blk_offset) = b[19*block_size + it] + b[20*block_size + it]*a[PosInMtrx(1,2,6, block_size) + it] + b[21*block_size + it]*a[PosInMtrx(1,3,6, block_size) + it] + b[22*block_size + it]*a[PosInMtrx(1,4,6, block_size) + it] + b[23*block_size + it]*a[PosInMtrx(1,5,6, block_size) + it];
-    c( 8, stride, blk_offset) = 0.0f;
-    c( 9, stride, blk_offset) = b[21*block_size + it];
+    c(0, stride, blk_offset) = b[0*block_size + it] + b[2*block_size + it]*a[PosInMtrx(0,2,6, block_size) + it] + b[3*block_size + it]*a[PosInMtrx(0,3,6, block_size) + it] + b[4*block_size + it]*a[PosInMtrx(0,4,6, block_size) + it] + b[5*block_size + it]*a[PosInMtrx(0,5,6, block_size) + it];
+    c(1, stride, blk_offset) = b[6*block_size + it] + b[8*block_size + it]*a[PosInMtrx(0,2,6, block_size) + it] + b[9*block_size + it]*a[PosInMtrx(0,3,6, block_size) + it] + b[10*block_size + it]*a[PosInMtrx(0,4,6, block_size) + it] + b[11*block_size + it]*a[PosInMtrx(0,5,6, block_size) + it];
+    c(2, stride, blk_offset) = b[7*block_size + it] + b[8*block_size + it]*a[PosInMtrx(1,2,6, block_size) + it] + b[9*block_size + it]*a[PosInMtrx(1,3,6, block_size) + it] + b[10*block_size + it]*a[PosInMtrx(1,4,6, block_size) + it] + b[11*block_size + it]*a[PosInMtrx(1,5,6, block_size) + it];
+    c(3, stride, blk_offset) = 0.0f;
+    c(4, stride, blk_offset) = 0.0f;
+    c(5, stride, blk_offset) = 0.0f;
+    c(6, stride, blk_offset) = b[18*block_size + it] + b[20*block_size + it]*a[PosInMtrx(0,2,6, block_size) + it] + b[21*block_size + it]*a[PosInMtrx(0,3,6, block_size) + it] + b[22*block_size + it]*a[PosInMtrx(0,4,6, block_size) + it] + b[23*block_size + it]*a[PosInMtrx(0,5,6, block_size) + it];
+    c(7, stride, blk_offset) = b[19*block_size + it] + b[20*block_size + it]*a[PosInMtrx(1,2,6, block_size) + it] + b[21*block_size + it]*a[PosInMtrx(1,3,6, block_size) + it] + b[22*block_size + it]*a[PosInMtrx(1,4,6, block_size) + it] + b[23*block_size + it]*a[PosInMtrx(1,5,6, block_size) + it];
+    c(8, stride, blk_offset) = 0.0f;
+    c(9, stride, blk_offset) = b[21*block_size + it];
     c(10, stride, blk_offset) = b[24*block_size + it] + b[26*block_size + it]*a[PosInMtrx(0,2,6, block_size) + it] + b[27*block_size + it]*a[PosInMtrx(0,3,6, block_size) + it] + b[28*block_size + it]*a[PosInMtrx(0,4,6, block_size) + it] + b[29*block_size + it]*a[PosInMtrx(0,5,6, block_size) + it];
     c(11, stride, blk_offset) = b[25*block_size + it] + b[26*block_size + it]*a[PosInMtrx(1,2,6, block_size) + it] + b[27*block_size + it]*a[PosInMtrx(1,3,6, block_size) + it] + b[28*block_size + it]*a[PosInMtrx(1,4,6, block_size) + it] + b[29*block_size + it]*a[PosInMtrx(1,5,6, block_size) + it];
     c(12, stride, blk_offset) = 0.0f;
@@ -653,181 +863,6 @@ inline void MultHelixPropTranspEndcap(const MP6x6F_ &a, const MP6x6F_ &b, MP6x6S
   }
   return;
 }
-
-template<typename AccessorTp1, typename AccessorTp2, size_t block_size = 1>
-inline void KalmanGainInv(const AccessorTp1 &a, const AccessorTp2 &b, MP3x3_ &c, const int tid, const int lay) {
-  const auto a_stride  = a.GetThreadStride();
-  const auto a_offset_ = a.GetThreadOffset(tid);
-
-  const auto b_stride  = b.GetThreadStride();
-  const auto b_offset_ = b.GetThreadOffset(tid, lay);
-#pragma omp simd
-  for (int it = 0; it < block_size; ++it)
-  {
-    const auto a_offset = a_offset_+it;
-    const auto b_offset = b_offset_+it;
-
-    double det =
-        ((a(0, a_stride, a_offset)+b(0, b_stride, b_offset))*(((a(6, a_stride, a_offset)+b(3, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))))) -
-        ((a(1, a_stride, a_offset)+b(1, b_stride, b_offset))*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))))) +
-        ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset))*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset)))));
-
-    float invdet = 1.0 / det;
-
-    c[0*block_size+it] =   invdet*(((a(6, a_stride, a_offset)+b(3, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))));
-    c[1*block_size+it] =  -invdet*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))));
-    c[2*block_size+it] =   invdet*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))));
-    c[3*block_size+it] =  -invdet*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(7, a_stride, a_offset)+b(4, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))));
-    c[4*block_size+it] =   invdet*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(11,a_stride, a_offset)+b(5, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(2, a_stride, a_offset)+b(2, b_stride, b_offset))));
-    c[5*block_size+it] =  -invdet*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(1, a_stride, a_offset)+b(1, b_stride, b_offset))));
-    c[6*block_size+it] =   invdet*(((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset))));
-    c[7*block_size+it] =  -invdet*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(7, a_stride, a_offset)+b(4, b_stride, b_offset))) - ((a(2, a_stride, a_offset)+b(2, b_stride, b_offset)) *(a(1, a_stride, a_offset)+b(1, b_stride, b_offset))));
-    c[8*block_size+it] =   invdet*(((a(0, a_stride, a_offset)+b(0, b_stride, b_offset)) *(a(6, a_stride, a_offset)+b(3, b_stride, b_offset))) - ((a(1, a_stride, a_offset)+b(1, b_stride, b_offset)) *(a(1, a_stride, a_offset)+b(1, b_stride, b_offset))));
-
-  }
-}
-
-template<typename AccessorTp, size_t block_size = 1>
-inline void KalmanGain(const AccessorTp &a, const MP3x3_ &b, MP3x6_ &c, const int tid) {
-  const auto a_stride = a.GetThreadStride();
-  const auto a_offset_= a.GetThreadOffset(tid);
-#pragma simd
-  for (int it = 0; it < block_size; ++it)
-  {
-    const auto a_offset = a_offset_+it;
-
-    c[ 0] = a(0, a_stride, a_offset)*b[0*block_size+it] + a( 1, a_stride, a_offset)*b[3*block_size+it] + a( 2, a_stride, a_offset)*b[6*block_size+it];
-    c[ 1] = a(0, a_stride, a_offset)*b[1*block_size+it] + a( 1, a_stride, a_offset)*b[4*block_size+it] + a( 2, a_stride, a_offset)*b[7*block_size+it];
-    c[ 2] = a(0, a_stride, a_offset)*b[2*block_size+it] + a( 1, a_stride, a_offset)*b[5*block_size+it] + a( 2, a_stride, a_offset)*b[8*block_size+it];
-    c[ 3] = a(1, a_stride, a_offset)*b[0*block_size+it] + a( 6, a_stride, a_offset)*b[3*block_size+it] + a( 7, a_stride, a_offset)*b[6*block_size+it];
-    c[ 4] = a(1, a_stride, a_offset)*b[1*block_size+it] + a( 6, a_stride, a_offset)*b[4*block_size+it] + a( 7, a_stride, a_offset)*b[7*block_size+it];
-    c[ 5] = a(1, a_stride, a_offset)*b[2*block_size+it] + a( 6, a_stride, a_offset)*b[5*block_size+it] + a( 7, a_stride, a_offset)*b[8*block_size+it];
-    c[ 6] = a(2, a_stride, a_offset)*b[0*block_size+it] + a( 7, a_stride, a_offset)*b[3*block_size+it] + a(11, a_stride, a_offset)*b[6*block_size+it];
-    c[ 7] = a(2, a_stride, a_offset)*b[1*block_size+it] + a( 7, a_stride, a_offset)*b[4*block_size+it] + a(11, a_stride, a_offset)*b[7*block_size+it];
-    c[ 8] = a(2, a_stride, a_offset)*b[2*block_size+it] + a( 7, a_stride, a_offset)*b[5*block_size+it] + a(11, a_stride, a_offset)*b[8*block_size+it];
-    c[ 9] = a(3, a_stride, a_offset)*b[0*block_size+it] + a( 8, a_stride, a_offset)*b[3*block_size+it] + a(12, a_stride, a_offset)*b[6*block_size+it];
-    c[10] = a(3, a_stride, a_offset)*b[1*block_size+it] + a( 8, a_stride, a_offset)*b[4*block_size+it] + a(12, a_stride, a_offset)*b[7*block_size+it];
-    c[11] = a(3, a_stride, a_offset)*b[2*block_size+it] + a( 8, a_stride, a_offset)*b[5*block_size+it] + a(12, a_stride, a_offset)*b[8*block_size+it];
-    c[12] = a(4, a_stride, a_offset)*b[0*block_size+it] + a( 9, a_stride, a_offset)*b[3*block_size+it] + a(13, a_stride, a_offset)*b[6*block_size+it];
-    c[13] = a(4, a_stride, a_offset)*b[1*block_size+it] + a( 9, a_stride, a_offset)*b[4*block_size+it] + a(13, a_stride, a_offset)*b[7*block_size+it];
-    c[14] = a(4, a_stride, a_offset)*b[2*block_size+it] + a( 9, a_stride, a_offset)*b[5*block_size+it] + a(13, a_stride, a_offset)*b[8*block_size+it];
-    c[15] = a(5, a_stride, a_offset)*b[0*block_size+it] + a(10, a_stride, a_offset)*b[3*block_size+it] + a(14, a_stride, a_offset)*b[6*block_size+it];
-    c[16] = a(5, a_stride, a_offset)*b[1*block_size+it] + a(10, a_stride, a_offset)*b[4*block_size+it] + a(14, a_stride, a_offset)*b[7*block_size+it];
-    c[17] = a(5, a_stride, a_offset)*b[2*block_size+it] + a(10, a_stride, a_offset)*b[5*block_size+it] + a(14, a_stride, a_offset)*b[8*block_size+it];
-
-  }
-}
-
-template <class MPTRKAccessors, class MPHITAccessors, size_t block_size = 1>
-void KalmanUpdate(MPTRKAccessors       &obtracks,
-		              const MPHITAccessors &bhits,
-                  const int tid,
-                  const int lay) {
-  using MP6Faccessor    = typename MPTRKAccessors::MP6FAccessor;
-  using MP6x6SFaccessor = typename MPTRKAccessors::MP6x6SFAccessor;
-  using MP3x3SFaccessor = typename MPHITAccessors::MP3x3SFAccessor;
-  using MP3Faccessor    = typename MPHITAccessors::MP3FAccessor;
-
-  const MP3x3SFaccessor &hitErr   = bhits.cov;
-  const MP3Faccessor    &msP      = bhits.pos;
-
-  MP6x6SFaccessor  &trkErr = obtracks.cov;
-  MP6Faccessor     &inPar  = obtracks.par;
-
-  const auto terr_stride = trkErr.GetThreadStride();
-  const auto terr_offset = trkErr.GetThreadOffset(tid);
-
-  const auto ipar_stride = inPar.GetThreadStride();
-  const auto ipar_offset = inPar.GetThreadOffset(tid);
-
-  MP3x3_ temp;//thread private data?
-  MP3x6_ kGain;//thread private data?
-
-  KalmanGainInv(trkErr, hitErr, temp, tid, lay);
-  KalmanGain(trkErr, temp, kGain, tid);
-
-#pragma simd
-  for (int it = 0; it < block_size; it++) {
-    const auto terr_blk_offset = terr_offset+it;
-    const auto ipar_blk_offset = ipar_offset+it;
-
-    const auto xin     = inPar(iparX, ipar_stride, ipar_blk_offset);
-    const auto yin     = inPar(iparY, ipar_stride, ipar_blk_offset);
-    const auto zin     = inPar(iparZ, ipar_stride, ipar_blk_offset);
-    const auto ptin    = 1. / inPar(iparIpt, ipar_stride, ipar_blk_offset);
-    const auto phiin   = inPar(iparPhi, ipar_stride, ipar_blk_offset);
-    const auto thetain = inPar(iparTheta, ipar_stride, ipar_blk_offset);
-    const auto xout    = msP(iparX, tid, it, lay);
-    const auto yout    = msP(iparY, tid, it, lay);
-
-    const auto xnew     = xin     + (kGain[ 0*block_size+it]*(xout-xin)) +(kGain[ 1*block_size+it]*(yout-yin));
-    const auto ynew     = yin     + (kGain[ 3*block_size+it]*(xout-xin)) +(kGain[ 4*block_size+it]*(yout-yin));
-    const auto znew     = zin     + (kGain[ 6*block_size+it]*(xout-xin)) +(kGain[ 7*block_size+it]*(yout-yin));
-    const auto ptnew    = ptin    + (kGain[ 9*block_size+it]*(xout-xin)) +(kGain[10*block_size+it]*(yout-yin));
-    const auto phinew   = phiin   + (kGain[12*block_size+it]*(xout-xin)) +(kGain[13*block_size+it]*(yout-yin));
-    const auto thetanew = thetain + (kGain[15*block_size+it]*(xout-xin)) +(kGain[16*block_size+it]*(yout-yin));
-
-    //
-    trkErr(0, terr_stride, terr_blk_offset) = trkErr(0, terr_stride, terr_blk_offset) - (kGain[ 0*block_size+it]*trkErr(0, terr_stride, terr_blk_offset)+kGain[ 1*block_size+it]*trkErr(1, terr_stride, terr_blk_offset)+kGain[ 2*block_size+it]*trkErr(2, terr_stride, terr_blk_offset));
-    //
-
-    temp[0*block_size+it] = trkErr(6, terr_stride, terr_blk_offset) - (kGain[ 3*block_size+it]*trkErr(1, terr_stride, terr_blk_offset)+kGain[ 4*block_size+it]*trkErr(6, terr_stride, terr_blk_offset)+kGain[ 5*block_size+it]*trkErr(7, terr_stride, terr_blk_offset));
-    //*
-    trkErr(1, terr_stride, terr_blk_offset) = trkErr(1, terr_stride, terr_blk_offset) - (kGain[ 0*block_size+it]*trkErr(1, terr_stride, terr_blk_offset)+kGain[ 1*block_size+it]*trkErr(6, terr_stride, terr_blk_offset)+kGain[ 2*block_size+it]*trkErr(7, terr_stride, terr_blk_offset));
-    //*
-    trkErr(6, terr_stride, terr_blk_offset) = temp[0*block_size+it];
-
-    temp[0*block_size+it] = trkErr(2, terr_stride, terr_blk_offset) - (kGain[ 0*block_size+it]*trkErr(2, terr_stride, terr_blk_offset)+kGain[ 1*block_size+it]*trkErr(7, terr_stride, terr_blk_offset)+kGain[ 2*block_size+it]*trkErr(11, terr_stride, terr_blk_offset));
-    temp[1*block_size+it] = trkErr(7, terr_stride, terr_blk_offset) - (kGain[ 3*block_size+it]*trkErr(2, terr_stride, terr_blk_offset)+kGain[ 4*block_size+it]*trkErr(7, terr_stride, terr_blk_offset)+kGain[ 5*block_size+it]*trkErr(11, terr_stride, terr_blk_offset));
-    //**
-    trkErr(11, terr_stride, terr_blk_offset) = trkErr(11, terr_stride, terr_blk_offset) - (kGain[ 6*block_size+it]*trkErr(2, terr_stride, terr_blk_offset)+kGain[ 7*block_size+it]*trkErr(7, terr_stride, terr_blk_offset)+kGain[ 8*block_size+it]*trkErr(11, terr_stride, terr_blk_offset));
-    //**
-    trkErr(2, terr_stride, terr_blk_offset)  = temp[0*block_size+it];
-    trkErr(7, terr_stride, terr_blk_offset)  = temp[1*block_size+it];
-
-    temp[0*block_size+it] = trkErr( 3, terr_stride, terr_blk_offset) - (kGain[ 0*block_size+it]*trkErr(3, terr_stride, terr_blk_offset)+kGain[ 1*block_size+it]*trkErr(8, terr_stride, terr_blk_offset)+kGain[ 2*block_size+it]*trkErr(12, terr_stride, terr_blk_offset));
-    temp[1*block_size+it] = trkErr(12, terr_stride, terr_blk_offset) - (kGain[ 6*block_size+it]*trkErr(3, terr_stride, terr_blk_offset)+kGain[ 7*block_size+it]*trkErr(8, terr_stride, terr_blk_offset)+kGain[ 8*block_size+it]*trkErr(12, terr_stride, terr_blk_offset));
-    //***
-    trkErr(15, terr_stride, terr_blk_offset) = trkErr(15, terr_stride, terr_blk_offset) - (kGain[ 9*block_size+it]*trkErr(3, terr_stride, terr_blk_offset)+kGain[10*block_size+it]*trkErr(8, terr_stride, terr_blk_offset)+kGain[11*block_size+it]*trkErr(12, terr_stride, terr_blk_offset));
-    trkErr( 8, terr_stride, terr_blk_offset) = trkErr( 8, terr_stride, terr_blk_offset) - (kGain[ 3*block_size+it]*trkErr(3, terr_stride, terr_blk_offset)+kGain[ 4*block_size+it]*trkErr(8, terr_stride, terr_blk_offset)+kGain[ 5*block_size+it]*trkErr(12, terr_stride, terr_blk_offset));
-    //***
-    trkErr( 3, terr_stride, terr_blk_offset) = temp[0*block_size+it];
-    trkErr(12, terr_stride, terr_blk_offset) = temp[1*block_size+it];
-
-    temp[0*block_size+it] = trkErr( 9, terr_stride, terr_blk_offset) - (kGain[ 3*block_size+it]*trkErr(4, terr_stride, terr_blk_offset)+kGain[ 4*block_size+it]*trkErr(9, terr_stride, terr_blk_offset)+kGain[ 5*block_size+it]*trkErr(13, terr_stride, terr_blk_offset));
-    temp[1*block_size+it] = trkErr(13, terr_stride, terr_blk_offset) - (kGain[ 6*block_size+it]*trkErr(4, terr_stride, terr_blk_offset)+kGain[ 7*block_size+it]*trkErr(9, terr_stride, terr_blk_offset)+kGain[ 8*block_size+it]*trkErr(13, terr_stride, terr_blk_offset));
-    //****
-    trkErr(16, terr_stride, terr_blk_offset) = trkErr(16, terr_stride, terr_blk_offset) - (kGain[ 9*block_size+it]*trkErr(4, terr_stride, terr_blk_offset)+kGain[10*block_size+it]*trkErr(9, terr_stride, terr_blk_offset)+kGain[11*block_size+it]*trkErr(13, terr_stride, terr_blk_offset));
-    trkErr(18, terr_stride, terr_blk_offset) = trkErr(18, terr_stride, terr_blk_offset) - (kGain[12*block_size+it]*trkErr(4, terr_stride, terr_blk_offset)+kGain[13*block_size+it]*trkErr(9, terr_stride, terr_blk_offset)+kGain[14*block_size+it]*trkErr(13, terr_stride, terr_blk_offset));
-    trkErr( 4, terr_stride, terr_blk_offset) = trkErr( 4, terr_stride, terr_blk_offset) - (kGain[ 0*block_size+it]*trkErr(4, terr_stride, terr_blk_offset)+kGain[ 1*block_size+it]*trkErr(9, terr_stride, terr_blk_offset)+kGain[ 2*block_size+it]*trkErr(13, terr_stride, terr_blk_offset));
-    //****
-    trkErr( 9, terr_stride, terr_blk_offset) = temp[0*block_size+it];
-    trkErr(13, terr_stride, terr_blk_offset) = temp[1*block_size+it];
-
-    temp[0*block_size+it] = trkErr(10, terr_stride, terr_blk_offset) - (kGain[ 3*block_size+it]*trkErr(5, terr_stride, terr_blk_offset)+kGain[ 4*block_size+it]*trkErr(10, terr_stride, terr_blk_offset)+kGain[ 5*block_size+it]*trkErr(14, terr_stride, terr_blk_offset));
-    temp[1*block_size+it] = trkErr(14, terr_stride, terr_blk_offset) - (kGain[ 6*block_size+it]*trkErr(5, terr_stride, terr_blk_offset)+kGain[ 7*block_size+it]*trkErr(10, terr_stride, terr_blk_offset)+kGain[ 8*block_size+it]*trkErr(14, terr_stride, terr_blk_offset));
-    //*****
-    trkErr(17, terr_stride, terr_blk_offset) = trkErr(17, terr_stride, terr_blk_offset) - (kGain[ 9*block_size+it]*trkErr(5, terr_stride, terr_blk_offset)+kGain[10*block_size+it]*trkErr(10, terr_stride, terr_blk_offset)+kGain[11*block_size+it]*trkErr(14, terr_stride, terr_blk_offset));
-    trkErr(19, terr_stride, terr_blk_offset) = trkErr(19, terr_stride, terr_blk_offset) - (kGain[12*block_size+it]*trkErr(5, terr_stride, terr_blk_offset)+kGain[13*block_size+it]*trkErr(10, terr_stride, terr_blk_offset)+kGain[14*block_size+it]*trkErr(14, terr_stride, terr_blk_offset));
-    trkErr(20, terr_stride, terr_blk_offset) = trkErr(20, terr_stride, terr_blk_offset) - (kGain[15*block_size+it]*trkErr(5, terr_stride, terr_blk_offset)+kGain[16*block_size+it]*trkErr(10, terr_stride, terr_blk_offset)+kGain[17*block_size+it]*trkErr(14, terr_stride, terr_blk_offset));
-    trkErr( 5, terr_stride, terr_blk_offset) = trkErr( 5, terr_stride, terr_blk_offset) - (kGain[ 0*block_size+it]*trkErr(5, terr_stride, terr_blk_offset)+kGain[ 1*block_size+it]*trkErr(10, terr_stride, terr_blk_offset)+kGain[ 2*block_size+it]*trkErr(14, terr_stride, terr_blk_offset));
-    //*****
-    trkErr(10, terr_stride, terr_blk_offset) = temp[0*block_size+it];
-    trkErr(14, terr_stride, terr_blk_offset) = temp[1*block_size+it];
-
-
-    inPar(iparX,ipar_stride, ipar_blk_offset)     = xnew;
-    inPar(iparY,ipar_stride, ipar_blk_offset)     = ynew;
-    inPar(iparZ,ipar_stride, ipar_blk_offset)     = znew;
-    inPar(iparIpt,ipar_stride, ipar_blk_offset)   = ptnew;
-    inPar(iparPhi,ipar_stride, ipar_blk_offset)   = phinew;
-    inPar(iparTheta,ipar_stride, ipar_blk_offset) = thetanew;
-  }
-
-  return;
-}
-
-const float kfact = 100/3.8;
 
 template <class MPTRKAccessors, class MPHITAccessors, size_t block_size = 1>
 void propagateToZ(MPTRKAccessors       &obtracks,
@@ -986,13 +1021,14 @@ int main (int argc, char* argv[]) {
      std::for_each(policy,
                    counting_iterator(0),
                    counting_iterator(outer_loop_range),
-                   [=,&trkNacc    = *trkNaccPtr,
-                      &hitNacc    = *hitNaccPtr,
+                   [=,&trkNacc = *trkNaccPtr,
+                      &hitNacc = *hitNaccPtr,
                       &outtrkNacc = *outtrkNaccPtr] (const auto i) {
                      for(int layer=0; layer<nlayer; ++layer) {
                        propagateToZ<MPTRKAccessorTp, MPHITAccessorTp, bsize>(outtrkNacc, trkNacc, hitNacc, i, layer);
                        KalmanUpdate<MPTRKAccessorTp, MPHITAccessorTp, bsize>(outtrkNacc, hitNacc, i, layer);
                      }
+
                    });
 #if defined(__NVCOMPILER_CUDA__) //artificial refresh pstl containers
       convertTracks<order>(outtrk, outtrkNPtr.get());
