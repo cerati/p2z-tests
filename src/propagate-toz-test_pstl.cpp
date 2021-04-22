@@ -696,24 +696,24 @@ inline void KalmanGain(const AccessorTp &a, const MP3x3_ &b, MP3x6_ &c, const in
   {
     const auto a_offset = a_offset_+it;
 
-    c[ 0] = a(0, a_stride, a_offset)*b[0*block_size+it] + a( 1, a_stride, a_offset)*b[3*block_size+it] + a( 2, a_stride, a_offset)*b[6*block_size+it];
-    c[ 1] = a(0, a_stride, a_offset)*b[1*block_size+it] + a( 1, a_stride, a_offset)*b[4*block_size+it] + a( 2, a_stride, a_offset)*b[7*block_size+it];
-    c[ 2] = a(0, a_stride, a_offset)*b[2*block_size+it] + a( 1, a_stride, a_offset)*b[5*block_size+it] + a( 2, a_stride, a_offset)*b[8*block_size+it];
-    c[ 3] = a(1, a_stride, a_offset)*b[0*block_size+it] + a( 6, a_stride, a_offset)*b[3*block_size+it] + a( 7, a_stride, a_offset)*b[6*block_size+it];
-    c[ 4] = a(1, a_stride, a_offset)*b[1*block_size+it] + a( 6, a_stride, a_offset)*b[4*block_size+it] + a( 7, a_stride, a_offset)*b[7*block_size+it];
-    c[ 5] = a(1, a_stride, a_offset)*b[2*block_size+it] + a( 6, a_stride, a_offset)*b[5*block_size+it] + a( 7, a_stride, a_offset)*b[8*block_size+it];
-    c[ 6] = a(2, a_stride, a_offset)*b[0*block_size+it] + a( 7, a_stride, a_offset)*b[3*block_size+it] + a(11, a_stride, a_offset)*b[6*block_size+it];
-    c[ 7] = a(2, a_stride, a_offset)*b[1*block_size+it] + a( 7, a_stride, a_offset)*b[4*block_size+it] + a(11, a_stride, a_offset)*b[7*block_size+it];
-    c[ 8] = a(2, a_stride, a_offset)*b[2*block_size+it] + a( 7, a_stride, a_offset)*b[5*block_size+it] + a(11, a_stride, a_offset)*b[8*block_size+it];
-    c[ 9] = a(3, a_stride, a_offset)*b[0*block_size+it] + a( 8, a_stride, a_offset)*b[3*block_size+it] + a(12, a_stride, a_offset)*b[6*block_size+it];
-    c[10] = a(3, a_stride, a_offset)*b[1*block_size+it] + a( 8, a_stride, a_offset)*b[4*block_size+it] + a(12, a_stride, a_offset)*b[7*block_size+it];
-    c[11] = a(3, a_stride, a_offset)*b[2*block_size+it] + a( 8, a_stride, a_offset)*b[5*block_size+it] + a(12, a_stride, a_offset)*b[8*block_size+it];
-    c[12] = a(4, a_stride, a_offset)*b[0*block_size+it] + a( 9, a_stride, a_offset)*b[3*block_size+it] + a(13, a_stride, a_offset)*b[6*block_size+it];
-    c[13] = a(4, a_stride, a_offset)*b[1*block_size+it] + a( 9, a_stride, a_offset)*b[4*block_size+it] + a(13, a_stride, a_offset)*b[7*block_size+it];
-    c[14] = a(4, a_stride, a_offset)*b[2*block_size+it] + a( 9, a_stride, a_offset)*b[5*block_size+it] + a(13, a_stride, a_offset)*b[8*block_size+it];
-    c[15] = a(5, a_stride, a_offset)*b[0*block_size+it] + a(10, a_stride, a_offset)*b[3*block_size+it] + a(14, a_stride, a_offset)*b[6*block_size+it];
-    c[16] = a(5, a_stride, a_offset)*b[1*block_size+it] + a(10, a_stride, a_offset)*b[4*block_size+it] + a(14, a_stride, a_offset)*b[7*block_size+it];
-    c[17] = a(5, a_stride, a_offset)*b[2*block_size+it] + a(10, a_stride, a_offset)*b[5*block_size+it] + a(14, a_stride, a_offset)*b[8*block_size+it];
+    c[ 0*block_size+it] = a(0, a_stride, a_offset)*b[0*block_size+it] + a( 1, a_stride, a_offset)*b[3*block_size+it] + a( 2, a_stride, a_offset)*b[6*block_size+it];
+    c[ 1*block_size+it] = a(0, a_stride, a_offset)*b[1*block_size+it] + a( 1, a_stride, a_offset)*b[4*block_size+it] + a( 2, a_stride, a_offset)*b[7*block_size+it];
+    c[ 2*block_size+it] = a(0, a_stride, a_offset)*b[2*block_size+it] + a( 1, a_stride, a_offset)*b[5*block_size+it] + a( 2, a_stride, a_offset)*b[8*block_size+it];
+    c[ 3*block_size+it] = a(1, a_stride, a_offset)*b[0*block_size+it] + a( 6, a_stride, a_offset)*b[3*block_size+it] + a( 7, a_stride, a_offset)*b[6*block_size+it];
+    c[ 4*block_size+it] = a(1, a_stride, a_offset)*b[1*block_size+it] + a( 6, a_stride, a_offset)*b[4*block_size+it] + a( 7, a_stride, a_offset)*b[7*block_size+it];
+    c[ 5*block_size+it] = a(1, a_stride, a_offset)*b[2*block_size+it] + a( 6, a_stride, a_offset)*b[5*block_size+it] + a( 7, a_stride, a_offset)*b[8*block_size+it];
+    c[ 6*block_size+it] = a(2, a_stride, a_offset)*b[0*block_size+it] + a( 7, a_stride, a_offset)*b[3*block_size+it] + a(11, a_stride, a_offset)*b[6*block_size+it];
+    c[ 7*block_size+it] = a(2, a_stride, a_offset)*b[1*block_size+it] + a( 7, a_stride, a_offset)*b[4*block_size+it] + a(11, a_stride, a_offset)*b[7*block_size+it];
+    c[ 8*block_size+it] = a(2, a_stride, a_offset)*b[2*block_size+it] + a( 7, a_stride, a_offset)*b[5*block_size+it] + a(11, a_stride, a_offset)*b[8*block_size+it];
+    c[ 9*block_size+it] = a(3, a_stride, a_offset)*b[0*block_size+it] + a( 8, a_stride, a_offset)*b[3*block_size+it] + a(12, a_stride, a_offset)*b[6*block_size+it];
+    c[10*block_size+it] = a(3, a_stride, a_offset)*b[1*block_size+it] + a( 8, a_stride, a_offset)*b[4*block_size+it] + a(12, a_stride, a_offset)*b[7*block_size+it];
+    c[11*block_size+it] = a(3, a_stride, a_offset)*b[2*block_size+it] + a( 8, a_stride, a_offset)*b[5*block_size+it] + a(12, a_stride, a_offset)*b[8*block_size+it];
+    c[12*block_size+it] = a(4, a_stride, a_offset)*b[0*block_size+it] + a( 9, a_stride, a_offset)*b[3*block_size+it] + a(13, a_stride, a_offset)*b[6*block_size+it];
+    c[13*block_size+it] = a(4, a_stride, a_offset)*b[1*block_size+it] + a( 9, a_stride, a_offset)*b[4*block_size+it] + a(13, a_stride, a_offset)*b[7*block_size+it];
+    c[14*block_size+it] = a(4, a_stride, a_offset)*b[2*block_size+it] + a( 9, a_stride, a_offset)*b[5*block_size+it] + a(13, a_stride, a_offset)*b[8*block_size+it];
+    c[15*block_size+it] = a(5, a_stride, a_offset)*b[0*block_size+it] + a(10, a_stride, a_offset)*b[3*block_size+it] + a(14, a_stride, a_offset)*b[6*block_size+it];
+    c[16*block_size+it] = a(5, a_stride, a_offset)*b[1*block_size+it] + a(10, a_stride, a_offset)*b[4*block_size+it] + a(14, a_stride, a_offset)*b[7*block_size+it];
+    c[17*block_size+it] = a(5, a_stride, a_offset)*b[2*block_size+it] + a(10, a_stride, a_offset)*b[5*block_size+it] + a(14, a_stride, a_offset)*b[8*block_size+it];
 
   }
 }
@@ -994,7 +994,7 @@ int main (int argc, char* argv[]) {
                        KalmanUpdate<MPTRKAccessorTp, MPHITAccessorTp, bsize>(outtrkNacc, hitNacc, i, layer);
                      }
                    });
-#if defined(__NVCOMPILER_CUDA__) //artificial refresh pstl containers
+#if defined(__NVCOMPILER_CUDA__) 
       convertTracks<order>(outtrk, outtrkNPtr.get());
 #endif
 
@@ -1008,7 +1008,6 @@ int main (int argc, char* argv[]) {
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, -1);
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
    convertTracks<order>(outtrk, outtrkNPtr.get());
    convertHits<order>(hit, hitNPtr.get());
