@@ -742,9 +742,9 @@ void KalmanUpdate(MPTRKAccessors       &obtracks,
 
   MP3x3_ temp;//thread private data?
   MP3x6_ kGain;//thread private data?
-
-  KalmanGainInv(trkErr, hitErr, temp, tid, lay);
-  KalmanGain(trkErr, temp, kGain, tid);
+ 
+  KalmanGainInv<MP6x6SFaccessor, MP3x3SFaccessor, block_size>(trkErr, hitErr, temp, tid, lay);
+  KalmanGain<MP6x6SFaccessor, block_size>(trkErr, temp, kGain, tid);
 
 #pragma simd
   for (int it = 0; it < block_size; it++) {
