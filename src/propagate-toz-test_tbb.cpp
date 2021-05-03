@@ -100,6 +100,18 @@ struct MP6x6F {
   float data[36*bsize];
 };
 
+struct MP2x2SF {
+  float data[3*bsize];
+};
+
+struct MP2x6 {
+  float data[12*bsize];
+};
+
+struct MP2F {
+  float data[2*bsize];
+};
+
 struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
@@ -477,6 +489,124 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
   (*trkErr) = newErr;
 }
 
+void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
+
+   // AddIntoUpperLeft2x2(psErr, msErr, resErr);
+   MP2x2SF resErr_loc;
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+     resErr_loc.data[0*bsize+it] = trkErr->data[0*bsize+it] + hitErr->data[0*bsize+it];
+     resErr_loc.data[1*bsize+it] = trkErr->data[1*bsize+it] + hitErr->data[1*bsize+it];
+     resErr_loc.data[2*bsize+it] = trkErr->data[2*bsize+it] + hitErr->data[2*bsize+it];
+   }
+
+   // Matriplex::InvertCramerSym(resErr);
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+     const double det = (double)resErr_loc.data[0*bsize+it] * resErr_loc.data[2*bsize+it] -
+                        (double)resErr_loc.data[1*bsize+it] * resErr_loc.data[1*bsize+it];
+     const float s   = 1.f / det;
+     const float tmp = s * resErr_loc.data[2*bsize+it];
+     resErr_loc.data[1*bsize+it] *= -s;
+     resErr_loc.data[2*bsize+it]  = s * resErr_loc.data[0*bsize+it];
+     resErr_loc.data[0*bsize+it]  = tmp;
+   }
+
+   // KalmanGain(psErr, resErr, K);
+   MP2x6 kGain;
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+      kGain.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it];
+      kGain.data[ 1*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 2*bsize+it];
+      kGain.data[ 2*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc.data[ 1*bsize+it];
+      kGain.data[ 3*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc.data[ 2*bsize+it];
+      kGain.data[ 4*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc.data[ 1*bsize+it];
+      kGain.data[ 5*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc.data[ 2*bsize+it];
+      kGain.data[ 6*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc.data[ 1*bsize+it];
+      kGain.data[ 7*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc.data[ 2*bsize+it];
+      kGain.data[ 8*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc.data[ 1*bsize+it];
+      kGain.data[ 9*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc.data[ 2*bsize+it];
+      kGain.data[10*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc.data[ 1*bsize+it];
+      kGain.data[11*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc.data[ 2*bsize+it];
+   }
+
+   // SubtractFirst2(msPar, psPar, res);
+   // MultResidualsAdd(K, psPar, res, outPar);
+   MP2F res_loc;
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+     res_loc.data[0*bsize+it] =  x(msP,it) - x(inPar,it);
+     res_loc.data[1*bsize+it] =  y(msP,it) - y(inPar,it);
+
+     setx    (inPar, it, x    (inPar, it) + kGain.data[ 0*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 1*bsize+it] * res_loc.data[ 1*bsize+it]);
+     sety    (inPar, it, y    (inPar, it) + kGain.data[ 2*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 3*bsize+it] * res_loc.data[ 1*bsize+it]);
+     setz    (inPar, it, z    (inPar, it) + kGain.data[ 4*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 5*bsize+it] * res_loc.data[ 1*bsize+it]);
+     setipt  (inPar, it, ipt  (inPar, it) + kGain.data[ 6*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 7*bsize+it] * res_loc.data[ 1*bsize+it]);
+     setphi  (inPar, it, phi  (inPar, it) + kGain.data[ 8*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 9*bsize+it] * res_loc.data[ 1*bsize+it]);
+     settheta(inPar, it, theta(inPar, it) + kGain.data[10*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[11*bsize+it] * res_loc.data[ 1*bsize+it]);
+     //note: if ipt changes sign we should update the charge, or we should get rid of the charge altogether and just use the sign of ipt
+   }
+
+   // squashPhiMPlex(outPar,N_proc); // ensure phi is between |pi|
+   // missing
+
+   // KHC(K, psErr, outErr);
+   // outErr.Subtract(psErr, outErr);
+   MP6x6SF newErr;
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+      newErr.data[ 0*bsize+it] = kGain.data[ 0*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 1*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr.data[ 1*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr.data[ 2*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr.data[ 3*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr.data[ 4*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr.data[ 5*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 4*bsize+it];
+      newErr.data[ 6*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr.data[ 7*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr.data[ 8*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 4*bsize+it];
+      newErr.data[ 9*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 7*bsize+it];
+      newErr.data[10*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr.data[11*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr.data[12*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 4*bsize+it];
+      newErr.data[13*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 7*bsize+it];
+      newErr.data[14*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[10*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[11*bsize+it];
+      newErr.data[15*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr.data[16*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr.data[17*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 4*bsize+it];
+      newErr.data[18*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 7*bsize+it];
+      newErr.data[19*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[10*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[11*bsize+it];
+      newErr.data[20*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[15*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[16*bsize+it];
+
+      newErr.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it] - newErr.data[ 0*bsize+it];
+      newErr.data[ 1*bsize+it] = trkErr->data[ 1*bsize+it] - newErr.data[ 1*bsize+it];
+      newErr.data[ 2*bsize+it] = trkErr->data[ 2*bsize+it] - newErr.data[ 2*bsize+it];
+      newErr.data[ 3*bsize+it] = trkErr->data[ 3*bsize+it] - newErr.data[ 3*bsize+it];
+      newErr.data[ 4*bsize+it] = trkErr->data[ 4*bsize+it] - newErr.data[ 4*bsize+it];
+      newErr.data[ 5*bsize+it] = trkErr->data[ 5*bsize+it] - newErr.data[ 5*bsize+it];
+      newErr.data[ 6*bsize+it] = trkErr->data[ 6*bsize+it] - newErr.data[ 6*bsize+it];
+      newErr.data[ 7*bsize+it] = trkErr->data[ 7*bsize+it] - newErr.data[ 7*bsize+it];
+      newErr.data[ 8*bsize+it] = trkErr->data[ 8*bsize+it] - newErr.data[ 8*bsize+it];
+      newErr.data[ 9*bsize+it] = trkErr->data[ 9*bsize+it] - newErr.data[ 9*bsize+it];
+      newErr.data[10*bsize+it] = trkErr->data[10*bsize+it] - newErr.data[10*bsize+it];
+      newErr.data[11*bsize+it] = trkErr->data[11*bsize+it] - newErr.data[11*bsize+it];
+      newErr.data[12*bsize+it] = trkErr->data[12*bsize+it] - newErr.data[12*bsize+it];
+      newErr.data[13*bsize+it] = trkErr->data[13*bsize+it] - newErr.data[13*bsize+it];
+      newErr.data[14*bsize+it] = trkErr->data[14*bsize+it] - newErr.data[14*bsize+it];
+      newErr.data[15*bsize+it] = trkErr->data[15*bsize+it] - newErr.data[15*bsize+it];
+      newErr.data[16*bsize+it] = trkErr->data[16*bsize+it] - newErr.data[16*bsize+it];
+      newErr.data[17*bsize+it] = trkErr->data[17*bsize+it] - newErr.data[17*bsize+it];
+      newErr.data[18*bsize+it] = trkErr->data[18*bsize+it] - newErr.data[18*bsize+it];
+      newErr.data[19*bsize+it] = trkErr->data[19*bsize+it] - newErr.data[19*bsize+it];
+      newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - newErr.data[20*bsize+it];
+   }
+
+   (*trkErr) = newErr;
+}
 
 const float kfact= 100/(-0.299792458*3.8112);
 void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg, 
@@ -592,7 +722,7 @@ int main (int argc, char* argv[]) {
           for(size_t layer=0; layer<nlayer; ++layer) {
             const MPHIT* bhits = bHit(hit, ie, ib,layer);
             propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-            KalmanUpdate(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);
+            KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);
           }
         }});
       }});
@@ -633,7 +763,9 @@ int main (int argc, char* argv[]) {
        }
        if (fabs( (x_-hx_)/hx_ )>1. ||
 	   fabs( (y_-hy_)/hy_ )>1. ||
-	   fabs( (z_-hz_)/hz_ )>1.) {
+	   fabs( (z_-hz_)/hz_ )>1. ||
+	   fabs( (pt_-12.)/12.)>1.
+	   ) {
 	 nfail++;
 	 continue;
        }
@@ -665,6 +797,7 @@ int main (int argc, char* argv[]) {
        float x_ = x(outtrk,ie,it);
        float y_ = y(outtrk,ie,it);
        float z_ = z(outtrk,ie,it);
+       float pt_ = 1./ipt(outtrk,ie,it);
        float hx_ = inputhits[nlayer-1].pos[0];
        float hy_ = inputhits[nlayer-1].pos[1];
        float hz_ = inputhits[nlayer-1].pos[2];
@@ -677,7 +810,9 @@ int main (int argc, char* argv[]) {
        }
        if (fabs( (x_-hx_)/hx_ )>1. ||
 	   fabs( (y_-hy_)/hy_ )>1. ||
-	   fabs( (z_-hz_)/hz_ )>1.) {
+	   fabs( (z_-hz_)/hz_ )>1. ||
+	   fabs( (pt_-12.)/12.)>1.
+	   ) {
 	 continue;
        }
        stdx += (x_-avgx)*(x_-avgx);
