@@ -722,7 +722,8 @@ int main (int argc, char* argv[]) {
           for(size_t layer=0; layer<nlayer; ++layer) {
             const MPHIT* bhits = bHit(hit, ie, ib,layer);
             propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-            KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);
+            KalmanUpdate(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);//use v2 for better physics performance
+            //KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);
           }
         }});
       }});
