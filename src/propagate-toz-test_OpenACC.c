@@ -621,9 +621,9 @@ int main (int argc, char* argv[]) {
    start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    for(itr=0; itr<NITER; itr++) {
-     #pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb*nlayer])
+     #pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb*nlayer]) async
      {
-     #pragma acc parallel loop gang num_workers(bsize) collapse(2) present(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
+     #pragma acc parallel loop gang num_workers(bsize) collapse(2) present(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb]) async
      for (size_t ie=0;ie<nevts;++ie) { // loop over events
        for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
          //
@@ -645,9 +645,10 @@ int main (int argc, char* argv[]) {
        }
      }
    }  
-   #pragma acc update host(outtrk[0:nevts*nb])
+   #pragma acc update host(outtrk[0:nevts*nb]) async
    } //end of itr loop
 
+   #pragma acc wait
    gettimeofday(&timecheck, NULL);
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
