@@ -128,7 +128,8 @@ CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlar
 endif
 ifeq ($(COMPILER),openarc)
 CXX=g++
-CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
+#CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
+CSRCS = ../cetus_output/propagate-toz-test_OpenACC_v3.cpp
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
 CLIBS1 += -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper

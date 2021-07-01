@@ -824,7 +824,7 @@
 #SetAccEntryFunction=functionname
 #SetOutputKernelFileNameBase=filename
 addIncludePath=__openarcrt__
-#macro=_N_=__inputSize__
+macro=num_streams=__numStreams__
 defaultNumWorkers=32
 #maxNumGangs=N
 #maxNumWorkers=N
