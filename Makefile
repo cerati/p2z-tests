@@ -109,7 +109,19 @@ CXX=g++
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4.cpp
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
-CLIBS1 += -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper
+ifeq ($(OPENARC_ARCH),5)
+CXX=hipcc
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
+else ifeq ($(OPENARC_ARCH),6)
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lpthread -lbrisbane -ldl -lopenaccrt_brisbane -lomphelper
+else ifeq ($(OPENARC_ARCH),1)
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lOpenCL -lomphelper
+else
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
+endif
 # On macOS
 #CFLAGS1 = -O3 -I. -I${openarc}/openarcrt -arch x86_64
 #CLIBS1 = -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
@@ -121,18 +133,37 @@ endif
 #  ACC Setting #
 ################
 ifeq ($(MODE),acc)
-CSRCS = propagate-toz-test_OpenACC.cpp
+#In the following version, PGI incorrectly allocates gang-private data (errorProp, temp, inverse_temp, kGain, newErr) as gang-shared.
+#CSRCS = propagate-toz-test_OpenACC.cpp
+#In the following version (V2), temporary data (errorProp, temp, inverse_temp, kGain, newErr) are declared as vector-private, 
+#which is correct but very inefficient.
+#CSRCS = propagate-toz-test_OpenACC_v2.cpp
+#In the following version (V3), PGI correctly privatizes the gang-private data (errorProp, temp, inverse_temp, kGain, newErr) in the global memory 
+#but not in the shared memory; less optimal.
+CSRCS = propagate-toz-test_OpenACC_v3.cpp
 ifeq ($(COMPILER),pgi)
 CXX=pgc++
 CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+#CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla,keepgpu,keepptx,nollvm -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),openarc)
-CXX=g++
 #CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
 CSRCS = ../cetus_output/propagate-toz-test_OpenACC_v3.cpp
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
-CLIBS1 += -L${openarc}/openarcrt -lcuda -lopenaccrt_cuda -lomphelper
+ifeq ($(OPENARC_ARCH),5)
+CXX=hipcc
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
+else ifeq ($(OPENARC_ARCH),6)
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lpthread -lbrisbane -ldl -lopenaccrt_brisbane -lomphelper
+else ifeq ($(OPENARC_ARCH),1)
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lOpenCL -lomphelper
+else
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
+endif
 # On macOS
 #CFLAGS1 = -O3 -I. -I${openarc}/openarcrt -arch x86_64
 #CLIBS1 = -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
@@ -265,6 +296,7 @@ $(TARGET)/$(BENCHMARK): src/$(CSRCS)
 	if [ -f $(TARGET)/*.ptx ]; then rm $(TARGET)/*.ptx; fi
 	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
+	if [ -f "./cetus_output/openarc_kernel.hip.cpp" ]; then cp ./cetus_output/openarc_kernel.hip.cpp ${TARGET}/; fi
 
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o

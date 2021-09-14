@@ -591,9 +591,8 @@ int main (int argc, char* argv[]) {
    for(itr=0; itr<NITER; itr++) {
      #pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb*nlayer])
      {
-     #pragma acc parallel loop gang present(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
+     #pragma acc parallel loop gang collapse(2) present(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
      for (size_t ie=0;ie<nevts;++ie) { // loop over events
-       #pragma acc loop worker
        for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
          //
 		 //[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device functions (propagateToZ and KalmanUpdate) to here.
