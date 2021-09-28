@@ -140,7 +140,9 @@ ifeq ($(MODE),acc)
 #CSRCS = propagate-toz-test_OpenACC_v2.cpp
 #In the following version (V3), PGI correctly privatizes the gang-private data (errorProp, temp, inverse_temp, kGain, newErr) in the global memory 
 #but not in the shared memory; less optimal.
-CSRCS = propagate-toz-test_OpenACC_v3.cpp
+#CSRCS = propagate-toz-test_OpenACC_v3.cpp
+#In the following version (V4), private data (errorProp, temp, inverse_temp, kGain, newErr) are used as vector private with bsize = 1.
+CSRCS = propagate-toz-test_OpenACC_v4.cpp
 ifeq ($(COMPILER),pgi)
 CXX=pgc++
 CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
