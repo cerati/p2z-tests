@@ -84,7 +84,10 @@ java -classpath $openarclib/cetus.jar:$openarclib/antlr.jar openacc.exec.ACC2GPU
 
 echo ""
 echo "====> To compile the translated output file:"
+echo "//for OpenACC: "
 echo "\$ make COMPILER=openarc MODE=acc"
+echo "//for OpenMP4: "
+echo "\$ make COMPILER=openarc MODE=omp4"
 echo ""
 echo "====> To run the compiled binary:"
 echo "\$ cd bin; propagate_openarc_acc"

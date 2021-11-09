@@ -14,6 +14,7 @@
 COMPILER ?= nvcc
 MODE ?= eigen
 OS ?= linux
+DEBUG ?= 0
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
@@ -110,7 +111,11 @@ ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_v3.cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
+ifeq ($(DEBUG),1)
+CFLAGS1 += -g -I. -I${openarc}/openarcrt 
+else
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
+endif
 else
 # On Mac OS
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt -arch x86_64
@@ -133,7 +138,11 @@ CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenC
 endif
 else
 CXX=g++
+ifeq ($(DEBUG),1)
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cudapf -lcuda -lomphelper
+else
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
+endif
 endif
 endif
 endif
@@ -160,9 +169,9 @@ CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlar
 endif
 ifeq ($(COMPILER),openarc)
 #OpenACC C V1: synchronous version
-CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
+#CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
 #OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
-#CSRCS = ../cetus_output/propagate-toz-test_OpenACC_v3.cpp
+CSRCS = ../cetus_output/propagate-toz-test_OpenACC_v3.cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 

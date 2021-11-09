@@ -648,9 +648,9 @@ int main (int argc, char* argv[]) {
 		if( s==num_streams-1 ) {
 			localChunkSize = lastChunkSize;
 		}
-     	#pragma omp target update to(trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) nowait depend(inout:s)
+     	#pragma omp target update to(trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) nowait depend(out:trk[s*chunkSize*nb:1])
 		//#pragma openarc cuda sharedRW(ie, ib)
-     	#pragma omp target teams distribute collapse(2) map(present,to: trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) map(present,from: outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(inout:s)
+     	#pragma omp target teams distribute collapse(2) map(present,to: trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) map(present,from: outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(in:trk[s*chunkSize*nb:1]) depend(out:outtrk[s*chunkSize*nb:1])
      	for (size_t ie=s*chunkSize;ie<(s*chunkSize+localChunkSize);++ie) { // loop over events
        		for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
 		 		//[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device functions (propagateToZ and KalmanUpdate) to here.
@@ -670,7 +670,7 @@ int main (int argc, char* argv[]) {
          		}
        		}
      	}
-   		#pragma omp target update from(outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(inout:s)
+   		#pragma omp target update from(outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(inout:outtrk[s*chunkSize*nb:1])
 	}  
    } //end of itr loop
 
