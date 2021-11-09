@@ -13,6 +13,7 @@
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
+OS ?= linux
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
@@ -105,10 +106,15 @@ CXX=xlc
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
 endif
 ifeq ($(COMPILER),openarc)
-CXX=g++
-CSRCS = ../cetus_output/propagate-toz-test_OpenMP4.cpp
+#CSRCS = ../cetus_output/propagate-toz-test_OpenMP4.cpp
+CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_v3.cpp
+ifeq ($(OS),linux)
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
+else
+# On Mac OS
+CFLAGS1 += -O3 -I. -I${openarc}/openarcrt -arch x86_64
+endif
 ifeq ($(OPENARC_ARCH),5)
 CXX=hipcc
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
@@ -116,15 +122,19 @@ else ifeq ($(OPENARC_ARCH),6)
 CXX=g++
 CLIBS1 += -L${openarc}/openarcrt -lpthread -lbrisbane -ldl -lopenaccrt_brisbane -lomphelper
 else ifeq ($(OPENARC_ARCH),1)
+ifeq ($(OS),linux)
+# On Linux
 CXX=g++
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lOpenCL -lomphelper
+else
+# On Mac OS
+CXX=clang++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
+endif
 else
 CXX=g++
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
 endif
-# On macOS
-#CFLAGS1 = -O3 -I. -I${openarc}/openarcrt -arch x86_64
-#CLIBS1 = -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
 endif
 endif
 
@@ -149,10 +159,17 @@ CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlar
 #CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla,keepgpu,keepptx,nollvm -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),openarc)
-#CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
-CSRCS = ../cetus_output/propagate-toz-test_OpenACC_v3.cpp
+#OpenACC C V1: synchronous version
+CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
+#OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
+#CSRCS = ../cetus_output/propagate-toz-test_OpenACC_v3.cpp
+ifeq ($(OS),linux)
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
+else
+# On Mac OS
+CFLAGS1 += -O3 -I. -I${openarc}/openarcrt -arch x86_64
+endif
 ifeq ($(OPENARC_ARCH),5)
 CXX=hipcc
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
@@ -160,15 +177,19 @@ else ifeq ($(OPENARC_ARCH),6)
 CXX=g++
 CLIBS1 += -L${openarc}/openarcrt -lpthread -lbrisbane -ldl -lopenaccrt_brisbane -lomphelper
 else ifeq ($(OPENARC_ARCH),1)
+ifeq ($(OS),linux)
+# On Linux
 CXX=g++
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lOpenCL -lomphelper
+else
+# On Mac OS
+CXX=clang++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
+endif
 else
 CXX=g++
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
 endif
-# On macOS
-#CFLAGS1 = -O3 -I. -I${openarc}/openarcrt -arch x86_64
-#CLIBS1 = -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
 endif
 endif
 

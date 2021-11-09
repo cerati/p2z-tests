@@ -96,15 +96,15 @@ struct MP6x6F {
 };
 
 struct MPTRK {
-  MP6F    par;
-  MP6x6SF cov;
-  MP1I    q;
-  //  MP22I   hitidx;
+  struct MP6F    par;
+  struct MP6x6SF cov;
+  struct MP1I    q;
+  //  struct MP22I   hitidx;
 };
 
 struct MPHIT {
-  MP3F    pos;
-  MP3x3SF cov;
+  struct MP3F    pos;
+  struct MP3x3SF cov;
 };
 
 float randn(float mu, float sigma) {
@@ -127,19 +127,19 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-MPTRK* bTk(MPTRK* tracks, size_t ev, size_t ib) {
+struct MPTRK* bTk(struct MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
+const struct MPTRK* bTk(const struct MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-float q(const MP1I* bq, size_t it){
+float q(const struct MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 //
-float par(const MP6F* bpars, size_t it, size_t ipar){
+float par(const struct MP6F* bpars, size_t it, size_t ipar){
   return (*bpars).data[it + ipar*bsize];
 }
 float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
@@ -373,6 +373,7 @@ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
     c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
   }
 }
+
 #pragma acc routine vector nohost
 void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);

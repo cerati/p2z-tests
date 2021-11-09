@@ -1,7 +1,30 @@
 #! /bin/bash
 
+###########################################
+# OpenARC Commandline Option: ompaccInter #
+###########################################
+#ompaccInter=${defaultOmpAccInter}
+#Interchange OpenACC directives with OpenMP 3.0 or OpenMP 4.0 directives: 
+#        =0 disable this option (default)
+#        =1 generate OpenACC directives from OpenMP 3.0 directives
+#        =2 generate OpenACC directives from OpenMP 4.0 directives
+#        =3 generate OpenMP 3.0 directives from OpenACC directives
+#        =4 generate OpenMP 4.0 directives from OpenACC directives
+#        =5 generate optimized OpenMP directives from OpenMP directives
+
+###############################
+# Default options for OpenACC #
+###############################
 #defaultInputFile="propagate-toz-test_OpenACC.c"
-defaultInputFile="propagate-toz-test_OpenACC_v3.c"
+#defaultInputFile="propagate-toz-test_OpenACC_v3.c"
+#defaultOmpAccInter=0
+###############################
+# Default options for OpenMP4 #
+###############################
+#defaultInputFile="propagate-toz-test_OpenMP4.c"
+defaultInputFile="propagate-toz-test_OpenMP4_v3.c"
+defaultOmpAccInter=2
+
 
 if [ $# -eq 3 ]; then
 	numStreams=$1
@@ -14,11 +37,11 @@ elif [ $# -eq 2 ]; then
 elif [ $# -eq 1 ]; then
 	numStreams=$1
 	inputFile="$defaultInputFile"
-	ompaccInter=0
+	ompaccInter="$defaultOmpAccInter"
 else
 	numStreams=10
 	inputFile="$defaultInputFile"
-	ompaccInter=0
+	ompaccInter="$defaultOmpAccInter"
 fi
 
 if [ ! -f "./src/$inputFile" ]; then
