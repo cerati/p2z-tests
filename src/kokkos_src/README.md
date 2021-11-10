@@ -29,6 +29,14 @@ kokkos config h file options
 * lines 53 through 63 contain the settings for GPU and CPU data structures which 
 should be automatically selected based on the KOKKOS_DEVICES option in the Makefile
 * These set how the data is stored and processed
+*  ExecSpace - The backend execution method (OpenMP and CUDA have been tested)
+*  MemSpace - The where the memory is allocated (Cuda, CudaUVM, OpenMP, Host)
+  * CudaUVM - unified memory and current GPU version
+  * Cuda - requires manual data transfers (currently not an option in p2z)
+  * OpenMP / Host - On the CPU difference is unclear
+* Layout - row- or column- wise data layouts
+  * LayoutRight - Row major, for CPU, with logically adjacent element adjacent in memory
+  * LayoutLeft - Column major for GPU, with logically adjacent element adjacent in memory
 
 
 
