@@ -105,6 +105,10 @@ CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
 else ifeq ($(COMPILER),ibm)
 CXX=xlc++_r
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+else ifeq ($(COMPILER),pgi)
+CXX=nvc++
+#CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp -ta=tesla -mcmodel=medium -Mlarge_arrays
+CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp -mcmodel=medium -Mlarge_arrays
 else
 CSRCS = "NotSupported"
 endif
@@ -126,6 +130,9 @@ CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
 else ifeq ($(COMPILER),ibm)
 CXX=xlc_r
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+else ifeq ($(COMPILER),pgi)
+CXX=nvc
+CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp -ta=tesla -mcmodel=medium -Mlarge_arrays
 else ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_sync.cpp
 ifeq ($(OS),linux)
@@ -247,6 +254,7 @@ CSRCS = propagate-toz-test_OpenACC_sync_v4.cpp
 ifeq ($(COMPILER),pgi)
 CXX=nvc++
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+#CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -mcmodel=medium -Mlarge_arrays
 #CXX=pgc++
 #CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
 else
@@ -483,7 +491,7 @@ precmd:
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
 
-cleanall:
+cleanall: purge
 	rm -f $(TARGET)/* 
 
 purge: clean
