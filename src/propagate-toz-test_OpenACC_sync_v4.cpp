@@ -269,8 +269,8 @@ MPHIT* prepareHits(AHIT inputhit) {
 }
 
 #define N bsize
-//#pragma acc routine vector nohost
-#pragma acc routine seq nohost
+//#pragma acc routine vector 
+#pragma acc routine seq 
 void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
@@ -317,8 +317,8 @@ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
   }
 }
 
-//#pragma acc routine vector nohost
-#pragma acc routine seq nohost
+//#pragma acc routine vector 
+#pragma acc routine seq 
 void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
@@ -350,8 +350,8 @@ void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C) {
   }
 }
 
-//#pragma acc routine vector nohost
-#pragma acc routine seq nohost
+//#pragma acc routine vector 
+#pragma acc routine seq 
 void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
@@ -376,8 +376,8 @@ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
     c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
   }
 }
-//#pragma acc routine vector nohost
-#pragma acc routine seq nohost
+//#pragma acc routine vector 
+#pragma acc routine seq 
 void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
@@ -406,8 +406,8 @@ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
   }
 }
 
-//#pragma acc routine vector nohost
-#pragma acc routine seq nohost
+//#pragma acc routine vector 
+#pragma acc routine seq 
 void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP3x3* inverse_temp, MP3x6* kGain, MP6x6SF* newErr){
   //MP3x3 inverse_temp;
   //MP3x6 kGain;
@@ -475,8 +475,8 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
 
 
 const float kfact = 100/3.8;
-//#pragma acc routine vector nohost
-#pragma acc routine seq nohost
+//#pragma acc routine vector 
+#pragma acc routine seq
 void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar,

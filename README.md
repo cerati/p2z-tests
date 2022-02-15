@@ -7,13 +7,33 @@ $ make COMPILER=gcc MODE=omp
 $ make COMPILER=icc MODE=omp
 $ make COMPILER=pgi MODE=omp
 
+## OpenACC C++
+#### Compile with pgi
+//Compile OpenACC C++ sync version
+$ make COMPILER=pgi MODE=acc
 
-## OpenACC
-#### Compile with PGI
-//Compile OpenACC C++ version
-$ make COMPILER=pgi MODE=acc SRCTYPE=cpp
-//Compile OpenACC C version
-$ make COMPILER=pgi MODE=acc SRCTYPE=c
+## OpenACC C
+#### Compile with pgi, openarc
+//Compile OpenACC C sync version
+$ make COMPILER=pgi MODE=accc
+$ make COMPILER=openarc MODE=accc
+//Compile OpenACC C async version (v3)
+$ make COMPILER=pgi MODE=acccv3
+$ make COMPILER=openarc MODE=acccv3
+
+## OpenMP4 C++
+#### Compile with gcc, llvm, ibm
+//Compile OpenMP4 C++ sync version
+$ make COMPILER=gcc MODE=omp4
+$ make COMPILER=llvm MODE=omp4
+$ make COMPILER=ibm MODE=omp4
+
+## OpenMP4 C
+#### Compile with openarc
+//Compile OpenMP4 C sync version
+$ make COMPILER=openarc MODE=omp4c
+//Compile OpenMP4 C async version (v3)
+$ make COMPILER=openarc MODE=omp4cv3
 
 ## Tbb
 #### Compilers: gcc, icc
@@ -22,8 +42,11 @@ $ make COMPILER=icc MODE=tbb
 
 ## CUDA
 #### Compilers: nvcc
-Version 1 uses unified memory. Version 2 uses explicit memory transfers
+//Version 1 uses unified memory. Version 2 and 3 use explicit memory transfers
+//Version 3 has the same computation and communiation patterns as OpenACC async version (v3).
 $ make COMPILER=nvcc MODE=cuda
+$ make COMPILER=nvcc MODE=cudav2
+$ make COMPILER=nvcc MODE=cudav3
 
 ## Eigen
 #### Compilers: gcc, icc, nvcc
@@ -35,13 +58,6 @@ $ make COMPILER=nvcc MODE=eigen
 #### Compilers: gcc, nvcc 
 $ make COMPILER=gcc MODE=alpaka
 $ make COMPILER=nvcc MODE=alpaka//not yet functional
-
-#### Compile with OpenARC
-1. set the environment variable, openarc to the root directory of the OpenARC repository.
-2. $ O2GBuild.script
-3. $ make COMPILER=openarc MODE=acc SRCTYPE=c
-# OpenARC in the public repository has bugs in handling async versions.
-# Therefore, do not use propagate-*_async.c files as input.
 
 ## Kokkos
 The kokkos version exists in its own directory, `src/kokkos_src`, which contains

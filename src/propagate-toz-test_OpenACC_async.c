@@ -296,7 +296,7 @@ struct MPHIT* prepareHits(struct AHIT inputhit) {
 }
 
 #define N bsize
-#pragma acc routine vector nohost
+#pragma acc routine vector 
 void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct MP6x6F* C) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
@@ -343,7 +343,7 @@ void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct
   }
 }
 
-#pragma acc routine vector nohost
+#pragma acc routine vector 
 void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, struct MP6x6SF* C) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
@@ -375,7 +375,7 @@ void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, s
   }
 }
 
-#pragma acc routine vector nohost
+#pragma acc routine vector 
 void KalmanGainInv(const struct MP6x6SF* A, const struct MP3x3SF* B, struct MP3x3* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
@@ -400,7 +400,7 @@ void KalmanGainInv(const struct MP6x6SF* A, const struct MP3x3SF* B, struct MP3x
     c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
   }
 }
-#pragma acc routine vector nohost
+#pragma acc routine vector 
 void KalmanGain(const struct MP6x6SF* A, const struct MP3x3* B, struct MP3x6* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
@@ -429,7 +429,7 @@ void KalmanGain(const struct MP6x6SF* A, const struct MP3x3* B, struct MP3x6* C)
   }
 }
 
-#pragma acc routine vector nohost
+#pragma acc routine vector 
 void KalmanUpdate(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3SF* hitErr, const struct MP3F* msP, struct MP3x3* inverse_temp, struct MP3x6* kGain, struct MP6x6SF* newErr){
   //struct MP3x3 inverse_temp1;
   //struct MP3x6 kGain1;
@@ -506,7 +506,7 @@ void KalmanUpdate(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3
 
 //const float kfact = 100/3.8;
 #define kfact 100/3.8
-#pragma acc routine vector nohost
+#pragma acc routine vector
 void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
 		  const struct MP1I* inChg, const struct MP3F* msP,
 	                struct MP6x6SF* outErr, struct MP6F* outPar,

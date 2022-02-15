@@ -98,15 +98,15 @@ ifeq ($(COMPILER),gcc)
 CXX=gcc
 CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
 CLIBS1 += -lm -lgomp 
-endif
-ifeq ($(COMPILER),llvm)
+else ifeq ($(COMPILER),llvm)
 CXX=clang
 CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu -lm
-endif
-ifeq ($(COMPILER),ibm)
+else ifeq ($(COMPILER),ibm)
 CXX=xlc
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+else
+CSRCS = "NotSupported"
 endif
 endif
 
@@ -152,6 +152,8 @@ else
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
 endif
 endif
+else
+CSRCS = "NotSupported"
 endif
 endif
 
@@ -222,6 +224,8 @@ CXX=nvc++
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
 #CXX=pgc++
 #CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+else
+CSRCS = "NotSupported"
 endif
 endif
 
@@ -233,10 +237,9 @@ ifeq ($(COMPILER),pgi)
 CSRCS = propagate-toz-test_OpenACC_sync.c
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-endif
-ifeq ($(COMPILER),openarc)
+else ifeq ($(COMPILER),openarc)
 #OpenACC C V1: synchronous version
-#CSRCS = ../cetus_output/propagate-toz-test_OpenACC_sync.cpp
+CSRCS = ../cetus_output/propagate-toz-test_OpenACC_sync.cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
@@ -264,6 +267,8 @@ else
 CXX=g++
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
 endif
+else
+CSRCS = "NotSupported"
 endif
 endif
 
@@ -273,8 +278,7 @@ ifeq ($(COMPILER),pgi)
 CSRCS = propagate-toz-test_OpenACC_async.c
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-endif
-ifeq ($(COMPILER),openarc)
+else ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenACC_async.cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
@@ -303,6 +307,8 @@ else
 CXX=g++
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
 endif
+else
+CSRCS = "NotSupported"
 endif
 endif
 
@@ -428,13 +434,18 @@ BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
 
 CFLAGS1 += -std=c++17
 
-$(TARGET)/$(BENCHMARK): src/$(CSRCS)
+$(TARGET)/$(BENCHMARK): precmd src/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi
 	$(CXX) $(CFLAGS1) src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK)
 	if [ -f $(TARGET)/*.ptx ]; then rm $(TARGET)/*.ptx; fi
 	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.hip.cpp" ]; then cp ./cetus_output/openarc_kernel.hip.cpp ${TARGET}/; fi
+
+precmd:
+	@if [ "$(CSRCS)" = "NotSupported" ]; then echo "==> [ERROR] The compiler $(COMPILER) is not supported for the mode = $(MODE)"; fi
+	@if [ "$(COMPILER)" = "openarc" ]; then rm -rf ./cetus_output $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx $(TARGET)/propagate_openarc_*; fi
+	@if [ "$(COMPILER)" = "openarc" ]; then O2GBuild.script $(MODE); fi
 
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
