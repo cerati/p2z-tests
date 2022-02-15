@@ -68,6 +68,7 @@ $ make COMPILER=icc MODE=tbb
 ## CUDA
 #### Compilers: nvcc
 Version 1 uses unified memory. Version 2 and 3 use explicit memory transfers.
+
 Version 3 has the same computation and communiation patterns as OpenACC async version (v3).
 
 ```shell
