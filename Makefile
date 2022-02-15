@@ -10,6 +10,7 @@
 #                   ibm                                  #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
 #               omp4, cudav2, cudav3, accc, acccv3       #
+#               omp4c                                    #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -107,9 +108,59 @@ ifeq ($(COMPILER),ibm)
 CXX=xlc
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
 endif
+endif
+
+###################
+#  OMP4 C Setting #
+###################
+ifeq ($(MODE),omp4c)
 ifeq ($(COMPILER),openarc)
-#CSRCS = ../cetus_output/propagate-toz-test_OpenMP4.cpp
-CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_v3.cpp
+CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_sync.cpp
+#CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_async.cpp
+ifeq ($(OS),linux)
+# On Linux with CUDA GPU
+ifeq ($(DEBUG),1)
+CFLAGS1 += -g -I. -I${openarc}/openarcrt 
+else
+CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
+endif
+else
+# On Mac OS
+CFLAGS1 += -O3 -I. -I${openarc}/openarcrt -arch x86_64
+endif
+ifeq ($(OPENARC_ARCH),5)
+CXX=hipcc
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
+else ifeq ($(OPENARC_ARCH),6)
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lpthread -liris -ldl -lopenaccrt_iris -lomphelper
+else ifeq ($(OPENARC_ARCH),1)
+ifeq ($(OS),linux)
+# On Linux
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lOpenCL -lomphelper
+else
+# On Mac OS
+CXX=clang++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
+endif
+else
+CXX=g++
+ifeq ($(DEBUG),1)
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cudapf -lcuda -lomphelper
+else
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
+endif
+endif
+endif
+endif
+
+###################
+#  OMP4 C Setting #
+###################
+ifeq ($(MODE),omp4cv3)
+ifeq ($(COMPILER),openarc)
+CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_async.cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
 ifeq ($(DEBUG),1)

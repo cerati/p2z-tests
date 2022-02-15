@@ -34,8 +34,6 @@ elif [ $# -eq 1 ]; then
 else
 	inputMode="acccv3"
 	numStreams=10
-	inputFile="$defaultInputFile"
-	ompaccInter="$defaultOmpAccInter"
 fi
 
 if [ "$inputMode" == "accc" ]; then
@@ -44,10 +42,10 @@ if [ "$inputMode" == "accc" ]; then
 elif [ "$inputMode" == "acccv3" ]; then
 	inputFile="$defaultACCInputFile2"
 	ompaccInter=0
-elif [ "$inputMode" == "omp4" ]; then
+elif [ "$inputMode" == "omp4c" ]; then
 	inputFile="$defaultOMP4InputFile1"
 	ompaccInter=2
-elif [ "$inputMode" == "omp4v3" ]; then
+elif [ "$inputMode" == "omp4cv3" ]; then
 	inputFile="$defaultOMP4InputFile2"
 	ompaccInter=2
 fi
@@ -90,20 +88,36 @@ fi
 
 java -classpath $openarclib/cetus.jar:$openarclib/antlr.jar openacc.exec.ACC2GPUDriver -verbosity=${verLevel} -ompaccInter=${ompaccInter} -gpuConfFile=openarcConf.txt ./src/$inputFile
 
-echo ""
-echo "====> To compile the translated output file:"
-echo "//for OpenACC (sync version): "
-echo "\$ make COMPILER=openarc MODE=accc"
-echo "//for OpenACC (async version): "
-echo "\$ make COMPILER=openarc MODE=acccv3"
-echo "//for OpenMP4 (sync version): "
-echo "\$ make COMPILER=openarc MODE=omp4"
-echo ""
-echo "====> To run the compiled binary:"
-echo "//for OpenACC (sync version): "
-echo "\$ cd bin; propagate_openarc_accc"
-echo "//for OpenACC (async version): "
-echo "\$ cd bin; propagate_openarc_acccv3"
-echo "//for OpenMP4 (sync version): "
-echo "\$ cd bin; propagate_openarc_omp4"
-echo ""
+if [ "$inputMode" == "accc" ]; then
+	echo ""
+	echo "====> To compile the translated output file:"
+	echo "\$ make COMPILER=openarc MODE=accc"
+	echo ""
+	echo "====> To run the compiled binary:"
+	echo "\$ cd bin; propagate_openarc_accc"
+	echo ""
+elif [ "$inputMode" == "acccv3" ]; then
+	echo ""
+	echo "====> To compile the translated output file:"
+	echo "\$ make COMPILER=openarc MODE=acccv3"
+	echo ""
+	echo "====> To run the compiled binary:"
+	echo "\$ cd bin; propagate_openarc_acccv3"
+	echo ""
+elif [ "$inputMode" == "omp4c" ]; then
+	echo ""
+	echo "====> To compile the translated output file:"
+	echo "\$ make COMPILER=openarc MODE=omp4c"
+	echo ""
+	echo "====> To run the compiled binary:"
+	echo "\$ cd bin; propagate_openarc_omp4c"
+	echo ""
+elif [ "$inputMode" == "omp4cv3" ]; then
+	echo ""
+	echo "====> To compile the translated output file:"
+	echo "\$ make COMPILER=openarc MODE=omp4cv3"
+	echo ""
+	echo "====> To run the compiled binary:"
+	echo "\$ cd bin; propagate_openarc_omp4cv3"
+	echo ""
+fi
