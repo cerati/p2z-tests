@@ -9,7 +9,7 @@
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
 #                   ibm                                  #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
-#               omp4, cudav2, cudav3                     #
+#               omp4, cudav2, cudav3, accc, acccv3       #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -69,7 +69,8 @@ CFLAGS1 += -O3 -I. -fopenmp
 CLIBS1 += -lm -lgomp
 endif
 ifeq ($(COMPILER),pgi)
-CXX=pgc++
+CXX=nvc++
+#CXX=pgc++
 CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),icc)
@@ -91,7 +92,7 @@ endif
 #  OMP4 Setting #
 #################
 ifeq ($(MODE),omp4)
-CSRCS = propagate-toz-test_OpenMP4.cpp
+CSRCS = propagate-toz-test_OpenMP4_sync.cpp
 ifeq ($(COMPILER),gcc)
 CXX=gcc
 CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
@@ -125,7 +126,7 @@ CXX=hipcc
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
 else ifeq ($(OPENARC_ARCH),6)
 CXX=g++
-CLIBS1 += -L${openarc}/openarcrt -lpthread -lbrisbane -ldl -lopenaccrt_brisbane -lomphelper
+CLIBS1 += -L${openarc}/openarcrt -lpthread -liris -ldl -lopenaccrt_iris -lomphelper
 else ifeq ($(OPENARC_ARCH),1)
 ifeq ($(OS),linux)
 # On Linux
@@ -152,26 +153,39 @@ endif
 #  ACC Setting #
 ################
 ifeq ($(MODE),acc)
-#In the following version, PGI incorrectly allocates gang-private data (errorProp, temp, inverse_temp, kGain, newErr) as gang-shared.
-#CSRCS = propagate-toz-test_OpenACC.cpp
+# Synchronous version
+#In the following version (V1), PGI incorrectly allocates gang-private data (errorProp, temp, inverse_temp, kGain, newErr) as gang-shared.
+#With nvc++ V21.11 with -O3 option, this compiles and run correctly.
+#CSRCS = propagate-toz-test_OpenACC_sync_v1.cpp
 #In the following version (V2), temporary data (errorProp, temp, inverse_temp, kGain, newErr) are declared as vector-private, 
 #which is correct but very inefficient.
-#CSRCS = propagate-toz-test_OpenACC_v2.cpp
+#CSRCS = propagate-toz-test_OpenACC_sync_v2.cpp
 #In the following version (V3), PGI correctly privatizes the gang-private data (errorProp, temp, inverse_temp, kGain, newErr) in the global memory 
 #but not in the shared memory; less optimal.
-#CSRCS = propagate-toz-test_OpenACC_v3.cpp
+#CSRCS = propagate-toz-test_OpenACC_sync_v3.cpp
 #In the following version (V4), private data (errorProp, temp, inverse_temp, kGain, newErr) are used as vector private with bsize = 1.
-CSRCS = propagate-toz-test_OpenACC_v4.cpp
+#Performs best when using nvc++ V21.11 with -O3 option.
+CSRCS = propagate-toz-test_OpenACC_sync_v4.cpp
 ifeq ($(COMPILER),pgi)
-CXX=pgc++
-CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-#CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla,keepgpu,keepptx,nollvm -mcmodel=medium -Mlarge_arrays
+CXX=nvc++
+CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+#CXX=pgc++
+#CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+endif
+endif
+
+##################
+#  ACC C Setting #
+##################
+ifeq ($(MODE),accc)
+ifeq ($(COMPILER),pgi)
+CSRCS = propagate-toz-test_OpenACC_sync.c
+CXX=nvc
+CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),openarc)
 #OpenACC C V1: synchronous version
-#CSRCS = ../cetus_output/propagate-toz-test_OpenACC.cpp
-#OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
-CSRCS = ../cetus_output/propagate-toz-test_OpenACC_v3.cpp
+#CSRCS = ../cetus_output/propagate-toz-test_OpenACC_sync.cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
@@ -184,7 +198,46 @@ CXX=hipcc
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
 else ifeq ($(OPENARC_ARCH),6)
 CXX=g++
-CLIBS1 += -L${openarc}/openarcrt -lpthread -lbrisbane -ldl -lopenaccrt_brisbane -lomphelper
+CLIBS1 += -L${openarc}/openarcrt -lpthread -liris -ldl -lopenaccrt_iris -lomphelper
+else ifeq ($(OPENARC_ARCH),1)
+ifeq ($(OS),linux)
+# On Linux
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lOpenCL -lomphelper
+else
+# On Mac OS
+CXX=clang++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
+endif
+else
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
+endif
+endif
+endif
+
+ifeq ($(MODE),acccv3)
+#OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
+ifeq ($(COMPILER),pgi)
+CSRCS = propagate-toz-test_OpenACC_async.c
+CXX=nvc
+CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+endif
+ifeq ($(COMPILER),openarc)
+CSRCS = ../cetus_output/propagate-toz-test_OpenACC_async.cpp
+ifeq ($(OS),linux)
+# On Linux with CUDA GPU
+CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
+else
+# On Mac OS
+CFLAGS1 += -O3 -I. -I${openarc}/openarcrt -arch x86_64
+endif
+ifeq ($(OPENARC_ARCH),5)
+CXX=hipcc
+CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
+else ifeq ($(OPENARC_ARCH),6)
+CXX=g++
+CLIBS1 += -L${openarc}/openarcrt -lpthread -liris -ldl -lopenaccrt_iris -lomphelper
 else ifeq ($(OPENARC_ARCH),1)
 ifeq ($(OS),linux)
 # On Linux
@@ -219,7 +272,8 @@ CXX=icc
 CFLAGS1+= -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
 endif
 ifeq ($(COMPILER),pgi)
-CXX=pgc++
+CXX=nvc++
+#CXX=pgc++
 CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 endif
@@ -273,7 +327,8 @@ CXX=icc
 CFLAGS1 += -fopenmp -O3 -fopenmp-simd  -mtune=native -march=native -xHost -qopt-zmm-usage=high
 endif
 ifeq ($(COMPILER),pgi)
-CXX=pgc++
+CXX=nvc++
+#CXX=pgc++
 CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),nvcc)
@@ -337,4 +392,4 @@ cleanall:
 	rm -f $(TARGET)/* 
 
 purge: clean
-	rm -rf bin cetus_output openarcConf.txt 
+	rm -rf cetus_output openarcConf.txt 

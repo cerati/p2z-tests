@@ -15,33 +15,41 @@
 ###############################
 # Default options for OpenACC #
 ###############################
-#defaultInputFile="propagate-toz-test_OpenACC.c"
-#defaultInputFile="propagate-toz-test_OpenACC_v3.c"
+defaultACCInputFile1="propagate-toz-test_OpenACC_sync.c"
+defaultACCInputFile2="propagate-toz-test_OpenACC_async.c"
 #defaultOmpAccInter=0
 ###############################
 # Default options for OpenMP4 #
 ###############################
-#defaultInputFile="propagate-toz-test_OpenMP4.c"
-defaultInputFile="propagate-toz-test_OpenMP4_v3.c"
-defaultOmpAccInter=2
+defaultOMP4InputFile1="propagate-toz-test_OpenMP4_sync.c"
+defaultOMP4InputFile2="propagate-toz-test_OpenMP4_async.c"
+#defaultOmpAccInter=2
 
-
-if [ $# -eq 3 ]; then
-	numStreams=$1
-	inputFile="$2"
-	ompaccInter=$3
-elif [ $# -eq 2 ]; then
-	numStreams=$1
-	inputFile="$2"
-	ompaccInter=$3
+if [ $# -eq 2 ]; then
+	inputMode="$1"
+	numStreams=$2
 elif [ $# -eq 1 ]; then
-	numStreams=$1
-	inputFile="$defaultInputFile"
-	ompaccInter="$defaultOmpAccInter"
+	inputMode="$1"
+	numStreams=10
 else
+	inputMode="acccv3"
 	numStreams=10
 	inputFile="$defaultInputFile"
 	ompaccInter="$defaultOmpAccInter"
+fi
+
+if [ "$inputMode" == "accc" ]; then
+	inputFile="$defaultACCInputFile1"
+	ompaccInter=0
+elif [ "$inputMode" == "acccv3" ]; then
+	inputFile="$defaultACCInputFile2"
+	ompaccInter=0
+elif [ "$inputMode" == "omp4" ]; then
+	inputFile="$defaultOMP4InputFile1"
+	ompaccInter=2
+elif [ "$inputMode" == "omp4v3" ]; then
+	inputFile="$defaultOMP4InputFile2"
+	ompaccInter=2
 fi
 
 if [ ! -f "./src/$inputFile" ]; then
@@ -59,9 +67,9 @@ fi
 openarcrt="${openarc}/openarcrt"
 openarclib="${openarc}/lib"
 
-if [ ! -f "openarcConf.txt" ]; then
+#if [ ! -f "openarcConf.txt" ]; then
     cp "openarcConf_NORMAL.txt" "openarcConf.txt"
-fi
+#fi
 
 if [ "$numStreams" != "" ]; then
     mv "openarcConf.txt" "openarcConf.txt_tmp"
@@ -84,11 +92,18 @@ java -classpath $openarclib/cetus.jar:$openarclib/antlr.jar openacc.exec.ACC2GPU
 
 echo ""
 echo "====> To compile the translated output file:"
-echo "//for OpenACC: "
-echo "\$ make COMPILER=openarc MODE=acc"
-echo "//for OpenMP4: "
+echo "//for OpenACC (sync version): "
+echo "\$ make COMPILER=openarc MODE=accc"
+echo "//for OpenACC (async version): "
+echo "\$ make COMPILER=openarc MODE=acccv3"
+echo "//for OpenMP4 (sync version): "
 echo "\$ make COMPILER=openarc MODE=omp4"
 echo ""
 echo "====> To run the compiled binary:"
-echo "\$ cd bin; propagate_openarc_acc"
+echo "//for OpenACC (sync version): "
+echo "\$ cd bin; propagate_openarc_accc"
+echo "//for OpenACC (async version): "
+echo "\$ cd bin; propagate_openarc_acccv3"
+echo "//for OpenMP4 (sync version): "
+echo "\$ cd bin; propagate_openarc_omp4"
 echo ""
