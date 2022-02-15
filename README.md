@@ -12,7 +12,7 @@ $ make COMPILER=pgi MODE=omp
 
 ## OpenACC C++
 #### Compile with pgi
-Compile OpenACC C++ sync version
+Compile the OpenACC C++ sync version
 
 ```shell
 $ make COMPILER=pgi MODE=acc
@@ -20,14 +20,14 @@ $ make COMPILER=pgi MODE=acc
 
 ## OpenACC C
 #### Compile with pgi, openarc
-Compile OpenACC C sync version
+Compile the OpenACC C sync version
 
 ```shell
 $ make COMPILER=pgi MODE=accc
 $ make COMPILER=openarc MODE=accc
 ```
 
-Compile OpenACC C async version (v3)
+Compile the OpenACC C async version (v3)
 
 ```shell
 $ make COMPILER=pgi MODE=acccv3
@@ -36,7 +36,7 @@ $ make COMPILER=openarc MODE=acccv3
 
 ## OpenMP4 C++
 #### Compile with gcc, llvm, ibm
-Compile OpenMP4 C++ sync version
+Compile the OpenMP4 C++ sync version
 
 ```shell
 $ make COMPILER=gcc MODE=omp4
@@ -46,13 +46,13 @@ $ make COMPILER=ibm MODE=omp4
 
 ## OpenMP4 C
 #### Compile with openarc
-Compile OpenMP4 C sync version
+Compile the OpenMP4 C sync version
 
 ```shell
 $ make COMPILER=openarc MODE=omp4c
 ```
 
-Compile OpenMP4 C async version (v3)
+Compile the OpenMP4 C async version (v3)
 
 ```shell
 $ make COMPILER=openarc MODE=omp4cv3
@@ -68,7 +68,6 @@ $ make COMPILER=icc MODE=tbb
 ## CUDA
 #### Compilers: nvcc
 Version 1 uses unified memory. Version 2 and 3 use explicit memory transfers.
-
 Version 3 has the same computation and communiation patterns as OpenACC async version (v3).
 
 ```shell
