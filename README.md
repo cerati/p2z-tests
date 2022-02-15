@@ -2,62 +2,97 @@
 
 ## OpenMP
 #### Compilers: gcc, icc, pgi.
-version 3 is most up to date. 
+Version 3 is most up to date. 
+
+```shell
 $ make COMPILER=gcc MODE=omp
 $ make COMPILER=icc MODE=omp
 $ make COMPILER=pgi MODE=omp
+```
 
 ## OpenACC C++
 #### Compile with pgi
-//Compile OpenACC C++ sync version
+Compile OpenACC C++ sync version
+
+```shell
 $ make COMPILER=pgi MODE=acc
+```
 
 ## OpenACC C
 #### Compile with pgi, openarc
-//Compile OpenACC C sync version
+Compile OpenACC C sync version
+
+```shell
 $ make COMPILER=pgi MODE=accc
 $ make COMPILER=openarc MODE=accc
-//Compile OpenACC C async version (v3)
+```
+
+Compile OpenACC C async version (v3)
+
+```shell
 $ make COMPILER=pgi MODE=acccv3
 $ make COMPILER=openarc MODE=acccv3
+```
 
 ## OpenMP4 C++
 #### Compile with gcc, llvm, ibm
-//Compile OpenMP4 C++ sync version
+Compile OpenMP4 C++ sync version
+
+```shell
 $ make COMPILER=gcc MODE=omp4
 $ make COMPILER=llvm MODE=omp4
 $ make COMPILER=ibm MODE=omp4
+```
 
 ## OpenMP4 C
 #### Compile with openarc
-//Compile OpenMP4 C sync version
+Compile OpenMP4 C sync version
+
+```shell
 $ make COMPILER=openarc MODE=omp4c
-//Compile OpenMP4 C async version (v3)
+```
+
+Compile OpenMP4 C async version (v3)
+
+```shell
 $ make COMPILER=openarc MODE=omp4cv3
+```
 
 ## Tbb
 #### Compilers: gcc, icc
+```shell
 $ make COMPILER=gcc MODE=tbb
 $ make COMPILER=icc MODE=tbb
+```
 
 ## CUDA
 #### Compilers: nvcc
-//Version 1 uses unified memory. Version 2 and 3 use explicit memory transfers
-//Version 3 has the same computation and communiation patterns as OpenACC async version (v3).
+Version 1 uses unified memory. Version 2 and 3 use explicit memory transfers.
+
+Version 3 has the same computation and communiation patterns as OpenACC async version (v3).
+
+```shell
 $ make COMPILER=nvcc MODE=cuda
 $ make COMPILER=nvcc MODE=cudav2
 $ make COMPILER=nvcc MODE=cudav3
+```
 
 ## Eigen
 #### Compilers: gcc, icc, nvcc
+
+```shell
 $ make COMPILER=gcc MODE=eigen
 $ make COMPILER=icc MODE=eigen
 $ make COMPILER=nvcc MODE=eigen
+```
 
 ## Alpaka
 #### Compilers: gcc, nvcc 
+
+```shell
 $ make COMPILER=gcc MODE=alpaka
 $ make COMPILER=nvcc MODE=alpaka//not yet functional
+```
 
 ## Kokkos
 The kokkos version exists in its own directory, `src/kokkos_src`, which contains
