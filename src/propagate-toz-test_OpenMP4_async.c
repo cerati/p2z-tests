@@ -650,7 +650,11 @@ int main (int argc, char* argv[]) {
 		}
      	#pragma omp target update to(trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) nowait depend(out:trk[s*chunkSize*nb:1])
 		//#pragma openarc cuda sharedRW(ie, ib)
+#ifdef _OPENARC_
      	#pragma omp target teams distribute collapse(2) map(present,to: trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) map(present,from: outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(in:trk[s*chunkSize*nb:1]) depend(out:outtrk[s*chunkSize*nb:1])
+#else
+     	#pragma omp target teams distribute collapse(2) map(to: trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) map(from: outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(in:trk[s*chunkSize*nb:1]) depend(out:outtrk[s*chunkSize*nb:1])
+#endif
      	for (size_t ie=s*chunkSize;ie<(s*chunkSize+localChunkSize);++ie) { // loop over events
        		for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
 		 		//[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device functions (propagateToZ and KalmanUpdate) to here.

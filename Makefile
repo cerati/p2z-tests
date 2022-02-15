@@ -10,7 +10,7 @@
 #                   ibm                                  #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
 #               omp4, cudav2, cudav3, accc, acccv3       #
-#               omp4c                                    #
+#               omp4c, omp4cv3                           #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -93,17 +93,17 @@ endif
 #  OMP4 Setting #
 #################
 ifeq ($(MODE),omp4)
-CSRCS = propagate-toz-test_OpenMP4_sync.cpp
+CSRCS = propagate-toz-test_OpenMP4_sync_v1.cpp
 ifeq ($(COMPILER),gcc)
-CXX=gcc
+CXX=g++
 CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
-CXX=clang
+CXX=clang++
 CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu -lm
 else ifeq ($(COMPILER),ibm)
-CXX=xlc
+CXX=xlc++_r
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
 else
 CSRCS = "NotSupported"
@@ -114,9 +114,20 @@ endif
 #  OMP4 C Setting #
 ###################
 ifeq ($(MODE),omp4c)
-ifeq ($(COMPILER),openarc)
+CSRCS = propagate-toz-test_OpenMP4_sync.c
+ifeq ($(COMPILER),gcc)
+CXX=gcc
+CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
+CLIBS1 += -lm -lgomp 
+else ifeq ($(COMPILER),llvm)
+CXX=clang
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu -lm
+else ifeq ($(COMPILER),ibm)
+CXX=xlc_r
+CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+else ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_sync.cpp
-#CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_async.cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
 ifeq ($(DEBUG),1)
@@ -161,7 +172,19 @@ endif
 #  OMP4 C Setting #
 ###################
 ifeq ($(MODE),omp4cv3)
-ifeq ($(COMPILER),openarc)
+CSRCS = propagate-toz-test_OpenMP4_async.c
+ifeq ($(COMPILER),gcc)
+CXX=gcc
+CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
+CLIBS1 += -lm -lgomp 
+else ifeq ($(COMPILER),llvm)
+CXX=clang
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu -lm
+else ifeq ($(COMPILER),ibm)
+CXX=xlc_r
+CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+else ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_async.cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
@@ -198,6 +221,8 @@ else
 CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
 endif
 endif
+else
+CSRCS = "NotSupported"
 endif
 endif
 
@@ -432,7 +457,15 @@ endif
 TARGET = ./bin
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
 
+ifneq ($(MODE),omp4c)
+ifneq ($(MODE),omp4cv3)
+ifneq ($(MODE),accc)
+ifneq ($(MODE),acccv3)
 CFLAGS1 += -std=c++17
+endif
+endif
+endif
+endif
 
 $(TARGET)/$(BENCHMARK): precmd src/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi

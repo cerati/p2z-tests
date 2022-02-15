@@ -161,7 +161,7 @@ float theta(const struct MPTRK* btracks, size_t it){ return par(btracks, it, 5);
 //
 float par(const struct MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const struct MPTRK* btracks = bTkC(tracks, ev, ib);
+  const struct MPTRK* btracks = bTk(tracks, ev, ib);
   size_t it = tk % bsize;
   return par(btracks, it, ipar);
 }
