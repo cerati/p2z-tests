@@ -36,6 +36,7 @@ $ make
 ```
 
 ## COMPILE and RUN P2Z BENCHMARK
+Environment variables, `OPENARC_ARCH` and `openarc` should be set up properly to run the build scripts correctly.
 
 - To compile and run OpenACC C sync version of P2Z
 
