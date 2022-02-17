@@ -65,6 +65,18 @@ $ make COMPILER=openarc MODE=omp4c
 $ make COMPILER=openarc MODE=omp4cv3
 ```
 
+- To compile OpenACC C sync version of P2Z for CPU
+
+```shell
+$ make COMPILER=openarc MODE=accccpu
+```
+
+- To compile OpenACC C async version (v3) of P2Z for CPU
+
+```shell
+$ make COMPILER=openarc MODE=acccv3cpu
+```
+
 - To enable the host-memory-prepinning optimization, set up the environment variable, `OPENARCRT_PREPINHOSTMEM` to `1` before running the application.
 
 ```shell

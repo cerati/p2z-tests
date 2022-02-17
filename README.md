@@ -34,6 +34,22 @@ $ make COMPILER=pgi MODE=acccv3
 $ make COMPILER=openarc MODE=acccv3
 ```
 
+## OpenACC C for CPU
+#### Compile with pgi, openarc
+Compile the OpenACC C sync version for CPU
+
+```shell
+$ make COMPILER=pgi MODE=accccpu
+$ make COMPILER=openarc MODE=accccpu
+```
+
+Compile the OpenACC C async version (v3) for CPU
+
+```shell
+$ make COMPILER=pgi MODE=acccv3cpu
+$ make COMPILER=openarc MODE=acccv3cpu
+```
+
 ## OpenMP4 C++
 #### Compile with gcc, llvm, ibm
 Compile the OpenMP4 C++ sync version

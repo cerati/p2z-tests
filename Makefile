@@ -10,7 +10,7 @@
 #                   ibm                                  #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
 #               omp4, cudav2, cudav3, accc, acccv3       #
-#               omp4c, omp4cv3                           #
+#               omp4c, omp4cv3, accccpu, acccv3cpu       #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -345,6 +345,44 @@ CSRCS = "NotSupported"
 endif
 endif
 
+##########################
+#  ACC C Setting for CPU #
+##########################
+ifeq ($(MODE),accccpu)
+ifeq ($(COMPILER),pgi)
+CSRCS = propagate-toz-test_OpenACC_sync.c
+CXX=nvc
+CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc=multicore -mcmodel=medium -Mlarge_arrays
+else ifeq ($(COMPILER),openarc)
+#OpenACC C V1: synchronous version
+CSRCS = ../cetus_output/propagate-toz-test_OpenACC_sync.c
+CXX=gcc
+CFLAGS1 += -O3 -I. -fopenmp 
+CLIBS1 += -lm -lgomp
+else
+CSRCS = "NotSupported"
+endif
+endif
+
+##########################
+#  ACC C Setting for CPU #
+##########################
+ifeq ($(MODE),acccv3cpu)
+ifeq ($(COMPILER),pgi)
+CSRCS = propagate-toz-test_OpenACC_async.c
+CXX=nvc
+CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc=multicore -mcmodel=medium -Mlarge_arrays
+else ifeq ($(COMPILER),openarc)
+#OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
+CSRCS = ../cetus_output/propagate-toz-test_OpenACC_async.c
+CXX=gcc
+CFLAGS1 += -O3 -I. -fopenmp 
+CLIBS1 += -lm -lgomp
+else
+CSRCS = "NotSupported"
+endif
+endif
+
 ################
 #  TBB Setting #
 ################
@@ -469,7 +507,11 @@ ifneq ($(MODE),omp4c)
 ifneq ($(MODE),omp4cv3)
 ifneq ($(MODE),accc)
 ifneq ($(MODE),acccv3)
+ifneq ($(MODE),accccpu)
+ifneq ($(MODE),acccv3cpu)
 CFLAGS1 += -std=c++17
+endif
+endif
 endif
 endif
 endif
