@@ -100,15 +100,19 @@ CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang++
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu -lm
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_70
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
+CLIBS1 += -lm
 else ifeq ($(COMPILER),ibm)
 CXX=xlc++_r
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+CLIBS1 += -lm
 else ifeq ($(COMPILER),pgi)
 CXX=nvc++
 #CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp -ta=tesla -mcmodel=medium -Mlarge_arrays
 CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp -mcmodel=medium -Mlarge_arrays
+CLIBS1 += -lm
 else
 CSRCS = "NotSupported"
 endif
@@ -125,14 +129,18 @@ CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu -lm
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_70
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
+CLIBS1 += -lm
 else ifeq ($(COMPILER),ibm)
 CXX=xlc_r
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+CLIBS1 += -lm
 else ifeq ($(COMPILER),pgi)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp -ta=tesla -mcmodel=medium -Mlarge_arrays
+CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_sync.cpp
 ifeq ($(OS),linux)
@@ -186,11 +194,14 @@ CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda -lm
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu -lm
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_70
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
+CLIBS1 += -lm
 else ifeq ($(COMPILER),ibm)
 CXX=xlc_r
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_async.cpp
 ifeq ($(OS),linux)

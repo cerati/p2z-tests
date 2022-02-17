@@ -43,7 +43,6 @@ Environment variables, `OPENARC_ARCH` and `openarc` should be set up properly to
 ```shell
 $ cd [directory-where-this-file-exists]
 $ make COMPILER=openarc MODE=accc
-$ make
 $ cd ./bin
 $ ./propagate_openarc_accc
 ```
@@ -81,4 +80,13 @@ $ make COMPILER=openarc MODE=acccv3cpu
 
 ```shell
 $ export OPENARCRT_PREPINHOSTMEM=1
+```
+
+- The best performance will be achieved if using the async OpenACC version with the host-memory-prepinning optimization:
+
+```shell
+$ make COMPILER=openarc MODE=acccv3
+$ export OPENARCRT_PREPINHOSTMEM=1
+$ cd ./bin
+$ ./propagate_openarc_acccv3
 ```
