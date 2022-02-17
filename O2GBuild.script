@@ -42,6 +42,12 @@ if [ "$inputMode" == "accc" ]; then
 elif [ "$inputMode" == "acccv3" ]; then
 	inputFile="$defaultACCInputFile2"
 	ompaccInter=0
+elif [ "$inputMode" == "accccpu" ]; then
+    inputFile="$defaultACCInputFile1"
+    ompaccInter=3
+elif [ "$inputMode" == "acccv3cpu" ]; then
+    inputFile="$defaultACCInputFile2"
+    ompaccInter=3
 elif [ "$inputMode" == "omp4c" ]; then
 	inputFile="$defaultOMP4InputFile1"
 	ompaccInter=2
