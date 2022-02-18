@@ -14,7 +14,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define FIXED_RSEED
 
 #ifndef bsize
-#define bsize 128
+#define bsize 32
 #endif
 #ifndef ntrks
 #define ntrks 9600
@@ -475,7 +475,8 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
 }
 #pragma omp end declare target
 
-const float kfact = 100/3.8;
+//const float kfact = 100/3.8;
+#define kfact 100/3.8
 #pragma omp declare target
 void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
 		  const struct MP1I* inChg, const struct MP3F* msP,
