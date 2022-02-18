@@ -61,17 +61,19 @@ $ make COMPILER=ibm MODE=omp4
 ```
 
 ## OpenMP4 C
-#### Compile with openarc
+#### Compile with openarc, llvm
 Compile the OpenMP4 C sync version
 
 ```shell
 $ make COMPILER=openarc MODE=omp4c
+$ make COMPILER=llvm MODE=omp4c
 ```
 
 Compile the OpenMP4 C async version (v3)
 
 ```shell
 $ make COMPILER=openarc MODE=omp4cv3
+$ make COMPILER=llvm MODE=omp4cv3
 ```
 
 ## Tbb
