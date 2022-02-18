@@ -701,10 +701,10 @@ int main (int argc, char* argv[]) {
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
 
+#pragma acc exit data delete(trk[0:nevts*nb], hit[0:nlayer*nevts*nb], outtrk[0:nevts*nb])
    free(trk);
    free(hit);
    free(outtrk);
-#pragma acc exit data delete(trk[0:nevts*nb], hit[0:nlayer*nevts*nb], outtrk[0:nevts*nb])
 
    return 0;
 }
