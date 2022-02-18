@@ -110,8 +110,7 @@ CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
 CLIBS1 += -lm
 else ifeq ($(COMPILER),pgi)
 CXX=nvc++
-#CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp -ta=tesla -mcmodel=medium -Mlarge_arrays
-CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp -mcmodel=medium -Mlarge_arrays
+CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp=gpu -mcmodel=medium -Mlarge_arrays
 CLIBS1 += -lm
 else
 CSRCS = "NotSupported"
@@ -139,7 +138,7 @@ CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
 CLIBS1 += -lm
 else ifeq ($(COMPILER),pgi)
 CXX=nvc
-CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp -ta=tesla -mcmodel=medium -Mlarge_arrays
+CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp=gpu -mcmodel=medium -Mlarge_arrays
 CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_sync.cpp
@@ -201,6 +200,10 @@ CLIBS1 += -lm
 else ifeq ($(COMPILER),ibm)
 CXX=xlc_r
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
+CLIBS1 += -lm
+else ifeq ($(COMPILER),pgi)
+CXX=nvc
+CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp=gpu -mcmodel=medium -Mlarge_arrays
 CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_async.cpp
