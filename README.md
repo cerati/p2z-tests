@@ -58,6 +58,7 @@ Compile the OpenMP4 C++ sync version
 $ make COMPILER=gcc MODE=omp4
 $ make COMPILER=llvm MODE=omp4
 $ make COMPILER=ibm MODE=omp4
+$ make COMPILER=pgi MODE=omp4 #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet).
 ```
 
 ## OpenMP4 C
@@ -67,6 +68,8 @@ Compile the OpenMP4 C sync version
 ```shell
 $ make COMPILER=openarc MODE=omp4c
 $ make COMPILER=llvm MODE=omp4c
+$ make COMPILER=ibm MODE=omp4c
+$ make COMPILER=pgi MODE=omp4c #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet).
 ```
 
 Compile the OpenMP4 C async version (v3)
@@ -74,6 +77,8 @@ Compile the OpenMP4 C async version (v3)
 ```shell
 $ make COMPILER=openarc MODE=omp4cv3
 $ make COMPILER=llvm MODE=omp4cv3
+$ make COMPILER=ibm MODE=omp4cv3
+$ make COMPILER=pgi MODE=omp4cv3 #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet).
 ```
 
 ## Tbb

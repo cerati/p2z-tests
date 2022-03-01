@@ -523,7 +523,11 @@ ifneq ($(MODE),accc)
 ifneq ($(MODE),acccv3)
 ifneq ($(MODE),accccpu)
 ifneq ($(MODE),acccv3cpu)
+ifeq ($(COMPILER),ibm)
+CFLAGS1 += -std=c++11
+else
 CFLAGS1 += -std=c++17
+endif
 endif
 endif
 endif
