@@ -41,17 +41,6 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #define nlayer 20
 #endif
 
-#ifndef __NVCOMPILER_CUDA__
-
-#if defined(__INTEL_COMPILER)
-#include <malloc.h>
-#else
-#include <mm_malloc.h>
-#endif
-
-constexpr int alloc_align  = (2*1024*1024);
-
-#endif
 
 namespace impl {
 
@@ -105,46 +94,6 @@ namespace impl {
 } //impl
 
 
-   template<typename Tp>
-   struct AlignedAllocator {
-     public:
-
-       typedef Tp value_type;
-
-       AlignedAllocator () {};
-
-       AlignedAllocator(const AlignedAllocator&) { }
-
-       template<typename Tp1> constexpr AlignedAllocator(const AlignedAllocator<Tp1>&) { }
-
-       ~AlignedAllocator() { }
-
-       Tp* address(Tp& x) const { return &x; }
-
-       std::size_t  max_size() const throw() { return size_t(-1) / sizeof(Tp); }
-
-       [[nodiscard]] Tp* allocate(std::size_t n){
-
-         Tp* ptr = nullptr;
-#if defined( __NVCOMPILER_CUDA__) || defined(__INTEL_COMPILER)
-	 ptr = (Tp*) malloc(n*sizeof(Tp));
-#elif !defined(DPCPP_BACKEND)
-         ptr = (Tp*)_mm_malloc(n*sizeof(Tp),alloc_align);
-#endif
-	 if(!ptr) throw std::bad_alloc();
-
-         return ptr;
-       }
-
-      void deallocate( Tp* p, std::size_t n) noexcept {
-#if defined(__NVCOMPILER_CUDA__) || defined(__INTEL_COMPILER)
-         free((void *)p);
-#elif !defined(DPCPP_BACKEND)
-         _mm_free((void *)p);
-#endif
-       }
-     };
-     
 auto PosInMtrx = [](const size_t &&i, const size_t &&j, const size_t &&D, const size_t block_size = 1) constexpr {return block_size*(i*D+j);};
 
 enum class FieldOrder{P2R_TRACKBLK_EVENT_LAYER_MATIDX_ORDER,
@@ -208,10 +157,10 @@ struct MPHIT_ {
   MP3x3SF_ cov;
 };
 
-using IntAllocator   = AlignedAllocator<int>;
-using FloatAllocator = AlignedAllocator<float>;
-using MPTRKAllocator = AlignedAllocator<MPTRK_>;
-using MPHITAllocator = AlignedAllocator<MPHIT_>;
+using IntAllocator   = std::allocator<int>;
+using FloatAllocator = std::allocator<float>;
+using MPTRKAllocator = std::allocator<MPTRK_>;
+using MPHITAllocator = std::allocator<MPHIT_>;
 
 template <typename T, typename Allocator, int n, int bSize>
 struct MPNX {
