@@ -439,7 +439,7 @@ inline void MultHelixPropTranspEndcap(const MP6x6F &a, const MP6x6F &b, MP6x6SF 
   return;
 }
 
-template<int N>
+template<int N = 1>
 inline void KalmanGainInv(const MP6x6SF &a, const MP3x3SF &b, MP3x3 &c) {
 
 //#pragma omp simd
@@ -465,7 +465,7 @@ inline void KalmanGainInv(const MP6x6SF &a, const MP3x3SF &b, MP3x3 &c) {
   return;
 }
 
-template <int N>
+template <int N = 1>
 inline void KalmanGain(const MP6x6SF &a, const MP3x3 &b, MP3x6 &c) {
 
 //#pragma omp simd
