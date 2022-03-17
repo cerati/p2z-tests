@@ -615,6 +615,8 @@ __device__ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP
   
   MP6x6F_ errorProp;
   MP6x6F_ temp;
+
+  auto PosInMtrx = [=] (int i, int j, int D) constexpr {return (i*D+j);};
 //#pragma omp simd
   {	
     const auto zout = msP[iparZ];
@@ -677,8 +679,8 @@ __device__ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP
 }
 
 
-template <FieldOrder order = FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER, bool grid_stride = true>
-__global__ void launch_p2z_kernels(MPTRKAccessor<order> &obtracksAcc, MPTRKAccessor<order> &btracksAcc, MPHITAccessor<order> &bhitsAcc, const int length){
+template <bool grid_stride = true>
+__global__ void launch_p2z_kernels(MPTRK_ *obtracks_, MPTRK_ *btracks_, MPHIT_ *bhits_, const int length){
    auto i = threadIdx.x + blockIdx.x * blockDim.x;
 
    MPTRK_ btracks;
@@ -687,17 +689,17 @@ __global__ void launch_p2z_kernels(MPTRKAccessor<order> &obtracksAcc, MPTRKAcces
 
    while (i < length) {
      //
-     btracksAcc.load(btracks, i);
+     btracks_[i].load(btracks);
      for(int layer=0; layer<nlayer; ++layer) {  
        //
-       bhitsAcc.load(bhits, i, layer);
+       bhits_[layer+nlayer*i].load(bhits);
        //
-       propagateToR(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
+       propagateToZ(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
        KalmanUpdate(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
        //
      }
      //
-     obtracksAcc.save(obtracks, i);
+     obtracks_[i].save(obtracks);
      
      if (grid_stride)
        i += gridDim.x * blockDim.x;

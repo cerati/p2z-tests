@@ -5,5 +5,5 @@
 #    Certain standard math functions are replaced by equivalent, lower-precision, intrinsics
 
 
-nvcc -arch=sm_86 -O3 --extended-lambda --expt-relaxed-constexpr --use_fast_math --default-stream per-thread -std=c++17 ./src/propagate-tor-test_cuda_accessors.cu -L -lcudart   -o ./"propagate_nvcc_cuda"
+nvcc -arch=sm_86 -O3 --extended-lambda --expt-relaxed-constexpr --use_fast_math --default-stream per-thread -std=c++17 ./src/propagate-toz-test_cuda_accessors.cu -L -lcudart   -o ./"propagate_nvcc_cuda"
 

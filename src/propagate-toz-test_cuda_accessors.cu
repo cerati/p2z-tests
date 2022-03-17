@@ -835,6 +835,8 @@ __device__ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP
   
   MP6x6F_ errorProp;
   MP6x6F_ temp;
+ 
+  auto PosInMtrx = [=] (int i, int j, int D) constexpr {return (i*D+j);};
 //#pragma omp simd
   {	
     const auto zout = msP[iparZ];
@@ -912,7 +914,7 @@ __global__ void launch_p2z_kernels(MPTRKAccessor<order> &obtracksAcc, MPTRKAcces
        //
        bhitsAcc.load(bhits, i, layer);
        //
-       propagateToR(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
+       propagateToZ(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
        KalmanUpdate(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
        //
      }
@@ -1037,13 +1039,13 @@ int main (int argc, char* argv[]) {
 
    for (int ie=0;ie<nevts;++ie) {
      for (int it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie];
-       float y_ = y(outtrk,ie];
-       float z_ = z(outtrk,ie];
+       float x_ = x(outtrk,ie,it);
+       float y_ = y(outtrk,ie,it);
+       float z_ = z(outtrk,ie,it);
        float r_ = sqrtf(x_*x_ + y_*y_);
-       float pt_ = std::abs(1./ipt(outtrk,ie]);
-       float phi_ = phi(outtrk,ie];
-       float theta_ = theta(outtrk,ie];
+       float pt_ = std::abs(1./ipt(outtrk,ie, it));
+       float phi_ = phi(outtrk,ie,it);
+       float theta_ = theta(outtrk,ie,it);
        float hx_ = inputhits[nlayer-1].pos[0];
        float hy_ = inputhits[nlayer-1].pos[1];
        float hz_ = inputhits[nlayer-1].pos[2];
@@ -1097,9 +1099,9 @@ int main (int argc, char* argv[]) {
    float stddx = 0, stddy = 0, stddz = 0, stddr = 0;
    for (int ie=0;ie<nevts;++ie) {
      for (int it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie];
-       float y_ = y(outtrk,ie];
-       float z_ = z(outtrk,ie];
+       float x_ = x(outtrk,ie,it);
+       float y_ = y(outtrk,ie,it);
+       float z_ = z(outtrk,ie,it);
        float r_ = sqrtf(x_*x_ + y_*y_);
        float hx_ = inputhits[nlayer-1].pos[0];
        float hy_ = inputhits[nlayer-1].pos[1];
