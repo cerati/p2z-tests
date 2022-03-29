@@ -5,12 +5,6 @@ export ONEDPL_USE_DPCPP_BACKEND=1
 dpcpp -std=c++17 -O2 src/propagate-toz-test_sycl.cpp -o test-sycl.exe -Dntrks=8192 -Dnevts=100 -DNITER=5 -Dbsize=1 -Dnlayer=20
 
 */
-
-#include <oneapi/dpl/algorithm>
-#include <oneapi/dpl/execution>
-#include <oneapi/dpl/iterator>
-#include <oneapi/dpl/random>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>

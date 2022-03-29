@@ -445,82 +445,77 @@ float z(const MPHIT* hits, size_t ev, size_t tk)    { return Pos(hits, ev, tk, 2
 }
 
 [[intel::sycl_explicit_simd]] inline void MultHelixPropTranspEndcap(const MP6x6F_ &a, const MP6x6F_ &b, MP6x6SF_ &c) {
-//#pragma omp simd
-  {
-    c[ 0] = b[ 0] + b[ 2]*a[ 2] + b[ 3]*a[ 3] + b[ 4]*a[ 4] + b[ 5]*a[ 5];
-    c[ 1] = b[ 6] + b[ 8]*a[ 2] + b[ 9]*a[ 3] + b[10]*a[ 4] + b[11]*a[ 5];
-    c[ 2] = b[ 7] + b[ 8]*a[ 8] + b[ 9]*a[ 9] + b[10]*a[10] + b[11]*a[11];
-    c[ 3] = b[12] + b[14]*a[ 2] + b[15]*a[ 3] + b[16]*a[ 4] + b[17]*a[ 5];
-    c[ 4] = b[13] + b[14]*a[ 8] + b[15]*a[ 9] + b[16]*a[10] + b[17]*a[11];
-    c[ 5] = 0.f;
-    c[ 6] = b[18] + b[20]*a[ 2] + b[21]*a[ 3] + b[22]*a[ 4] + b[23]*a[ 5];
-    c[ 7] = b[19] + b[20]*a[ 8] + b[21]*a[ 9] + b[22]*a[10] + b[23]*a[11];
-    c[ 8] = 0.f;
-    c[ 9] = b[21];
-    c[10] = b[24] + b[26]*a[ 2] + b[27]*a[ 3] + b[28]*a[ 4] + b[29]*a[ 5];
-    c[11] = b[25] + b[26]*a[ 8] + b[27]*a[ 9] + b[28]*a[10] + b[29]*a[11];
-    c[12] = 0.f;
-    c[13] = b[27];
-    c[14] = b[26]*a[26] + b[27]*a[27] + b[28] + b[29]*a[29];
-    c[15] = b[30] + b[32]*a[ 2] + b[33]*a[ 3] + b[34]*a[ 4] + b[35]*a[ 5];
-    c[16] = b[31] + b[32]*a[ 8] + b[33]*a[ 9] + b[34]*a[10] + b[35]*a[11];
-    c[17] = 0.f;
-    c[18] = b[33];
-    c[19] = b[32]*a[26] + b[33]*a[27] + b[34] + b[35]*a[29];
-    c[20] = b[35];
-  }
+
+  c[ 0] = b[ 0] + b[ 2]*a[ 2] + b[ 3]*a[ 3] + b[ 4]*a[ 4] + b[ 5]*a[ 5];
+  c[ 1] = b[ 6] + b[ 8]*a[ 2] + b[ 9]*a[ 3] + b[10]*a[ 4] + b[11]*a[ 5];
+  c[ 2] = b[ 7] + b[ 8]*a[ 8] + b[ 9]*a[ 9] + b[10]*a[10] + b[11]*a[11];
+  c[ 3] = b[12] + b[14]*a[ 2] + b[15]*a[ 3] + b[16]*a[ 4] + b[17]*a[ 5];
+  c[ 4] = b[13] + b[14]*a[ 8] + b[15]*a[ 9] + b[16]*a[10] + b[17]*a[11];
+  c[ 5] = 0.f;
+  c[ 6] = b[18] + b[20]*a[ 2] + b[21]*a[ 3] + b[22]*a[ 4] + b[23]*a[ 5];
+  c[ 7] = b[19] + b[20]*a[ 8] + b[21]*a[ 9] + b[22]*a[10] + b[23]*a[11];
+  c[ 8] = 0.f;
+  c[ 9] = b[21];
+  c[10] = b[24] + b[26]*a[ 2] + b[27]*a[ 3] + b[28]*a[ 4] + b[29]*a[ 5];
+  c[11] = b[25] + b[26]*a[ 8] + b[27]*a[ 9] + b[28]*a[10] + b[29]*a[11];
+  c[12] = 0.f;
+  c[13] = b[27];
+  c[14] = b[26]*a[26] + b[27]*a[27] + b[28] + b[29]*a[29];
+  c[15] = b[30] + b[32]*a[ 2] + b[33]*a[ 3] + b[34]*a[ 4] + b[35]*a[ 5];
+  c[16] = b[31] + b[32]*a[ 8] + b[33]*a[ 9] + b[34]*a[10] + b[35]*a[11];
+  c[17] = 0.f;
+  c[18] = b[33];
+  c[19] = b[32]*a[26] + b[33]*a[27] + b[34] + b[35]*a[29];
+  c[20] = b[35];
+  
   return;
 }
 
 template<int N = bSize>
 [[intel::sycl_explicit_simd]] inline void KalmanGainInv(const MP6x6SF_ &a, const MP3x3SF_ &b, MP3x3_ &c){
 
-//#pragma omp simd
-  {
-    simd<float, N> det =
+  using FloatN = simd<float,N>;
+  
+  FloatN det =
       ((a[0]+b[0])*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])))) -
       ((a[1]+b[1])*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])))) +
       ((a[2]+b[2])*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3]))));
       
-    simd<float, N> invdet = esimd::inv(det);
+  FloatN invdet = esimd::inv(det);
 
-    c[ 0] =   invdet*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])));
-    c[ 1] =  -invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[7]+b[4])));
-    c[ 2] =   invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[7]+b[4])));
-    c[ 3] =  -invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])));
-    c[ 4] =   invdet*(((a[ 0]+b[ 0]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[2]+b[2])));
-    c[ 5] =  -invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
-    c[ 6] =   invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3])));
-    c[ 7] =  -invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
-    c[ 8] =   invdet*(((a[ 0]+b[ 0]) *(a[6]+b[3])) - ((a[1]+b[1]) *(a[1]+b[1])));
-  }
+  c[ 0] =   invdet*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])));
+  c[ 1] =  -invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[7]+b[4])));
+  c[ 2] =   invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[7]+b[4])));
+  c[ 3] =  -invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])));
+  c[ 4] =   invdet*(((a[ 0]+b[ 0]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[2]+b[2])));
+  c[ 5] =  -invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+  c[ 6] =   invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3])));
+  c[ 7] =  -invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+  c[ 8] =   invdet*(((a[ 0]+b[ 0]) *(a[6]+b[3])) - ((a[1]+b[1]) *(a[1]+b[1])));
   
   return;
 }
 
 [[intel::sycl_explicit_simd]] inline void KalmanGain(const MP6x6SF_ &a, const MP3x3_ &b, MP3x6_ &c) {
 
-//#pragma omp simd
-  {
-    c[ 0] = a[0]*b[0] + a[ 1]*b[3] + a[2]*b[6];
-    c[ 1] = a[0]*b[1] + a[ 1]*b[4] + a[2]*b[7];
-    c[ 2] = a[0]*b[2] + a[ 1]*b[5] + a[2]*b[8];
-    c[ 3] = a[1]*b[0] + a[ 6]*b[3] + a[7]*b[6];
-    c[ 4] = a[1]*b[1] + a[ 6]*b[4] + a[7]*b[7];
-    c[ 5] = a[1]*b[2] + a[ 6]*b[5] + a[7]*b[8];
-    c[ 6] = a[2]*b[0] + a[ 7]*b[3] + a[11]*b[6];
-    c[ 7] = a[2]*b[1] + a[ 7]*b[4] + a[11]*b[7];
-    c[ 8] = a[2]*b[2] + a[ 7]*b[5] + a[11]*b[8];
-    c[ 9] = a[3]*b[0] + a[ 8]*b[3] + a[12]*b[6];
-    c[10] = a[3]*b[1] + a[ 8]*b[4] + a[12]*b[7];
-    c[11] = a[3]*b[2] + a[ 8]*b[5] + a[12]*b[8];
-    c[12] = a[4]*b[0] + a[ 9]*b[3] + a[13]*b[6];
-    c[13] = a[4]*b[1] + a[ 9]*b[4] + a[13]*b[7];
-    c[14] = a[4]*b[2] + a[ 9]*b[5] + a[13]*b[8];
-    c[15] = a[5]*b[0] + a[10]*b[3] + a[14]*b[6];
-    c[16] = a[5]*b[1] + a[10]*b[4] + a[14]*b[7];
-    c[17] = a[5]*b[2] + a[10]*b[5] + a[14]*b[8];
-  }
+  c[ 0] = a[0]*b[0] + a[ 1]*b[3] + a[2]*b[6];
+  c[ 1] = a[0]*b[1] + a[ 1]*b[4] + a[2]*b[7];
+  c[ 2] = a[0]*b[2] + a[ 1]*b[5] + a[2]*b[8];
+  c[ 3] = a[1]*b[0] + a[ 6]*b[3] + a[7]*b[6];
+  c[ 4] = a[1]*b[1] + a[ 6]*b[4] + a[7]*b[7];
+  c[ 5] = a[1]*b[2] + a[ 6]*b[5] + a[7]*b[8];
+  c[ 6] = a[2]*b[0] + a[ 7]*b[3] + a[11]*b[6];
+  c[ 7] = a[2]*b[1] + a[ 7]*b[4] + a[11]*b[7];
+  c[ 8] = a[2]*b[2] + a[ 7]*b[5] + a[11]*b[8];
+  c[ 9] = a[3]*b[0] + a[ 8]*b[3] + a[12]*b[6];
+  c[10] = a[3]*b[1] + a[ 8]*b[4] + a[12]*b[7];
+  c[11] = a[3]*b[2] + a[ 8]*b[5] + a[12]*b[8];
+  c[12] = a[4]*b[0] + a[ 9]*b[3] + a[13]*b[6];
+  c[13] = a[4]*b[1] + a[ 9]*b[4] + a[13]*b[7];
+  c[14] = a[4]*b[2] + a[ 9]*b[5] + a[13]*b[8];
+  c[15] = a[5]*b[0] + a[10]*b[3] + a[14]*b[6];
+  c[16] = a[5]*b[1] + a[10]*b[4] + a[14]*b[7];
+  c[17] = a[5]*b[2] + a[10]*b[5] + a[14]*b[8];
   
   return;
 }
@@ -528,6 +523,8 @@ template<int N = bSize>
 template<int N = bSize>
 [[intel::sycl_explicit_simd]] void KalmanUpdate(MP6x6SF_ &trkErr, MP6F_ &inPar, const MP3x3SF_ &hitErr, const MP3F_ &msP) {
 
+  using FloatN = simd<float,N>;
+  
   MP3x3_ inverse_temp;
   MP3x6_ kGain;
   MP6x6SF_ newErr;
@@ -537,22 +534,22 @@ template<int N = bSize>
 
 //#pragma omp simd
   {
-    const simd<float, N> xin     = inPar[iparX];
-    const simd<float, N> yin     = inPar[iparY];
-    const simd<float, N> zin     = inPar[iparZ];
-    const simd<float, N> ptin    = esimd::inv( inPar[iparIpt]);
-    const simd<float, N> phiin   = inPar[iparPhi];
-    const simd<float, N> thetain = inPar[iparTheta];
-    const simd<float, N> xout    = msP[iparX];
-    const simd<float, N> yout    = msP[iparY];
-    //const simd<float, N> zout    = msP[iparZ];
+    const FloatN xin     = inPar[iparX];
+    const FloatN yin     = inPar[iparY];
+    const FloatN zin     = inPar[iparZ];
+    const FloatN ptin    = esimd::inv( inPar[iparIpt]);
+    const FloatN phiin   = inPar[iparPhi];
+    const FloatN thetain = inPar[iparTheta];
+    const FloatN xout    = msP[iparX];
+    const FloatN yout    = msP[iparY];
+    //const FloatN zout    = msP[iparZ];
 
-    simd<float, N> xnew     = xin     + (kGain[ 0]*(xout-xin)) +(kGain[ 1]*(yout-yin)); 
-    simd<float, N> ynew     = yin     + (kGain[ 3]*(xout-xin)) +(kGain[ 4]*(yout-yin)); 
-    simd<float, N> znew     = zin     + (kGain[ 6]*(xout-xin)) +(kGain[ 7]*(yout-yin)); 
-    simd<float, N> ptnew    = ptin    + (kGain[ 9]*(xout-xin)) +(kGain[10]*(yout-yin)); 
-    simd<float, N> phinew   = phiin   + (kGain[12]*(xout-xin)) +(kGain[13]*(yout-yin)); 
-    simd<float, N> thetanew = thetain + (kGain[15]*(xout-xin)) +(kGain[16]*(yout-yin)); 
+    FloatN xnew     = xin     + (kGain[ 0]*(xout-xin)) +(kGain[ 1]*(yout-yin)); 
+    FloatN ynew     = yin     + (kGain[ 3]*(xout-xin)) +(kGain[ 4]*(yout-yin)); 
+    FloatN znew     = zin     + (kGain[ 6]*(xout-xin)) +(kGain[ 7]*(yout-yin)); 
+    FloatN ptnew    = ptin    + (kGain[ 9]*(xout-xin)) +(kGain[10]*(yout-yin)); 
+    FloatN phinew   = phiin   + (kGain[12]*(xout-xin)) +(kGain[13]*(yout-yin)); 
+    FloatN thetanew = thetain + (kGain[15]*(xout-xin)) +(kGain[16]*(yout-yin)); 
 
     newErr[ 0] = trkErr[ 0] - (kGain[ 0]*trkErr[0]+kGain[1]*trkErr[1]+kGain[2]*trkErr[2]);
     newErr[ 1] = trkErr[ 1] - (kGain[ 0]*trkErr[1]+kGain[1]*trkErr[6]+kGain[2]*trkErr[7]);
@@ -603,6 +600,8 @@ constexpr float kfact= 100/3.8f;
 template<int N = bSize>
 [[intel::sycl_explicit_simd]] void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP1I_ &inChg, 
                   const MP3F_ &msP, MP6x6SF_ &outErr, MP6F_ &outPar) {
+                  
+  using FloatN = simd<float,N>;
   
   MP6x6F_ errorProp;
   MP6x6F_ temp;
@@ -610,26 +609,26 @@ template<int N = bSize>
   auto PosInMtrx = [=] (int i, int j, int D) constexpr {return (i*D+j);};
 //#pragma omp simd
   {	
-    const simd<float, N> zout = msP[iparZ];
+    const FloatN zout = msP[iparZ];
     //note: in principle charge is not needed and could be the sign of ipt
-    const simd<float, N> k = inChg[0]*kfact;
-    const simd<float, N> deltaZ = zout - inPar[iparZ];
-    const simd<float, N> ipt  = inPar[iparIpt];
-    const simd<float, N> pt   = esimd::inv(ipt);
-    const simd<float, N> phi  = inPar[iparPhi];
-    const simd<float, N> cosP = esimd::cos(phi);
-    const simd<float, N> sinP = esimd::sin(phi);
-    const simd<float, N> theta= inPar[iparTheta];
-    const simd<float, N> cosT = esimd::cos(theta);
-    const simd<float, N> sinT = esimd::sin(theta);
-    const simd<float, N> pxin = cosP*pt;
-    const simd<float, N> pyin = sinP*pt;
-    const simd<float, N> icosT  = esimd::inv(cosT);
-    const simd<float, N> icosTk = icosT / k;
-    const simd<float, N> alpha  = deltaZ*sinT*ipt*icosTk;
-    //const simd<float, N> alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
-    const simd<float, N> sina = esimd::sin(alpha); // this can be approximated;
-    const simd<float, N> cosa = esimd::cos(alpha); // this can be approximated;
+    const FloatN k = inChg[0]*kfact;
+    const FloatN deltaZ = zout - inPar[iparZ];
+    const FloatN ipt  = inPar[iparIpt];
+    const FloatN pt   = esimd::inv(ipt);
+    const FloatN phi  = inPar[iparPhi];
+    const FloatN cosP = esimd::cos(phi);
+    const FloatN sinP = esimd::sin(phi);
+    const FloatN theta= inPar[iparTheta];
+    const FloatN cosT = esimd::cos(theta);
+    const FloatN sinT = esimd::sin(theta);
+    const FloatN pxin = cosP*pt;
+    const FloatN pyin = sinP*pt;
+    const FloatN icosT  = esimd::inv(cosT);
+    const FloatN icosTk = icosT / k;
+    const FloatN alpha  = deltaZ*sinT*ipt*icosTk;
+    //const FloatN alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
+    const FloatN sina = esimd::sin(alpha); // this can be approximated;
+    const FloatN cosa = esimd::cos(alpha); // this can be approximated;
     //
     outPar[iparX]     = inPar[iparX] + k*(pxin*sina - pyin*(1.f-cosa));
     outPar[iparY]     = inPar[iparY] + k*(pyin*sina + pxin*(1.f-cosa));
@@ -638,8 +637,8 @@ template<int N = bSize>
     outPar[iparPhi]   = phi +alpha;
     outPar[iparTheta] = theta;
     
-    const simd<float, N> sCosPsina = esimd::sin(cosP*sina);
-    const simd<float, N> cCosPsina = esimd::cos(cosP*sina);
+    const FloatN sCosPsina = esimd::sin(cosP*sina);
+    const FloatN cCosPsina = esimd::cos(cosP*sina);
     
     //for (int i=0;i<6;++i) errorProp[bsize*PosInMtrx(i,i,6) + it] = 1.;
     errorProp[PosInMtrx(0,0,6)] = 1.0f;
