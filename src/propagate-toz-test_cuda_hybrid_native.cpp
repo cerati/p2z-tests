@@ -1,7 +1,10 @@
 /*
-nvc++ -O2 -std=c++17 -stdpar=gpu -gpu=cc75 -gpu=managed -gpu=fma -gpu=fastmath -gpu=autocollapse -gpu=loadcache:L1 -gpu=unroll  src/propagate-tor-test_pstl.cpp   -o ./propagate_nvcpp_pstl
-nvc++ -O2 -std=c++17 -stdpar=multicore src/propagate-tor-test_pstl.cpp   -o ./propagate_nvcpp_pstl 
-g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -lgomp -Lpath-to-tbb-lib -ltbb  -o ./propagate_gcc_pstl
+nvc++ -cuda -O2 -std=c++20 --gcc-toolchain=path-to-gnu-compiler -stdpar=gpu -gpu=cc86 -gpu=managed -gpu=fma -gpu=fastmath -gpu=autocollapse -gpu=loadcache:L1 -gpu=unroll ./src/propagate-toz-test_cuda_hybrid_native.cpp  -o ./propagate_nvcpp_cuda -Dntrks=8192 -Dnevts=100 -DNITER=5 -Dbsize=1 -Dnlayer=20
+
+nvc++ -cuda -O2 -std=c++20 --gcc-toolchain=path-to-gnu-compiler -stdpar=multicore -gpu=cc86 -gpu=managed -gpu=fma -gpu=fastmath -gpu=autocollapse -gpu=loadcache:L1 -gpu=unroll ./src/propagate-toz-test_cuda_hybrid_native.cpp  -o ./propagate_nvcpp_cuda -Dntrks=8192 -Dnevts=100 -DNITER=5 -Dbsize=1 -Dnlayer=20
+
+nvc++ -O2 -std=c++20 --gcc-toolchain=path-to-gnu-compiler -stdpar=multicore ./src/propagate-toz-test_cuda_hybrid_native.cpp  -o ./propagate_nvcpp_x86 -Dntrks=8192 -Dnevts=100 -DNITER=5 -Dbsize=32 -Dnlayer=20
+
 */
 
 #include <stdio.h>
@@ -13,6 +16,10 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #include <iomanip>
 #include <sys/time.h>
 
+#include <concepts> 
+#include <ranges>
+#include <type_traits>
+
 #include <algorithm>
 #include <vector>
 #include <memory>
@@ -21,10 +28,15 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #include <random>
 
 #ifndef bsize
+#if defined(__NVCOMPILER_CUDA__)
+#define bsize 1
+#else
 #define bsize 128
+#endif//__NVCOMPILER_CUDA__
 #endif
+
 #ifndef ntrks
-#define ntrks 9600
+#define ntrks 8192
 #endif
 
 #define nb    (ntrks/bsize)
@@ -41,66 +53,22 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #define nlayer 20
 #endif
 
+#ifndef num_streams
+#define num_streams 1
+#endif
 
-namespace impl {
+#ifndef threadsperblock
+#define threadsperblock 32
+#endif
 
-   template <typename IntType>
-   class counting_iterator {
-       static_assert(std::numeric_limits<IntType>::is_integer, "Cannot instantiate counting_iterator with a non-integer type");
-     public:
-       using value_type = IntType;
-       using difference_type = typename std::make_signed<IntType>::type;
-       using pointer = IntType*;
-       using reference = IntType&;
-       using iterator_category = std::random_access_iterator_tag;
-
-       counting_iterator() : value(0) { }
-       explicit counting_iterator(IntType v) : value(v) { }
-
-       value_type operator*() const { return value; }
-       value_type operator[](difference_type n) const { return value + n; }
-
-       counting_iterator& operator++() { ++value; return *this; }
-       counting_iterator operator++(int) {
-         counting_iterator result{value};
-         ++value;
-         return result;
-       }  
-       counting_iterator& operator--() { --value; return *this; }
-       counting_iterator operator--(int) {
-         counting_iterator result{value};
-         --value;
-         return result;
-       }
-       counting_iterator& operator+=(difference_type n) { value += n; return *this; }
-       counting_iterator& operator-=(difference_type n) { value -= n; return *this; }
-
-       friend counting_iterator operator+(counting_iterator const& i, difference_type n)          { return counting_iterator(i.value + n);  }
-       friend counting_iterator operator+(difference_type n, counting_iterator const& i)          { return counting_iterator(i.value + n);  }
-       friend difference_type   operator-(counting_iterator const& x, counting_iterator const& y) { return x.value - y.value;  }
-       friend counting_iterator operator-(counting_iterator const& i, difference_type n)          { return counting_iterator(i.value - n);  }
-
-       friend bool operator==(counting_iterator const& x, counting_iterator const& y) { return x.value == y.value;  }
-       friend bool operator!=(counting_iterator const& x, counting_iterator const& y) { return x.value != y.value;  }
-       friend bool operator<(counting_iterator const& x, counting_iterator const& y)  { return x.value < y.value; }
-       friend bool operator<=(counting_iterator const& x, counting_iterator const& y) { return x.value <= y.value; }
-       friend bool operator>(counting_iterator const& x, counting_iterator const& y)  { return x.value > y.value; }
-       friend bool operator>=(counting_iterator const& x, counting_iterator const& y) { return x.value >= y.value; }
-
-     private:
-       IntType value;
-   };
-
-} //impl
-
-
-auto PosInMtrx = [](const size_t &&i, const size_t &&j, const size_t &&D, const size_t block_size = 1) constexpr {return block_size*(i*D+j);};
-
-enum class FieldOrder{P2R_TRACKBLK_EVENT_LAYER_MATIDX_ORDER,
-                      P2R_TRACKBLK_EVENT_MATIDX_LAYER_ORDER,
-                      P2R_MATIDX_LAYER_TRACKBLK_EVENT_ORDER};
-
-enum class ConversionType{P2R_CONVERT_TO_INTERNAL_ORDER, P2R_CONVERT_FROM_INTERNAL_ORDER};   
+#ifdef __NVCOMPILER_CUDA__
+#include <nv/target>
+#define __cuda_kernel__ __global__
+constexpr bool is_cuda_kernel = true;
+#else
+#define __cuda_kernel__
+constexpr bool is_cuda_kernel = false;
+#endif
 
 const std::array<size_t, 36> SymOffsets66{0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
 
@@ -123,316 +91,86 @@ constexpr int iparPhi   = 4;
 constexpr int iparTheta = 5;
 
 template <typename T, int N, int bSize>
-struct MPNX_ {
+struct MPNX {
    std::array<T,N*bSize> data;
    //basic accessors
    const T& operator[](const int idx) const {return data[idx];}
    T& operator[](const int idx) {return data[idx];}
    const T& operator()(const int m, const int b) const {return data[m*bSize+b];}
    T& operator()(const int m, const int b) {return data[m*bSize+b];}
-};
-
-using MP1I_    = MPNX_<int,   1 , bsize>;
-using MP1F_    = MPNX_<float, 1 , bsize>;
-using MP2F_    = MPNX_<float, 3 , bsize>;
-using MP3F_    = MPNX_<float, 3 , bsize>;
-using MP6F_    = MPNX_<float, 6 , bsize>;
-using MP2x2SF_ = MPNX_<float, 3 , bsize>;
-using MP3x3SF_ = MPNX_<float, 6 , bsize>;
-using MP6x6SF_ = MPNX_<float, 21, bsize>;
-using MP6x6F_  = MPNX_<float, 36, bsize>;
-using MP3x3_   = MPNX_<float, 9 , bsize>;
-using MP3x6_   = MPNX_<float, 18, bsize>;
-
-struct MPTRK_ {
-  MP6F_    par;
-  MP6x6SF_ cov;
-  MP1I_    q;
-
-  //  MP22I   hitidx;
-};
-
-struct MPHIT_ {
-  MP3F_    pos;
-  MP3x3SF_ cov;
-};
-
-using IntAllocator   = std::allocator<int>;
-using FloatAllocator = std::allocator<float>;
-using MPTRKAllocator = std::allocator<MPTRK_>;
-using MPHITAllocator = std::allocator<MPHIT_>;
-
-template <typename T, typename Allocator, int n, int bSize>
-struct MPNX {
-   using DataType = T;
-
-   static constexpr int N    = n;
-   static constexpr int BS   = bSize;
-
-   const int nTrks;//note that bSize is a tuning parameter!
-   const int nEvts;
-   const int nLayers;
-
-   std::vector<T, Allocator> data;
-
-   MPNX() : nTrks(bSize), nEvts(0), nLayers(0), data(n*bSize){}
-
-   MPNX(const int ntrks_, const int nevts_, const int nlayers_ = 1) :
-      nTrks(ntrks_),
-      nEvts(nevts_),
-      nLayers(nlayers_),
-      data(n*nTrks*nEvts*nLayers){
+   //
+   void load(MPNX& dst) const{
+     for (size_t it=0;it<bSize;++it) {
+     //const int l = it+ib*bsize+ie*nb*bsize;
+       for (size_t ip=0;ip<N;++ip) {    	
+    	 dst.data[it + ip*bSize] = this->operator()(ip, it);  
+       }
+     }//
+     
+     return;
    }
 
-   MPNX(const std::vector<T, Allocator> data_, const int ntrks_, const int nevts_, const int nlayers_ = 1) :
-      nTrks(ntrks_),
-      nEvts(nevts_),
-      nLayers(nlayers_),
-      data(data_) {
-     if(data_.size() > n*nTrks*nEvts*nLayers) {std::cerr << "Incorrect dim parameters."; }
+   void save(const MPNX& src) {
+     for (size_t it=0;it<bSize;++it) {
+     //const int l = it+ib*bsize+ie*nb*bsize;
+       for (size_t ip=0;ip<N;++ip) {    	
+    	 this->operator()(ip, it) = src.data[it + ip*bSize];  
+       }
+     }//
+     
+     return;
    }
 };
 
-using MP1I    = MPNX<int,  IntAllocator,   1 , bsize>;
-using MP1F    = MPNX<float,FloatAllocator, 1 , bsize>;
-using MP2F    = MPNX<float,FloatAllocator, 2 , bsize>;
-using MP3F    = MPNX<float,FloatAllocator, 3 , bsize>;
-using MP6F    = MPNX<float,FloatAllocator, 6 , bsize>;
-using MP3x3   = MPNX<float,FloatAllocator, 9 , bsize>;
-using MP3x6   = MPNX<float,FloatAllocator, 18, bsize>;
-using MP2x2SF = MPNX<float,FloatAllocator, 3 , bsize>;
-using MP3x3SF = MPNX<float,FloatAllocator, 6 , bsize>;
-using MP6x6SF = MPNX<float,FloatAllocator, 21, bsize>;
-using MP6x6F  = MPNX<float,FloatAllocator, 36, bsize>;
-
-
-template <typename MPNTp, FieldOrder Order = FieldOrder::P2R_MATIDX_LAYER_TRACKBLK_EVENT_ORDER>
-struct MPNXAccessor {
-   typedef typename MPNTp::DataType T;
-
-   static constexpr int bsz = MPNTp::BS;
-   static constexpr int n   = MPNTp::N;//matrix linear dim (total number of els)
-
-   const int nTrkB;
-   const int nEvts;
-   const int nLayers;
-
-   const int NevtsNtbBsz;
-
-   const int stride;
-   
-   const int thread_stride;
-
-   T* data_; //accessor field only for the data access, not allocated here
-
-   MPNXAccessor() : nTrkB(0), nEvts(0), nLayers(0), NevtsNtbBsz(0), stride(0), thread_stride(0), data_(nullptr){}
-   MPNXAccessor(const MPNTp &v) :
-        nTrkB(v.nTrks / bsz),
-        nEvts(v.nEvts),
-        nLayers(v.nLayers),
-        NevtsNtbBsz(nEvts*nTrkB*bsz),
-        stride(Order == FieldOrder::P2R_TRACKBLK_EVENT_LAYER_MATIDX_ORDER ? bsz*nTrkB*nEvts*nLayers  :
-              (Order == FieldOrder::P2R_TRACKBLK_EVENT_MATIDX_LAYER_ORDER ? bsz*nTrkB*nEvts*n : n*bsz*nLayers)),
-        thread_stride(Order == FieldOrder::P2R_TRACKBLK_EVENT_LAYER_MATIDX_ORDER ? stride  :
-              (Order == FieldOrder::P2R_TRACKBLK_EVENT_MATIDX_LAYER_ORDER ? NevtsNtbBsz : bsz)),              
-        data_(const_cast<T*>(v.data.data())){
-	 }
-
-   T& operator[](const int idx) const {return data_[idx];}
-
-   T& operator()(const int mat_idx, const int trkev_idx, const int b_idx, const int layer_idx) const {
-     if      constexpr (Order == FieldOrder::P2R_TRACKBLK_EVENT_LAYER_MATIDX_ORDER)
-       return data_[mat_idx*stride + layer_idx*NevtsNtbBsz + trkev_idx*bsz + b_idx];//using defualt order batch id (the fastest) > track id > event id > layer id (the slowest)
-     else if constexpr (Order == FieldOrder::P2R_TRACKBLK_EVENT_MATIDX_LAYER_ORDER)
-       return data_[layer_idx*stride + mat_idx*NevtsNtbBsz + trkev_idx*bsz + b_idx];
-     else //(Order == FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER)
-       return data_[trkev_idx*stride+layer_idx*n*bsz+mat_idx*bsz+b_idx];
-   }//i is the internal dof index
-
-   T& operator()(const int thrd_idx, const int blk_offset) const { return data_[thrd_idx*thread_stride + blk_offset];}//
-
-   int GetThreadOffset(const int thrd_idx, const int layer_idx = 0) const {
-     if      constexpr (Order == FieldOrder::P2R_TRACKBLK_EVENT_LAYER_MATIDX_ORDER)
-       return (layer_idx*NevtsNtbBsz + thrd_idx*bsz);//using defualt order batch id (the fastest) > track id > event id > layer id (the slowest)
-     else if constexpr (Order == FieldOrder::P2R_TRACKBLK_EVENT_MATIDX_LAYER_ORDER)
-       return (layer_idx*stride + thrd_idx*bsz);
-     else //(Order == FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER)
-       return (thrd_idx*stride+layer_idx*n*bsz);
-   }
-   
-   void load(MPNX_<T, n, bsz>& dest, const int tid, const int layer = 0) const {
-      auto tid_offset = GetThreadOffset(tid, layer);
-#pragma unroll 
-      for(int it = 0; it < bsz; it++){
-#pragma unroll
-        for(int id = 0; id < n; id++){
-          dest(id, it) = this->operator()(id, tid_offset+it);
-        }
-      }
-      return;
-   }
-   void save(const MPNX_<T, n, bsz>& src, const int tid, const int layer = 0){
-      auto tid_offset = GetThreadOffset(tid, layer); 
-#pragma unroll
-      for(int it = 0; it < bsz; it++){
-#pragma unroll
-        for(int id = 0; id < n; id++){
-           this->operator()(id, tid_offset+it) = src(id, it);
-        }
-      }
-      return;
-   }  
-  
-};
+using MP1I    = MPNX<int,   1 , bsize>;
+using MP1F    = MPNX<float, 1 , bsize>;
+using MP2F    = MPNX<float, 3 , bsize>;
+using MP3F    = MPNX<float, 3 , bsize>;
+using MP6F    = MPNX<float, 6 , bsize>;
+using MP2x2SF = MPNX<float, 3 , bsize>;
+using MP3x3SF = MPNX<float, 6 , bsize>;
+using MP6x6SF = MPNX<float, 21, bsize>;
+using MP6x6F  = MPNX<float, 36, bsize>;
+using MP3x3   = MPNX<float, 9 , bsize>;
+using MP3x6   = MPNX<float, 18, bsize>;
 
 struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
   MP1I    q;
 
-  MPTRK() : par(), cov(), q() {}
-  MPTRK(const int ntrks_, const int nevts_) : par(ntrks_, nevts_), cov(ntrks_, nevts_), q(ntrks_, nevts_) {}
   //  MP22I   hitidx;
-};
-
-template <FieldOrder Order>
-struct MPTRKAccessor {
-  using MP6FAccessor   = MPNXAccessor<MP6F,    Order>;
-  using MP6x6SFAccessor= MPNXAccessor<MP6x6SF, Order>;
-  using MP1IAccessor   = MPNXAccessor<MP1I,    Order>;
-
-  MP6FAccessor    par;
-  MP6x6SFAccessor cov;
-  MP1IAccessor    q;
-
-  MPTRKAccessor() : par(), cov(), q() {}
-  MPTRKAccessor(const MPTRK &in) : par(in.par), cov(in.cov), q(in.q) {}
-  
-  void load(MPTRK_ &dst, const int tid, const int layer = 0) const {
-    this->par.load(dst.par, tid, layer);
-    this->cov.load(dst.cov, tid, layer);
-    this->q.load(dst.q, tid, layer);
-    
-    return;
+  void load(MPTRK &dst){
+    par.load(dst.par);
+    cov.load(dst.cov);
+    q.load(dst.q);    
+    return;	  
   }
-  
-  void save(MPTRK_ &src, const int tid, const int layer = 0) {
-    this->par.save(src.par, tid, layer);
-    this->cov.save(src.cov, tid, layer);
-    this->q.save(src.q, tid, layer);
-    
+  void save(const MPTRK &src){
+    par.save(src.par);
+    cov.save(src.cov);
+    q.save(src.q);
     return;
   }
 };
-
 
 struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
-
-  MPHIT() : pos(), cov(){}
-  MPHIT(const int ntrks_, const int nevts_, const int nlayers_) : pos(ntrks_, nevts_, nlayers_), cov(ntrks_, nevts_, nlayers_) {}
-};
-
-template <FieldOrder Order>
-struct MPHITAccessor {
-  using MP3FAccessor   = MPNXAccessor<MP3F,    Order>;
-  using MP3x3SFAccessor= MPNXAccessor<MP3x3SF, Order>;
-
-  MP3FAccessor    pos;
-  MP3x3SFAccessor cov;
-
-  MPHITAccessor() : pos(), cov() {}
-  MPHITAccessor(const MPHIT &in) : pos(in.pos), cov(in.cov) {}
-  
-  void load(MPHIT_ &dst, const int tid, const int layer = 0) const {
-    this->pos.load(dst.pos, tid, layer);
-    this->cov.load(dst.cov, tid, layer);
-    
+  //
+  void load(MPHIT &dst){
+    pos.load(dst.pos);
+    cov.load(dst.cov);
     return;
   }
-  
-  void save(MPHIT_ &src, const int tid, const int layer = 0) {
-    this->pos.save(src.pos, tid, layer);
-    this->cov.save(src.cov, tid, layer);
-    
+  void save(const MPHIT &src){
+    pos.save(src.pos);
+    cov.save(src.cov);
+
     return;
-  } 
+  }
+
 };
-
-
-template<typename policy_tp, FieldOrder order, typename MPTRKAllocator, ConversionType convers_tp>
-void convertTracks(policy_tp &policy, std::vector<MPTRK_, MPTRKAllocator> &external_order_data, MPTRK* internal_order_data) {
-  //create an accessor field:
-  std::unique_ptr<MPTRKAccessor<order>> ind(new MPTRKAccessor<order>(*internal_order_data));
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  const int outer_loop_range = nevts*nb;
-  //
-  std::for_each(policy,
-                impl::counting_iterator(0),
-                impl::counting_iterator(outer_loop_range),
-                [=, exd_ = external_order_data.data(), &ind_ = *ind] (const auto tid) {
-                  for (size_t it=0;it<bsize;++it) {
-                  //const int l = it+ib*bsize+ie*nb*bsize;
-                    //par
-    	            for (size_t ip=0;ip<6;++ip) {
-    	              if constexpr (convers_tp == ConversionType::P2R_CONVERT_FROM_INTERNAL_ORDER)
-    	                exd_[tid].par.data[it + ip*bsize] = ind_.par(ip, tid, it, 0);
-    	              else
-    	                ind_.par(ip, tid, it, 0) = exd_[tid].par.data[it + ip*bsize];  
-    	            }
-    	            //cov
-    	            for (size_t ip=0;ip<21;++ip) {
-    	              if constexpr (convers_tp == ConversionType::P2R_CONVERT_FROM_INTERNAL_ORDER)
-    	                exd_[tid].cov.data[it + ip*bsize] = ind_.cov(ip, tid, it, 0);
-    	              else
-    	                ind_.cov(ip, tid, it, 0) = exd_[tid].cov.data[it + ip*bsize];
-    	            }
-    	            //q
-    	            if constexpr (convers_tp == ConversionType::P2R_CONVERT_FROM_INTERNAL_ORDER)
-    	              exd_[tid].q.data[it] = ind_.q(0, tid, it, 0);//fixme check
-    	            else
-    	              ind_.q(0, tid, it, 0) = exd_[tid].q.data[it];
-                  }
-                });
-   return;
-}
-
-
-template<typename policy_tp, FieldOrder order, typename MPHITAllocator, ConversionType convers_tp>
-void convertHits(policy_tp &policy, std::vector<MPHIT_, MPHITAllocator> &external_order_data, MPHIT* internal_oder_data) {
-  //create an accessor field:
-  std::unique_ptr<MPHITAccessor<order>> ind(new MPHITAccessor<order>(*internal_oder_data));
-  // store in element order for bunches of bsize matrices (a la matriplex)
-  const int outer_loop_range = nevts*nb;
-  
-  std::for_each(policy,
-                impl::counting_iterator(0),
-                impl::counting_iterator(outer_loop_range),
-                [=, exd_ = external_order_data.data(), &ind_ = *ind] (const auto tid) {
-                   //  
-                   for(int layer=0; layer<nlayer; ++layer) {  
-                     for (size_t it=0;it<bsize;++it) {
-                       //pos
-                       for (size_t ip=0;ip<3;++ip) {
-                         if constexpr (convers_tp == ConversionType::P2R_CONVERT_FROM_INTERNAL_ORDER)
-                           exd_[layer+nlayer*tid].pos.data[it + ip*bsize] = ind_.pos(ip, tid, it, layer);
-                         else
-                           ind_.pos(ip, tid, it, layer) = exd_[layer+nlayer*tid].pos.data[it + ip*bsize];
-                       }
-                       //cov
-                       for (size_t ip=0;ip<6;++ip) {
-                         if constexpr (convers_tp == ConversionType::P2R_CONVERT_FROM_INTERNAL_ORDER)
-                           exd_[layer+nlayer*tid].cov.data[it + ip*bsize] = ind_.cov(ip, tid, it, layer);
-                         else
-                           ind_.cov(ip, tid, it, layer) = exd_[layer+nlayer*tid].cov.data[it + ip*bsize];
-                       }
-                     } 
-                  }
-               });
-  
-  return;
-}
 
 ///////////////////////////////////////
 //Gen. utils
@@ -457,9 +195,7 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-
-template<typename MPTRKAllocator>
-void prepareTracks(std::vector<MPTRK_, MPTRKAllocator> &trcks, ATRK &inputtrk) {
+void prepareTracks(std::vector<MPTRK> &trcks, ATRK &inputtrk) {
   //
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -481,8 +217,7 @@ void prepareTracks(std::vector<MPTRK_, MPTRKAllocator> &trcks, ATRK &inputtrk) {
   return;
 }
 
-template<typename MPHITAllocator>
-void prepareHits(std::vector<MPHIT_, MPHITAllocator> &hits, std::vector<AHIT>& inputhits) {
+void prepareHits(std::vector<MPHIT> &hits, std::vector<AHIT>& inputhits) {
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
 
@@ -511,110 +246,90 @@ void prepareHits(std::vector<MPHIT_, MPHITAllocator> &hits, std::vector<AHIT>& i
   return;
 }
 
-
 //////////////////////////////////////////////////////////////////////////////////////
 // Aux utils 
-MPTRK_* bTk(MPTRK_* tracks, size_t ev, size_t ib) {
+MPTRK* bTk(MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-const MPTRK_* bTk(const MPTRK_* tracks, size_t ev, size_t ib) {
+const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-int q(const MP1I_* bq, size_t it){
-  return (*bq)[it];
+float q(const MP1I* bq, size_t it){
+  return (*bq).data[it];
 }
 //
-float par(const MP6F_* bpars, size_t it, size_t ipar){
-  return (*bpars)[it + ipar*bsize];
+float par(const MP6F* bpars, size_t it, size_t ipar){
+  return (*bpars).data[it + ipar*bsize];
 }
-float x    (const MP6F_* bpars, size_t it){ return par(bpars, it, 0); }
-float y    (const MP6F_* bpars, size_t it){ return par(bpars, it, 1); }
-float z    (const MP6F_* bpars, size_t it){ return par(bpars, it, 2); }
-float ipt  (const MP6F_* bpars, size_t it){ return par(bpars, it, 3); }
-float phi  (const MP6F_* bpars, size_t it){ return par(bpars, it, 4); }
-float theta(const MP6F_* bpars, size_t it){ return par(bpars, it, 5); }
+float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
+float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
+float z    (const MP6F* bpars, size_t it){ return par(bpars, it, 2); }
+float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
+float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
+float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
 //
-float par(const MPTRK_* btracks, size_t it, size_t ipar){
+float par(const MPTRK* btracks, size_t it, size_t ipar){
   return par(&(*btracks).par,it,ipar);
 }
-float x    (const MPTRK_* btracks, size_t it){ return par(btracks, it, 0); }
-float y    (const MPTRK_* btracks, size_t it){ return par(btracks, it, 1); }
-float z    (const MPTRK_* btracks, size_t it){ return par(btracks, it, 2); }
-float ipt  (const MPTRK_* btracks, size_t it){ return par(btracks, it, 3); }
-float phi  (const MPTRK_* btracks, size_t it){ return par(btracks, it, 4); }
-float theta(const MPTRK_* btracks, size_t it){ return par(btracks, it, 5); }
+float x    (const MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
+float y    (const MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
+float z    (const MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
+float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
+float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
+float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
 //
-float par(const MPTRK_* tracks, size_t ev, size_t tk, size_t ipar){
+float par(const MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const MPTRK_* btracks = bTk(tracks, ev, ib);
+  const MPTRK* btracks = bTk(tracks, ev, ib);
   size_t it = tk % bsize;
   return par(btracks, it, ipar);
 }
-float x    (const MPTRK_* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
-float y    (const MPTRK_* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
-float z    (const MPTRK_* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
-float ipt  (const MPTRK_* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
-float phi  (const MPTRK_* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
-float theta(const MPTRK_* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
+float x    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
+float y    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
+float z    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
+float ipt  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
+float phi  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
+float theta(const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
 //
-void setpar(MP6F_* bpars, size_t it, size_t ipar, auto val){
-  (*bpars)[it + ipar*bsize] = val;
-}
-void setx    (MP6F_* bpars, size_t it, auto val){ setpar(bpars, it, 0, val); }
-void sety    (MP6F_* bpars, size_t it, auto val){ setpar(bpars, it, 1, val); }
-void setz    (MP6F_* bpars, size_t it, auto val){ setpar(bpars, it, 2, val); }
-void setipt  (MP6F_* bpars, size_t it, auto val){ setpar(bpars, it, 3, val); }
-void setphi  (MP6F_* bpars, size_t it, auto val){ setpar(bpars, it, 4, val); }
-void settheta(MP6F_* bpars, size_t it, auto val){ setpar(bpars, it, 5, val); }
-//
-void setpar(MPTRK_* btracks, size_t it, size_t ipar, auto val){
-  setpar(&(*btracks).par,it,ipar,val);
-}
-void setx    (MPTRK_* btracks, size_t it, auto val){ setpar(btracks, it, 0, val); }
-void sety    (MPTRK_* btracks, size_t it, auto val){ setpar(btracks, it, 1, val); }
-void setz    (MPTRK_* btracks, size_t it, auto val){ setpar(btracks, it, 2, val); }
-void setipt  (MPTRK_* btracks, size_t it, auto val){ setpar(btracks, it, 3, val); }
-void setphi  (MPTRK_* btracks, size_t it, auto val){ setpar(btracks, it, 4, val); }
-void settheta(MPTRK_* btracks, size_t it, auto val){ setpar(btracks, it, 5, val); }
 
-const MPHIT_* bHit(const MPHIT_* hits, size_t ev, size_t ib) {
+const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
-const MPHIT_* bHit(const MPHIT_* hits, size_t ev, size_t ib,size_t lay) {
+const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,size_t lay) {
 return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
 }
 //
-float pos(const MP3F_* hpos, size_t it, size_t ipar){
-  return (*hpos)[it + ipar*bsize];
+float Pos(const MP3F* hpos, size_t it, size_t ipar){
+  return (*hpos).data[it + ipar*bsize];
 }
-float x(const MP3F_* hpos, size_t it)    { return pos(hpos, it, 0); }
-float y(const MP3F_* hpos, size_t it)    { return pos(hpos, it, 1); }
-float z(const MP3F_* hpos, size_t it)    { return pos(hpos, it, 2); }
+float x(const MP3F* hpos, size_t it)    { return Pos(hpos, it, 0); }
+float y(const MP3F* hpos, size_t it)    { return Pos(hpos, it, 1); }
+float z(const MP3F* hpos, size_t it)    { return Pos(hpos, it, 2); }
 //
-float pos(const MPHIT_* hits, size_t it, size_t ipar){
-  return pos(&(*hits).pos,it,ipar);
+float Pos(const MPHIT* hits, size_t it, size_t ipar){
+  return Pos(&(*hits).pos,it,ipar);
 }
-float x(const MPHIT_* hits, size_t it)    { return pos(hits, it, 0); }
-float y(const MPHIT_* hits, size_t it)    { return pos(hits, it, 1); }
-float z(const MPHIT_* hits, size_t it)    { return pos(hits, it, 2); }
+float x(const MPHIT* hits, size_t it)    { return Pos(hits, it, 0); }
+float y(const MPHIT* hits, size_t it)    { return Pos(hits, it, 1); }
+float z(const MPHIT* hits, size_t it)    { return Pos(hits, it, 2); }
 //
-float pos(const MPHIT_* hits, size_t ev, size_t tk, size_t ipar){
+float Pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const MPHIT_* bhits = bHit(hits, ev, ib);
+  const MPHIT* bhits = bHit(hits, ev, ib);
   size_t it = tk % bsize;
-  return pos(bhits,it,ipar);
+  return Pos(bhits,it,ipar);
 }
-float x(const MPHIT_* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
-float y(const MPHIT_* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
-float z(const MPHIT_* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
+float x(const MPHIT* hits, size_t ev, size_t tk)    { return Pos(hits, ev, tk, 0); }
+float y(const MPHIT* hits, size_t ev, size_t tk)    { return Pos(hits, ev, tk, 1); }
+float z(const MPHIT* hits, size_t ev, size_t tk)    { return Pos(hits, ev, tk, 2); }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Main stuff
 
-template<int N>
-void MultHelixPropEndcap(const MP6x6F_ &a, const MP6x6SF_ &b, MP6x6F_ &c) {
+////////////////////////////////////////////////////////////////////////
+///MAIN compute kernels
+template<int N = 1>
+inline void MultHelixPropEndcap(const MP6x6F &a, const MP6x6SF &b, MP6x6F &c) {
 //#pragma omp simd 
  for (int n = 0; n < N; ++n)
   {
@@ -658,9 +373,8 @@ void MultHelixPropEndcap(const MP6x6F_ &a, const MP6x6SF_ &b, MP6x6F_ &c) {
   return;
 }
 
-template<int N>
-void MultHelixPropTranspEndcap(const MP6x6F_ &a, const MP6x6F_ &b, MP6x6SF_ &c) {
-
+template<int N = 1>
+inline void MultHelixPropTranspEndcap(const MP6x6F &a, const MP6x6F &b, MP6x6SF &c) {
 //#pragma omp simd
   for (int n = 0; n < N; ++n)
   {
@@ -689,8 +403,8 @@ void MultHelixPropTranspEndcap(const MP6x6F_ &a, const MP6x6F_ &b, MP6x6SF_ &c) 
   return;
 }
 
-template<int N>
-void KalmanGainInv(const MP6x6SF_ &a, const MP3x3SF_ &b, MP3x3_ &c) {
+template<int N = 1>
+inline void KalmanGainInv(const MP6x6SF &a, const MP3x3SF &b, MP3x3 &c) {
 
 //#pragma omp simd
   for (int n = 0; n < N; ++n)
@@ -715,8 +429,8 @@ void KalmanGainInv(const MP6x6SF_ &a, const MP3x3SF_ &b, MP3x3_ &c) {
   return;
 }
 
-template <int N>
-void KalmanGain(const MP6x6SF_ &a, const MP3x3_ &b, MP3x6_ &c) {
+template <int N = 1>
+inline void KalmanGain(const MP6x6SF &a, const MP3x3 &b, MP3x6 &c) {
 
 //#pragma omp simd
   for (int n = 0; n < N; ++n)
@@ -745,11 +459,11 @@ void KalmanGain(const MP6x6SF_ &a, const MP3x3_ &b, MP3x6_ &c) {
 }
 
 template <int N = 1>
-void KalmanUpdate(MP6x6SF_ &trkErr, MP6F_ &inPar, const MP3x3SF_ &hitErr, const MP3F_ &msP){
+void KalmanUpdate(MP6x6SF &trkErr, MP6F &inPar, const MP3x3SF &hitErr, const MP3F &msP){
 
-  MP3x3_ inverse_temp;
-  MP3x6_ kGain;
-  MP6x6SF_ newErr;
+  MP3x3 inverse_temp;
+  MP3x6 kGain;
+  MP6x6SF newErr;
   
   KalmanGainInv<N>(trkErr, hitErr, inverse_temp);
   KalmanGain<N>(trkErr, inverse_temp, kGain);
@@ -815,17 +529,17 @@ void KalmanUpdate(MP6x6SF_ &trkErr, MP6F_ &inPar, const MP3x3SF_ &hitErr, const 
   }
   
   return;
-}
+}              
 
 //constexpr auto kfact= 100/(-0.299792458*3.8112);
 constexpr auto kfact= 100/3.8;
 
 template<int N = 1>
-void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP1I_ &inChg, 
-                  const MP3F_ &msP, MP6x6SF_ &outErr, MP6F_ &outPar) {
+void propagateToZ(const MP6x6SF &inErr, const MP6F &inPar, const MP1I &inChg, 
+                  const MP3F &msP, MP6x6SF &outErr, MP6F &outPar) {
   
-  MP6x6F_ errorProp;
-  MP6x6F_ temp;
+  MP6x6F errorProp;
+  MP6x6F temp;
 //#pragma omp simd
   for (size_t it=0;it<N;++it) {	
     const auto zout = msP(iparZ,it);
@@ -888,8 +602,80 @@ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP1I_ &inChg,
 }
 
 
-int main (int argc, char* argv[]) {
+template <bool is_cuda_call>
+concept cuda_concept = is_cuda_call == true;
 
+template <typename lambda_tp, bool grid_stride = false>
+requires (is_cuda_kernel == true)
+__cuda_kernel__ void launch_p2z_cuda_kernels(const lambda_tp p2z_kernel, const int length){
+
+  auto i = threadIdx.x + blockIdx.x * blockDim.x;
+   
+  while (i < length) {
+    p2z_kernel(i);	   
+
+    if (grid_stride)  i += gridDim.x * blockDim.x; 
+    else  break;
+  }
+
+  return;
+}
+
+//CUDA specialized version:
+template <bool cuda_compute>
+requires cuda_concept<cuda_compute>
+void dispatch_p2z_kernels(auto&& p2z_kernel, const int ntrks_, const int nevnts_){
+
+  const int outer_loop_range = nevnts_*ntrks_;
+
+  dim3 blocks(threadsperblock, 1, 1);
+  dim3 grid(((outer_loop_range + threadsperblock - 1)/ threadsperblock),1,1);
+  //
+  launch_p2z_cuda_kernels<<<grid, blocks>>>(p2z_kernel, outer_loop_range);
+  //
+  cudaDeviceSynchronize();
+
+  return;	
+}
+
+//General (default) implementation for both x86 and nvidia accelerators:
+template <bool cuda_compute>
+void dispatch_p2z_kernels(auto&& p2z_kernel, const int ntrks_, const int nevnts_){
+  //	
+  auto policy = std::execution::par_unseq;
+  //
+  auto outer_loop_range = std::ranges::views::iota(0, ntrks_*nevnts_);
+  //
+  std::for_each(policy,
+                std::ranges::begin(outer_loop_range),
+                std::ranges::end(outer_loop_range),
+                p2z_kernel);
+
+  return;
+}
+
+//CUDA specialized version:
+template <bool cuda_compute>
+requires cuda_concept<cuda_compute>
+void prefetch(std::vector<MPTRK> &trks, std::vector<MPHIT> &hits, std::vector<MPTRK> &outtrks) {
+  cudaMemPrefetchAsync(trks.data(), trks.size() * sizeof(MPTRK), 0, 0);	
+  //
+  cudaMemPrefetchAsync(hits.data(), hits.size() * sizeof(MPHIT), 0, 0);
+  //
+  cudaMemPrefetchAsync(outtrks.data(), outtrks.size() * sizeof(MPTRK), 0, 0);
+  //
+  cudaDeviceSynchronize();
+
+  return;
+}
+
+//Default implementation
+template <bool cuda_compute>
+void prefetch(std::vector<MPTRK> &trks, std::vector<MPHIT> &hits, std::vector<MPTRK> &outtrks) {
+  return;	
+}
+
+int main (int argc, char* argv[]) {
    #include "input_track.h"
 
    std::vector<AHIT> inputhits{inputhit21,inputhit20,inputhit19,inputhit18,inputhit17,inputhit16,inputhit15,inputhit14,
@@ -911,43 +697,44 @@ int main (int argc, char* argv[]) {
 
    long setup_start, setup_stop;
    struct timeval timecheck;
-#if defined(__NVCOMPILER_CUDA__)
-   constexpr auto order = FieldOrder::P2R_TRACKBLK_EVENT_LAYER_MATIDX_ORDER;
-#else
-   constexpr auto order = FieldOrder::P2R_MATIDX_LAYER_TRACKBLK_EVENT_ORDER;
-#endif
-   using MPTRKAccessorTp = MPTRKAccessor<order>;
-   using MPHITAccessorTp = MPHITAccessor<order>;
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-   std::unique_ptr<MPTRK> trcksPtr(new MPTRK(ntrks, nevts));
-   std::unique_ptr<MPTRKAccessorTp> trcksAccPtr(new MPTRKAccessorTp(*trcksPtr));
+   std::vector<MPTRK> trcks(nevts*nb); 
+   prepareTracks(trcks, inputtrk);
    //
-   std::unique_ptr<MPHIT> hitsPtr(new MPHIT(ntrks, nevts, nlayer));
-   std::unique_ptr<MPHITAccessorTp> hitsAccPtr(new MPHITAccessorTp(*hitsPtr));
+   std::vector<MPHIT> hits(nlayer*nevts*nb);
+   prepareHits(hits, inputhits);
    //
-   std::unique_ptr<MPTRK> outtrcksPtr(new MPTRK(ntrks, nevts));
-   std::unique_ptr<MPTRKAccessorTp> outtrcksAccPtr(new MPTRKAccessorTp(*outtrcksPtr));
-   //
-   std::vector<MPTRK_, MPTRKAllocator> trcks(nevts*nb); 
-   prepareTracks<MPTRKAllocator>(trcks, inputtrk);
-   //
-   std::vector<MPHIT_, MPHITAllocator> hits(nlayer*nevts*nb);
-   prepareHits<MPHITAllocator>(hits, inputhits);
-   //
-   std::vector<MPTRK_, MPTRKAllocator> outtrcks(nevts*nb);
+   std::vector<MPTRK> outtrcks(nevts*nb);
    
-   auto policy = std::execution::par_unseq;
-   //auto policy = std::execution::seq;
-   
-   convertHits<decltype(policy)  , order, MPHITAllocator, ConversionType::P2R_CONVERT_TO_INTERNAL_ORDER>(policy, hits,     hitsPtr.get());
-   convertTracks<decltype(policy), order, MPTRKAllocator, ConversionType::P2R_CONVERT_TO_INTERNAL_ORDER>(policy, trcks,    trcksPtr.get());
-   convertTracks<decltype(policy), order, MPTRKAllocator, ConversionType::P2R_CONVERT_TO_INTERNAL_ORDER>(policy, outtrcks, outtrcksPtr.get());
-
+   auto p2z_kernels = [=,btracksPtr    = trcks.data(),
+                         outtracksPtr  = outtrcks.data(),
+                         bhitsPtr      = hits.data()] (const auto i) {
+                         //  
+                         MPTRK btracks;
+                         MPTRK obtracks;
+                         MPHIT bhits;
+                         //
+                         btracksPtr[i].load(btracks);
+                         //
+                         for(int layer=0; layer<nlayer; ++layer) {
+                           //
+                           bhitsPtr[layer+nlayer*i].load(bhits);
+                           //
+                           propagateToR<bsize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
+                           KalmanUpdate<bsize>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
+                           //
+                         }
+                         //
+                         outtracksPtr[i].save(obtracks);
+                       };
+ 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+
+   prefetch<is_cuda_kernel>(trcks, hits, outtrcks);
 
    printf("done preparing!\n");
 
@@ -958,31 +745,7 @@ int main (int argc, char* argv[]) {
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    for(int itr=0; itr<NITER; itr++) {
-
-     const int outer_loop_range = nevts*nb;
-
-     std::for_each(policy,
-                   impl::counting_iterator(0),
-                   impl::counting_iterator(outer_loop_range),
-                   [=,&btracksAccessor    = *trcksAccPtr,
-                      &bhitsAccessor      = *hitsAccPtr,
-                      &outtracksAccessor  = *outtrcksAccPtr] (const auto i) {
-                     //  
-                     MPTRK_ btracks;
-                     MPTRK_ obtracks;
-                     MPHIT_ bhits;   
- 
-                     for(int layer=0; layer<nlayer; ++layer) {  
-                       //
-                       btracksAccessor.load(btracks, i);
-                       bhitsAccessor.load(bhits, i, layer);
-                       //
-                       propagateToZ<bsize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
-                       KalmanUpdate<bsize>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
-                       //
-                       outtracksAccessor.save(obtracks, i);
-                     }
-                   });
+     dispatch_p2z_kernels<is_cuda_kernel>(p2z_kernels, nb, nevts);
    } //end of itr loop
 
    auto wall_stop = std::chrono::high_resolution_clock::now();
@@ -994,7 +757,6 @@ int main (int argc, char* argv[]) {
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, -1);
 
-   convertTracks<decltype(policy), order, MPTRKAllocator, ConversionType::P2R_CONVERT_FROM_INTERNAL_ORDER>(policy, outtrcks, outtrcksPtr.get());
    auto outtrk = outtrcks.data();
 
    int nnans = 0, nfail = 0;
@@ -1117,3 +879,4 @@ int main (int argc, char* argv[]) {
 
    return 0;
 }
+
