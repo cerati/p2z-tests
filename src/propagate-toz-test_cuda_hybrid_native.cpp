@@ -540,6 +540,8 @@ void propagateToZ(const MP6x6SF &inErr, const MP6F &inPar, const MP1I &inChg,
   
   MP6x6F errorProp;
   MP6x6F temp;
+
+  auto PosInMtrx = [=] (int i, int j, int D, int block_size = 1) constexpr {return block_size*(i*D+j);};
 //#pragma omp simd
   for (size_t it=0;it<N;++it) {	
     const auto zout = msP(iparZ,it);
@@ -723,7 +725,7 @@ int main (int argc, char* argv[]) {
                            //
                            bhitsPtr[layer+nlayer*i].load(bhits);
                            //
-                           propagateToR<bsize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
+                           propagateToZ<bsize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
                            KalmanUpdate<bsize>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
                            //
                          }

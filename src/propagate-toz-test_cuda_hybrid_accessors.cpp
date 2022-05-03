@@ -773,7 +773,9 @@ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP1I_ &inChg,
   
   MP6x6F_ errorProp;
   MP6x6F_ temp;
-//#pragma omp simd
+
+  auto PosInMtrx = [=] (int i, int j, int D, int block_size = 1) constexpr {return block_size*(i*D+j);};
+//#pragma omp simd  
   for (size_t it=0;it<N;++it) {	
     const auto zout = msP(iparZ,it);
     //note: in principle charge is not needed and could be the sign of ipt
@@ -840,12 +842,12 @@ concept cuda_concept = is_cuda_call == true;
 
 template <typename lambda_tp, bool grid_stride = false>
 requires (is_cuda_kernel == true)
-__cuda_kernel__ void launch_P2Z_cuda_kernels(const lambda_tp p2z_kernel, const int length){
+__cuda_kernel__ void launch_p2z_cuda_kernels(const lambda_tp p2z_kernel, const int length){
 
   auto i = threadIdx.x + blockIdx.x * blockDim.x;
    
   while (i < length) {
-    P2Z_kernel(i);	   
+    p2z_kernel(i);	   
 
     if (grid_stride)  i += gridDim.x * blockDim.x; 
     else  break;
@@ -864,7 +866,7 @@ void dispatch_p2z_kernels(auto&& p2z_kernel, const int ntrks_, const int nevnts_
   dim3 blocks(threadsperblock, 1, 1);
   dim3 grid(((outer_loop_range + threadsperblock - 1)/ threadsperblock),1,1);
   //
-  launch_p2z_cuda_kernels<<<grid, blocks>>>(P2Z_kernel, outer_loop_range);
+  launch_p2z_cuda_kernels<<<grid, blocks>>>(p2z_kernel, outer_loop_range);
   //
   cudaDeviceSynchronize();
 
