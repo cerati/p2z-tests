@@ -623,6 +623,17 @@ __cuda_kernel__ void launch_p2z_cuda_kernels(const lambda_tp p2z_kernel, const i
   return;
 }
 
+//CUDA error check:
+template <bool cuda_compute>
+requires cuda_concept<cuda_compute>
+inline void checkLastCUDAError(){
+
+  auto error = cudaGetLastError();
+  if(error != cudaSuccess) std::cout << "Error detected, error " << error << std::endl;
+
+  return;
+}
+
 //CUDA specialized version:
 template <bool cuda_compute>
 requires cuda_concept<cuda_compute>
@@ -636,6 +647,8 @@ void dispatch_p2z_kernels(auto&& p2z_kernel, const int ntrks_, const int nevnts_
   launch_p2z_cuda_kernels<<<grid, blocks>>>(p2z_kernel, outer_loop_range);
   //
   cudaDeviceSynchronize();
+  //
+  checkLastCUDAError<cuda_compute>();
 
   return;	
 }
@@ -667,6 +680,8 @@ void prefetch(std::vector<MPTRK> &trks, std::vector<MPHIT> &hits, std::vector<MP
   cudaMemPrefetchAsync(outtrks.data(), outtrks.size() * sizeof(MPTRK), 0, 0);
   //
   cudaDeviceSynchronize();
+  // 
+  checkLastCUDAError<cuda_compute>();
 
   return;
 }
