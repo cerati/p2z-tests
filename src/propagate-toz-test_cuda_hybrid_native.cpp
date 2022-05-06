@@ -62,13 +62,88 @@ nvc++ -O2 -std=c++20 --gcc-toolchain=path-to-gnu-compiler -stdpar=multicore ./sr
 #endif
 
 #ifdef __NVCOMPILER_CUDA__
-#include <nv/target>
+//#include <nv/target>
 #define __cuda_kernel__ __global__
-constexpr bool is_cuda_kernel = true;
+constexpr bool enable_cuda         = true;
 #else
 #define __cuda_kernel__
-constexpr bool is_cuda_kernel = false;
+constexpr bool enable_cuda         = false;
 #endif
+
+template <bool is_cuda_target>
+concept CudaCompute = is_cuda_target == true;
+
+//Collection of helper methods
+//General helper routines:
+template <bool is_cuda_target>
+requires CudaCompute<is_cuda_target>
+inline void p2z_check_error(){
+  //	
+  auto error = cudaGetLastError();
+  if(error != cudaSuccess) std::cout << "Error detected, error " << error << std::endl;
+  //
+  return;
+}
+
+template <bool is_cuda_target>
+requires CudaCompute<is_cuda_target>
+inline int p2z_get_compute_device_id(){
+  int dev = -1;
+  cudaGetDevice(&dev);
+  return dev;
+}
+
+//default version:
+template <bool is_cuda_target>
+inline int p2z_get_compute_device_id(){
+  return 0;
+}
+
+template <bool is_cuda_target>
+requires CudaCompute<is_cuda_target>
+inline decltype(auto) p2z_get_stream(){
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+  return stream;
+}
+
+//default version:
+template <bool is_cuda_target>
+inline int p2z_get_stream(){
+  return 0;
+}
+
+//CUDA specialized version:
+template <typename data_tp, bool is_cuda_target, typename dev_t, typename stream_t, bool is_sync = false>
+requires CudaCompute<is_cuda_target>
+void p2z_prefetch(std::vector<data_tp> &v, dev_t devId, stream_t stream) {
+  cudaMemPrefetchAsync(v.data(), v.size() * sizeof(data_tp), devId, stream);	
+  //
+  if constexpr (is_sync) {cudaDeviceSynchronize();}
+
+  return;
+}
+
+//Default implementation
+template <typename data_tp, bool is_cuda_target, typename dev_t, typename stream_t, bool is_sync = false>
+void p2z_prefetch(std::vector<data_tp> &v, dev_t devId, stream_t stream) {
+  return;	
+}
+
+//CUDA specialized version:
+template <bool is_cuda_target>
+requires CudaCompute<is_cuda_target>
+void p2z_wait() { 
+  cudaDeviceSynchronize(); 
+  return; 
+}
+
+template <bool is_cuda_target>
+void p2z_wait() { 
+  return; 
+}
+
+//////////
 
 const std::array<size_t, 36> SymOffsets66{0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
 
@@ -541,7 +616,7 @@ void propagateToZ(const MP6x6SF &inErr, const MP6F &inPar, const MP1I &inChg,
   MP6x6F errorProp;
   MP6x6F temp;
 
-  auto PosInMtrx = [=] (int i, int j, int D, int block_size = 1) constexpr {return block_size*(i*D+j);};
+  auto PosInMtrx = [=] (int i, int j, int D, int block_size = 1) consteval {return block_size*(i*D+j);};
 //#pragma omp simd
   for (size_t it=0;it<N;++it) {	
     const auto zout = msP(iparZ,it);
@@ -604,12 +679,9 @@ void propagateToZ(const MP6x6SF &inErr, const MP6F &inPar, const MP1I &inChg,
 }
 
 
-template <bool is_cuda_call>
-concept cuda_concept = is_cuda_call == true;
-
 template <typename lambda_tp, bool grid_stride = false>
-requires (is_cuda_kernel == true)
-__cuda_kernel__ void launch_p2z_cuda_kernels(const lambda_tp p2z_kernel, const int length){
+requires (enable_cuda == true)
+__cuda_kernel__ void launch_p2z_cuda_kernel(const lambda_tp p2z_kernel, const int length){
 
   auto i = threadIdx.x + blockIdx.x * blockDim.x;
    
@@ -623,39 +695,26 @@ __cuda_kernel__ void launch_p2z_cuda_kernels(const lambda_tp p2z_kernel, const i
   return;
 }
 
-//CUDA error check:
-template <bool cuda_compute>
-requires cuda_concept<cuda_compute>
-inline void checkLastCUDAError(){
-
-  auto error = cudaGetLastError();
-  if(error != cudaSuccess) std::cout << "Error detected, error " << error << std::endl;
-
-  return;
-}
-
 //CUDA specialized version:
-template <bool cuda_compute>
-requires cuda_concept<cuda_compute>
-void dispatch_p2z_kernels(auto&& p2z_kernel, const int ntrks_, const int nevnts_){
+template <typename stream_tp, bool is_cuda_target>
+requires CudaCompute<is_cuda_target>
+void dispatch_p2z_kernels(auto&& p2z_kernel, stream_tp stream, const int ntrks_, const int nevnts_){
 
   const int outer_loop_range = nevnts_*ntrks_;
 
   dim3 blocks(threadsperblock, 1, 1);
   dim3 grid(((outer_loop_range + threadsperblock - 1)/ threadsperblock),1,1);
   //
-  launch_p2z_cuda_kernels<<<grid, blocks>>>(p2z_kernel, outer_loop_range);
+  launch_p2z_cuda_kernel<<<grid, blocks, 0, stream>>>(p2z_kernel, outer_loop_range);
   //
-  cudaDeviceSynchronize();
-  //
-  checkLastCUDAError<cuda_compute>();
+  p2z_check_error<is_cuda_target>();
 
   return;	
 }
 
 //General (default) implementation for both x86 and nvidia accelerators:
-template <bool cuda_compute>
-void dispatch_p2z_kernels(auto&& p2z_kernel, const int ntrks_, const int nevnts_){
+template <typename stream_tp, bool is_cuda_target>
+void dispatch_p2z_kernels(auto&& p2z_kernel, stream_tp stream, const int ntrks_, const int nevnts_){
   //	
   auto policy = std::execution::par_unseq;
   //
@@ -669,28 +728,6 @@ void dispatch_p2z_kernels(auto&& p2z_kernel, const int ntrks_, const int nevnts_
   return;
 }
 
-//CUDA specialized version:
-template <bool cuda_compute>
-requires cuda_concept<cuda_compute>
-void prefetch(std::vector<MPTRK> &trks, std::vector<MPHIT> &hits, std::vector<MPTRK> &outtrks) {
-  cudaMemPrefetchAsync(trks.data(), trks.size() * sizeof(MPTRK), 0, 0);	
-  //
-  cudaMemPrefetchAsync(hits.data(), hits.size() * sizeof(MPHIT), 0, 0);
-  //
-  cudaMemPrefetchAsync(outtrks.data(), outtrks.size() * sizeof(MPTRK), 0, 0);
-  //
-  cudaDeviceSynchronize();
-  // 
-  checkLastCUDAError<cuda_compute>();
-
-  return;
-}
-
-//Default implementation
-template <bool cuda_compute>
-void prefetch(std::vector<MPTRK> &trks, std::vector<MPHIT> &hits, std::vector<MPTRK> &outtrks) {
-  return;	
-}
 
 int main (int argc, char* argv[]) {
    #include "input_track.h"
@@ -751,18 +788,27 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
-   prefetch<is_cuda_kernel>(trcks, hits, outtrcks);
-
    printf("done preparing!\n");
 
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
 
+   auto dev_id = p2z_get_compute_device_id<enable_cuda>();
+   auto stream = p2z_get_stream<enable_cuda>();
+   // prefetch 
+   p2z_prefetch<MPTRK, enable_cuda>(trcks, dev_id, stream);
+   p2z_prefetch<MPHIT, enable_cuda>(hits,  dev_id, stream);
+   p2z_prefetch<MPTRK, enable_cuda>(outtrcks, dev_id, stream);
+   //
+   p2z_wait<enable_cuda>();
+
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    for(int itr=0; itr<NITER; itr++) {
-     dispatch_p2z_kernels<is_cuda_kernel>(p2z_kernels, nb, nevts);
+     dispatch_p2z_kernels<decltype(stream), enable_cuda>(p2z_kernels, stream, nb, nevts);
+     //
+     p2z_wait<enable_cuda>();
    } //end of itr loop
 
    auto wall_stop = std::chrono::high_resolution_clock::now();
