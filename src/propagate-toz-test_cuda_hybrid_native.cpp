@@ -86,6 +86,11 @@ inline void p2z_check_error(){
 }
 
 template <bool is_cuda_target>
+inline void p2z_check_error(){
+  return;
+}
+
+template <bool is_cuda_target>
 requires CudaCompute<is_cuda_target>
 inline int p2z_get_compute_device_id(){
   int dev = -1;
