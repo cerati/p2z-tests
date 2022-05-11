@@ -57,8 +57,12 @@ nvc++ -O2 -std=c++20 --gcc-toolchain=path-to-gnu-compiler -stdpar=multicore ./sr
 #define num_streams 1
 #endif
 
-#ifndef threadsperblock
-#define threadsperblock 32
+#ifndef threadsperblockx
+#define threadsperblockx 16
+#endif
+
+#ifndef threadsperblocky
+#define threadsperblocky 2
 #endif
 
 #ifdef __NVCOMPILER_CUDA__
@@ -69,6 +73,10 @@ constexpr bool enable_cuda         = true;
 #define __cuda_kernel__
 constexpr bool enable_cuda         = false;
 #endif
+
+static int threads_per_blockx = threadsperblockx;
+static int threads_per_blocky = threadsperblocky;
+static int nstreams           = num_streams;
 
 template <bool is_cuda_target>
 concept CudaCompute = is_cuda_target == true;
@@ -95,6 +103,7 @@ requires CudaCompute<is_cuda_target>
 inline int p2z_get_compute_device_id(){
   int dev = -1;
   cudaGetDevice(&dev);
+  cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
   return dev;
 }
 
@@ -102,6 +111,20 @@ inline int p2z_get_compute_device_id(){
 template <bool is_cuda_target>
 inline int p2z_get_compute_device_id(){
   return 0;
+}
+
+template <bool is_cuda_target>
+requires CudaCompute<is_cuda_target>
+inline void p2z_set_compute_device(const int dev){
+  cudaSetDevice(dev);
+  cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
+  return;
+}
+
+//default version:
+template <bool is_cuda_target>
+inline void p2z_set_compute_device(const int dev){
+  return;
 }
 
 template <bool is_cuda_target>
@@ -116,6 +139,26 @@ inline decltype(auto) p2z_get_stream(){
 template <bool is_cuda_target>
 inline int p2z_get_stream(){
   return 0;
+}
+
+template <bool is_cuda_target>
+requires CudaCompute<is_cuda_target>
+inline decltype(auto) p2z_get_streams(const int n){
+  std::vector<cudaStream_t> streams;
+  streams.reserve(n);
+  for (int i = 0; i < n; i++) {  
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    streams.push_back(stream);
+  }
+  return streams;
+}
+
+template <bool is_cuda_target>
+inline decltype(auto) p2z_get_streams(const int n){
+  if(n > 1) std::cout << "Number of compute streams is not supported : " << n << std::endl; 
+  std::vector<int> streams = {0};
+  return streams;
 }
 
 //CUDA specialized version:
@@ -146,6 +189,86 @@ void p2z_wait() {
 template <bool is_cuda_target>
 void p2z_wait() { 
   return; 
+}
+
+//used only in cuda 
+template <bool is_cuda_target, bool is_verbose = true>
+requires CudaCompute<is_cuda_target>
+void info(int device) {
+  cudaDeviceProp deviceProp;
+
+  int driver_version;
+  cudaDriverGetVersion(&driver_version);
+  if constexpr (is_verbose) { std::cout << "CUDA Driver version = " << driver_version << std::endl;}
+
+  int runtime_version;
+  cudaRuntimeGetVersion(&runtime_version);
+  if constexpr (is_verbose) { std::cout << "CUDA Runtime version = " << runtime_version << std::endl;}
+
+  cudaGetDeviceProperties(&deviceProp, device);
+
+  if constexpr (is_verbose) {
+    printf("%d - name:                    %s\n", device, deviceProp.name);
+    printf("%d - totalGlobalMem:          %lu bytes ( %.2f Gbytes)\n", device, deviceProp.totalGlobalMem,
+                   deviceProp.totalGlobalMem / (float)(1024 * 1024 * 1024));
+    printf("%d - sharedMemPerBlock:       %lu bytes ( %.2f Kbytes)\n", device, deviceProp.sharedMemPerBlock, deviceProp.sharedMemPerBlock / (float)1024);
+    printf("%d - regsPerBlock:            %d\n", device, deviceProp.regsPerBlock);
+    printf("%d - warpSize:                %d\n", device, deviceProp.warpSize);
+    printf("%d - memPitch:                %lu\n", device, deviceProp.memPitch);
+    printf("%d - maxThreadsPerBlock:      %d\n", device, deviceProp.maxThreadsPerBlock);
+    printf("%d - maxThreadsDim[0]:        %d\n", device, deviceProp.maxThreadsDim[0]);
+    printf("%d - maxThreadsDim[1]:        %d\n", device, deviceProp.maxThreadsDim[1]);
+    printf("%d - maxThreadsDim[2]:        %d\n", device, deviceProp.maxThreadsDim[2]);
+    printf("%d - maxGridSize[0]:          %d\n", device, deviceProp.maxGridSize[0]);
+    printf("%d - maxGridSize[1]:          %d\n", device, deviceProp.maxGridSize[1]);
+    printf("%d - maxGridSize[2]:          %d\n", device, deviceProp.maxGridSize[2]);
+    printf("%d - totalConstMem:           %lu bytes ( %.2f Kbytes)\n", device, deviceProp.totalConstMem,
+                   deviceProp.totalConstMem / (float)1024);
+    printf("%d - compute capability:      %d.%d\n", device, deviceProp.major, deviceProp.minor);
+    printf("%d - deviceOverlap            %s\n", device, (deviceProp.deviceOverlap ? "true" : "false"));
+    printf("%d - multiProcessorCount      %d\n", device, deviceProp.multiProcessorCount);
+    printf("%d - kernelExecTimeoutEnabled %s\n", device,
+                   (deviceProp.kernelExecTimeoutEnabled ? "true" : "false"));
+    printf("%d - integrated               %s\n", device, (deviceProp.integrated ? "true" : "false"));
+    printf("%d - canMapHostMemory         %s\n", device, (deviceProp.canMapHostMemory ? "true" : "false"));
+    switch (deviceProp.computeMode) {
+      case 0: printf("%d - computeMode              0: cudaComputeModeDefault\n", device); break;
+      case 1: printf("%d - computeMode              1: cudaComputeModeExclusive\n", device); break;
+      case 2: printf("%d - computeMode              2: cudaComputeModeProhibited\n", device); break;
+      case 3: printf("%d - computeMode              3: cudaComputeModeExclusiveProcess\n", device); break;
+      default: printf("Error: unknown deviceProp.computeMode."), exit(-1);
+    }
+    printf("%d - surfaceAlignment         %lu\n", device, deviceProp.surfaceAlignment);
+    printf("%d - concurrentKernels        %s\n", device, (deviceProp.concurrentKernels ? "true" : "false"));
+    printf("%d - ECCEnabled               %s\n", device, (deviceProp.ECCEnabled ? "true" : "false"));
+    printf("%d - pciBusID                 %d\n", device, deviceProp.pciBusID);
+    printf("%d - pciDeviceID              %d\n", device, deviceProp.pciDeviceID);
+    printf("%d - pciDomainID              %d\n", device, deviceProp.pciDomainID);
+    printf("%d - tccDriver                %s\n", device, (deviceProp.tccDriver ? "true" : "false"));
+
+    switch (deviceProp.asyncEngineCount) {
+      case 0: printf("%d - asyncEngineCount         1: host -> device only\n", device); break;
+      case 1: printf("%d - asyncEngineCount         2: host <-> device\n", device); break;
+      case 2: printf("%d - asyncEngineCount         0: not supported\n", device); break;
+      default: printf("Error: unknown deviceProp.asyncEngineCount."), exit(-1);
+    }
+    printf("%d - unifiedAddressing        %s\n", device, (deviceProp.unifiedAddressing ? "true" : "false"));
+    printf("%d - memoryClockRate          %d kilohertz\n", device, deviceProp.memoryClockRate);
+    printf("%d - memoryBusWidth           %d bits\n", device, deviceProp.memoryBusWidth);
+    printf("%d - l2CacheSize              %d bytes\n", device, deviceProp.l2CacheSize);
+    printf("%d - maxThreadsPerMultiProcessor          %d\n\n", device, deviceProp.maxThreadsPerMultiProcessor);
+
+
+  }
+
+  p2z_check_error<is_cuda_target>();
+
+  return;	  
+}
+
+template <bool is_cuda_target, bool is_verbose = true>
+void info(int device) {
+  return;
 }
 
 //////////
@@ -688,12 +811,15 @@ template <typename lambda_tp, bool grid_stride = false>
 requires (enable_cuda == true)
 __cuda_kernel__ void launch_p2z_cuda_kernel(const lambda_tp p2z_kernel, const int length){
 
-  auto i = threadIdx.x + blockIdx.x * blockDim.x;
+  const auto ib = threadIdx.x + blockIdx.x * blockDim.x;
+  const auto ie = threadIdx.y + blockIdx.y * blockDim.y; 
    
+  auto i = ib + nb*ie;
+
   while (i < length) {
     p2z_kernel(i);	   
 
-    if (grid_stride)  i += gridDim.x * blockDim.x; 
+    if (grid_stride)  i += (gridDim.x * blockDim.x)*(gridDim.y * blockDim.y); 
     else  break;
   }
 
@@ -704,11 +830,15 @@ __cuda_kernel__ void launch_p2z_cuda_kernel(const lambda_tp p2z_kernel, const in
 template <typename stream_tp, bool is_cuda_target>
 requires CudaCompute<is_cuda_target>
 void dispatch_p2z_kernels(auto&& p2z_kernel, stream_tp stream, const int ntrks_, const int nevnts_){
-
+	
   const int outer_loop_range = nevnts_*ntrks_;
 
-  dim3 blocks(threadsperblock, 1, 1);
-  dim3 grid(((outer_loop_range + threadsperblock - 1)/ threadsperblock),1,1);
+  const int blockx = threads_per_blockx;
+  const int blocky = threads_per_blocky;
+
+  dim3 blocks(blockx, blocky, 1);
+
+  dim3 grid(((ntrks_ + blockx - 1)/ blockx), ((nevnts_ + blocky - 1)/ blocky),1);
   //
   launch_p2z_cuda_kernel<<<grid, blocks, 0, stream>>>(p2z_kernel, outer_loop_range);
   //
@@ -760,14 +890,19 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
+   auto dev_id = p2z_get_compute_device_id<enable_cuda>();
+   auto streams= p2z_get_streams<enable_cuda>(nstreams);
+
+   std::vector<MPTRK> outtrcks(nevts*nb);
+   // migrate output object to dev memory:
+   p2z_prefetch<MPTRK, enable_cuda>(outtrcks, dev_id, streams[0]);
+
    std::vector<MPTRK> trcks(nevts*nb); 
    prepareTracks(trcks, inputtrk);
    //
    std::vector<MPHIT> hits(nlayer*nevts*nb);
    prepareHits(hits, inputhits);
    //
-   std::vector<MPTRK> outtrcks(nevts*nb);
-   
    auto p2z_kernels = [=,btracksPtr    = trcks.data(),
                          outtracksPtr  = outtrcks.data(),
                          bhitsPtr      = hits.data()] (const auto i) {
@@ -789,6 +924,8 @@ int main (int argc, char* argv[]) {
                          //
                          outtracksPtr[i].save(obtracks);
                        };
+   // synchronize to ensure data on the device:
+   p2z_wait<enable_cuda>();
  
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -799,19 +936,20 @@ int main (int argc, char* argv[]) {
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
 
-   auto dev_id = p2z_get_compute_device_id<enable_cuda>();
-   auto stream = p2z_get_stream<enable_cuda>();
+   //info<enable_cuda>(dev_id);
+
    // prefetch 
-   p2z_prefetch<MPTRK, enable_cuda>(trcks, dev_id, stream);
-   p2z_prefetch<MPHIT, enable_cuda>(hits,  dev_id, stream);
-   p2z_prefetch<MPTRK, enable_cuda>(outtrcks, dev_id, stream);
+   p2z_prefetch<MPTRK, enable_cuda>(trcks, dev_id, streams[0]);
+   p2z_prefetch<MPHIT, enable_cuda>(hits,  dev_id, streams[0]);
    //
    p2z_wait<enable_cuda>();
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    for(int itr=0; itr<NITER; itr++) {
-     dispatch_p2z_kernels<decltype(stream), enable_cuda>(p2z_kernels, stream, nb, nevts);
+     dispatch_p2z_kernels<decltype(streams[0]), enable_cuda>(p2z_kernels, streams[0], nb, nevts);
+     //
+     //p2z_prefetch<MPTRK, enable_cuda>(outtrcks, cudaCpuDeviceId, streams[0]);
      //
      p2z_wait<enable_cuda>();
    } //end of itr loop
