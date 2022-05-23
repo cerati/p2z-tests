@@ -262,8 +262,7 @@ void prepareHits(std::vector<MPHIT, MPHITAllocator> &hits, std::vector<AHIT>& in
   //
   const int elems = hits.size();
   //
-  std::vector<MPHIT, MPHITAllocator> h_hits(nlayer*nevts*nb);
-
+  std::vector<MPHIT, MPHITAllocator> h_hits(elems);
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
 
