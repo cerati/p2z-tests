@@ -201,9 +201,6 @@ struct MPHIT {
 
 };
 
-using MPTRKAllocator = std::allocator<MPTRK>;
-using MPHITAllocator = std::allocator<MPHIT>;
-
 ///////////////////////////////////////
 //Gen. utils
 
@@ -227,13 +224,11 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-
-template<typename MPTRKAllocator>
-void prepareTracks(std::vector<MPTRK, MPTRKAllocator> &trcks, ATRK &inputtrk) {
+void prepareTracks(std::vector<MPTRK> &trcks, ATRK &inputtrk) {
   //
   const int elems = trcks.size();
   //
-  std::vector<MPTRK, MPTRKAllocator> h_trcks(elems);
+  std::vector<MPTRK> h_trcks(elems);
   //
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -257,12 +252,11 @@ void prepareTracks(std::vector<MPTRK, MPTRKAllocator> &trcks, ATRK &inputtrk) {
   return;
 }
 
-template<typename MPHITAllocator>
-void prepareHits(std::vector<MPHIT, MPHITAllocator> &hits, std::vector<AHIT>& inputhits) {
+void prepareHits(std::vector<MPHIT> &hits, std::vector<AHIT>& inputhits) {
   //
   const int elems = hits.size();
   //
-  std::vector<MPHIT, MPHITAllocator> h_hits(elems);
+  std::vector<MPHIT> h_hits(elems);
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
 
@@ -678,19 +672,19 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    //~//
-   std::vector<MPTRK, MPTRKAllocator> trcks(nevts*nb);
-   prepareTracks<MPTRKAllocator>(trcks, inputtrk);
+   std::vector<MPTRK> trcks(nevts*nb);
+   prepareTracks(trcks, inputtrk);
    // 
-   std::vector<MPHIT, MPHITAllocator> hits(nlayer*nevts*nb);
-   prepareHits<MPHITAllocator>(hits, inputhits);
+   std::vector<MPHIT> hits(nlayer*nevts*nb);
+   prepareHits(hits, inputhits);
    //
-   std::vector<MPTRK, MPTRKAllocator> outtrcks(nevts*nb);
+   std::vector<MPTRK> outtrcks(nevts*nb);
    //
    auto policy = std::execution::par_unseq;
    //auto policy = std::execution::seq;
    {
      //
-     std::vector<MPTRK, MPTRKAllocator> h_outtrcks(nevts*nb);
+     std::vector<MPTRK> h_outtrcks(nevts*nb);
      //enforce data migration (not really needed IRL):
      std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
    }
