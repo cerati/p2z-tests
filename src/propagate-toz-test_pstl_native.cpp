@@ -45,6 +45,16 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #define nlayer 20
 #endif
 
+#if defined(__NVCOMPILER_CUDA__)
+#ifdef include_data
+constexpr bool include_data_transfer = true;
+#else
+constexpr bool include_data_transfer = false;
+#endif
+#else
+constexpr bool include_data_transfer = false;
+#endif
+
 namespace impl {
 
    template <typename IntType>
@@ -224,6 +234,7 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
+template<bool include_data_transfer = false>
 void prepareTracks(std::vector<MPTRK> &trcks, ATRK &inputtrk) {
   //
   const int elems = trcks.size();
@@ -247,11 +258,16 @@ void prepareTracks(std::vector<MPTRK> &trcks, ATRK &inputtrk) {
     }
   }
   //we need this step to migrate data on the device
-  std::copy(std::execution::par_unseq, h_trcks.begin(), h_trcks.end(), trcks.begin());
+  if constexpr (include_data_transfer == false) {
+    std::copy(std::execution::par_unseq, h_trcks.begin(), h_trcks.end(), trcks.begin());
+  } else {
+    std::copy(h_trcks.begin(), h_trcks.end(), trcks.begin());	  
+  }
   //
   return;
 }
 
+template<bool include_data_transfer = false>
 void prepareHits(std::vector<MPHIT> &hits, std::vector<AHIT>& inputhits) {
   //
   const int elems = hits.size();
@@ -283,7 +299,11 @@ void prepareHits(std::vector<MPHIT> &hits, std::vector<AHIT>& inputhits) {
     }
   }
   //we need this step to migrate data on the device
-  std::copy(std::execution::par_unseq, h_hits.begin(), h_hits.end(), hits.begin());
+  if constexpr (include_data_transfer == false) {
+    std::copy(std::execution::par_unseq, h_hits.begin(), h_hits.end(), hits.begin());
+  } else {//just do a regular copy
+    std::copy(h_hits.begin(), h_hits.end(), hits.begin());	  
+  }
 
   return;
 }
@@ -673,19 +693,25 @@ int main (int argc, char* argv[]) {
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    //~//
    std::vector<MPTRK> trcks(nevts*nb);
-   prepareTracks(trcks, inputtrk);
+   prepareTracks<include_data_transfer>(trcks, inputtrk);
    // 
    std::vector<MPHIT> hits(nlayer*nevts*nb);
-   prepareHits(hits, inputhits);
+   prepareHits<include_data_transfer>(hits, inputhits);
    //
    std::vector<MPTRK> outtrcks(nevts*nb);
    //
    auto policy = std::execution::par_unseq;
    //auto policy = std::execution::seq;
-   {
-     //
-     std::vector<MPTRK> h_outtrcks(nevts*nb);
-     //enforce data migration (not really needed IRL):
+
+   //create fake objects to emulate data transfers
+   std::vector<MPTRK> h_trcks(nevts*nb);
+   //
+   std::vector<MPTRK> h_outtrcks(nevts*nb);
+   //
+   std::vector<MPHIT> h_hits(nlayer*nevts*nb);
+   //
+   if constexpr (include_data_transfer == false){
+     //enforce data migration:
      std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
    }
 
@@ -722,19 +748,32 @@ int main (int argc, char* argv[]) {
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
 
-   auto wall_start = std::chrono::high_resolution_clock::now();
+   double wall_time = 0.0;
 
    for(int itr=0; itr<NITER; itr++) {
+     //
+     auto wall_start = std::chrono::high_resolution_clock::now();
+     //
      std::for_each(policy,
                    impl::counting_iterator(0),
                    impl::counting_iterator(outer_loop_range),
                    p2z_kernels);
+     //
+     auto wall_stop = std::chrono::high_resolution_clock::now();
+     //
+     auto wall_diff = wall_stop - wall_start;
+     //
+     wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+     //restore initial states:
+     if constexpr (include_data_transfer) {
+        std::copy(trcks.begin(), trcks.end(), h_trcks.begin());
+        //
+        std::copy(outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
+        //
+        std::copy(hits.begin(), hits.end(), h_hits.begin());
+     }
+
    } //end of itr loop
-
-   auto wall_stop = std::chrono::high_resolution_clock::now();
-
-   auto wall_diff = wall_stop - wall_start;
-   auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;   
 
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));

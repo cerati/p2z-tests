@@ -57,14 +57,20 @@ nvc++ -O2 -std=c++20 --gcc-toolchain=path-to-gnu-compiler -stdpar=multicore ./sr
 #define num_streams 1
 #endif
 
-#ifndef threadsperblock
-#define threadsperblock 32
+#ifndef threadsperblockx
+#define threadsperblockx 16
+#endif
+
+#ifndef threadsperblocky
+#define threadsperblocky 2
 #endif
 
 #ifdef __NVCOMPILER_CUDA__
 #include <nv/target>
 #define __cuda_kernel__ __global__
 constexpr bool is_cuda_kernel = true;
+static int threads_per_blockx = threadsperblockx;
+static int threads_per_blocky = threadsperblocky;
 #else
 #define __cuda_kernel__
 constexpr bool is_cuda_kernel = false;
@@ -844,12 +850,15 @@ template <typename lambda_tp, bool grid_stride = false>
 requires (is_cuda_kernel == true)
 __cuda_kernel__ void launch_p2z_cuda_kernels(const lambda_tp p2z_kernel, const int length){
 
-  auto i = threadIdx.x + blockIdx.x * blockDim.x;
+  auto ib = threadIdx.x + blockIdx.x * blockDim.x;
+  auto ie = threadIdx.y + blockIdx.y * blockDim.y;
+
+  auto i = ib + nb*ie;	
    
   while (i < length) {
     p2z_kernel(i);	   
 
-    if (grid_stride)  i += gridDim.x * blockDim.x; 
+    if constexpr (grid_stride) { i += (gridDim.x * blockDim.x)*(gridDim.y * blockDim.y);}
     else  break;
   }
 
@@ -860,12 +869,15 @@ __cuda_kernel__ void launch_p2z_cuda_kernels(const lambda_tp p2z_kernel, const i
 template <bool cuda_compute>
 requires cuda_concept<cuda_compute>
 void dispatch_p2z_kernels(auto&& p2z_kernel, const int ntrks_, const int nevnts_){
-
+  //
   const int outer_loop_range = nevnts_*ntrks_;
 
-  dim3 blocks(threadsperblock, 1, 1);
-  dim3 grid(((outer_loop_range + threadsperblock - 1)/ threadsperblock),1,1);
-  //
+  const int blockx = threads_per_blockx;
+  const int blocky = threads_per_blocky;
+
+  dim3 blocks(blockx, blocky, 1);
+  dim3 grid(((ntrks_ + blockx - 1)/ blockx), ((nevnts_ + blocky - 1)/ blocky),1);
+
   launch_p2z_cuda_kernels<<<grid, blocks>>>(p2z_kernel, outer_loop_range);
   //
   cudaDeviceSynchronize();

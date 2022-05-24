@@ -70,18 +70,18 @@ constexpr bool enable_cuda         = true;
 //
 static int threads_per_blockx = threadsperblockx;
 static int threads_per_blocky = threadsperblocky;
+#else
+#define __cuda_kernel__
+constexpr bool enable_cuda         = false;
+#endif
+
+constexpr int host_id = -1; /*cudaCpuDeviceId*/
+
 #ifdef include_data
 constexpr bool include_data_transfer = true;
 #else
 constexpr bool include_data_transfer = false;
 #endif
-#else
-#define __cuda_kernel__
-constexpr bool enable_cuda           = false;
-constexpr bool include_data_transfer = false;
-#endif
-
-constexpr int host_id = -1; /*cudaCpuDeviceId*/
 
 static int nstreams           = num_streams;//we have only one stream, though
 
@@ -92,7 +92,7 @@ concept CudaCompute = is_cuda_target == true;
 //General helper routines:
 template <bool is_cuda_target>
 requires CudaCompute<is_cuda_target>
-inline void p2z_check_error(){
+void p2z_check_error(){
   //	
   auto error = cudaGetLastError();
   if(error != cudaSuccess) std::cout << "Error detected, error " << error << std::endl;
@@ -101,13 +101,13 @@ inline void p2z_check_error(){
 }
 
 template <bool is_cuda_target>
-inline void p2z_check_error(){
+void p2z_check_error(){
   return;
 }
 
 template <bool is_cuda_target>
 requires CudaCompute<is_cuda_target>
-inline int p2z_get_compute_device_id(){
+int p2z_get_compute_device_id(){
   int dev = -1;
   cudaGetDevice(&dev);
   cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
@@ -116,13 +116,13 @@ inline int p2z_get_compute_device_id(){
 
 //default version:
 template <bool is_cuda_target>
-inline int p2z_get_compute_device_id(){
+int p2z_get_compute_device_id(){
   return 0;
 }
 
 template <bool is_cuda_target>
 requires CudaCompute<is_cuda_target>
-inline void p2z_set_compute_device(const int dev){
+void p2z_set_compute_device(const int dev){
   cudaSetDevice(dev);
   cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
   return;
@@ -130,13 +130,13 @@ inline void p2z_set_compute_device(const int dev){
 
 //default version:
 template <bool is_cuda_target>
-inline void p2z_set_compute_device(const int dev){
+void p2z_set_compute_device(const int dev){
   return;
 }
 
 template <bool is_cuda_target>
 requires CudaCompute<is_cuda_target>
-inline decltype(auto) p2z_get_streams(const int n){
+decltype(auto) p2z_get_streams(const int n){
   std::vector<cudaStream_t> streams;
   streams.reserve(n);
   for (int i = 0; i < n; i++) {  
@@ -148,7 +148,7 @@ inline decltype(auto) p2z_get_streams(const int n){
 }
 
 template <bool is_cuda_target>
-inline decltype(auto) p2z_get_streams(const int n){
+decltype(auto) p2z_get_streams(const int n){
   if(n > 1) std::cout << "Number of compute streams is not supported : " << n << std::endl; 
   std::vector<int> streams = {0};
   return streams;

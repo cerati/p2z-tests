@@ -921,10 +921,8 @@ __global__ void launch_p2z_kernels(MPTRKAccessor<order> &obtracksAcc, MPTRKAcces
      //
      obtracksAcc.save(obtracks, i);
      
-     if (grid_stride)
-       i += gridDim.x * blockDim.x;
-     else
-       break;
+     if constexpr (grid_stride) i += gridDim.x * blockDim.x;
+     else break;
   }
   return;
 }

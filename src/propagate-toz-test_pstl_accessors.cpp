@@ -160,12 +160,7 @@ struct MPHIT_ {
   MP3x3SF_ cov;
 };
 
-using IntAllocator   = std::allocator<int>;
-using FloatAllocator = std::allocator<float>;
-using MPTRKAllocator = std::allocator<MPTRK_>;
-using MPHITAllocator = std::allocator<MPHIT_>;
-
-template <typename T, typename Allocator, int n, int bSize>
+template <typename T, int n, int bSize>
 struct MPNX {
    using DataType = T;
 
@@ -176,7 +171,7 @@ struct MPNX {
    const int nEvts;
    const int nLayers;
 
-   std::vector<T, Allocator> data;
+   std::vector<T> data;
 
    MPNX() : nTrks(bSize), nEvts(0), nLayers(0), data(n*bSize){}
 
@@ -187,7 +182,7 @@ struct MPNX {
       data(n*nTrks*nEvts*nLayers){
    }
 
-   MPNX(const std::vector<T, Allocator> data_, const int ntrks_, const int nevts_, const int nlayers_ = 1) :
+   MPNX(const std::vector<T> data_, const int ntrks_, const int nevts_, const int nlayers_ = 1) :
       nTrks(ntrks_),
       nEvts(nevts_),
       nLayers(nlayers_),
@@ -196,17 +191,17 @@ struct MPNX {
    }
 };
 
-using MP1I    = MPNX<int,  IntAllocator,   1 , bsize>;
-using MP1F    = MPNX<float,FloatAllocator, 1 , bsize>;
-using MP2F    = MPNX<float,FloatAllocator, 2 , bsize>;
-using MP3F    = MPNX<float,FloatAllocator, 3 , bsize>;
-using MP6F    = MPNX<float,FloatAllocator, 6 , bsize>;
-using MP3x3   = MPNX<float,FloatAllocator, 9 , bsize>;
-using MP3x6   = MPNX<float,FloatAllocator, 18, bsize>;
-using MP2x2SF = MPNX<float,FloatAllocator, 3 , bsize>;
-using MP3x3SF = MPNX<float,FloatAllocator, 6 , bsize>;
-using MP6x6SF = MPNX<float,FloatAllocator, 21, bsize>;
-using MP6x6F  = MPNX<float,FloatAllocator, 36, bsize>;
+using MP1I    = MPNX<int,   1 , bsize>;
+using MP1F    = MPNX<float, 1 , bsize>;
+using MP2F    = MPNX<float, 2 , bsize>;
+using MP3F    = MPNX<float, 3 , bsize>;
+using MP6F    = MPNX<float, 6 , bsize>;
+using MP3x3   = MPNX<float, 9 , bsize>;
+using MP3x6   = MPNX<float, 18, bsize>;
+using MP2x2SF = MPNX<float, 3 , bsize>;
+using MP3x3SF = MPNX<float, 6 , bsize>;
+using MP6x6SF = MPNX<float, 21, bsize>;
+using MP6x6F  = MPNX<float, 36, bsize>;
 
 
 template <typename MPNTp, FieldOrder Order = FieldOrder::P2Z_MATIDX_LAYER_TRACKBLK_EVENT_ORDER>
@@ -364,8 +359,8 @@ struct MPHITAccessor {
 };
 
 
-template<typename policy_tp, FieldOrder order, typename MPTRKAllocator, ConversionType convers_tp>
-void convertTracks(policy_tp &policy, std::vector<MPTRK_, MPTRKAllocator> &external_order_data, MPTRK* internal_order_data) {
+template<typename policy_tp, FieldOrder order, ConversionType convers_tp>
+void convertTracks(policy_tp &policy, std::vector<MPTRK_> &external_order_data, MPTRK* internal_order_data) {
   //create an accessor field:
   std::unique_ptr<MPTRKAccessor<order>> ind(new MPTRKAccessor<order>(*internal_order_data));
   // store in element order for bunches of bsize matrices (a la matriplex)
@@ -402,8 +397,8 @@ void convertTracks(policy_tp &policy, std::vector<MPTRK_, MPTRKAllocator> &exter
 }
 
 
-template<typename policy_tp, FieldOrder order, typename MPHITAllocator, ConversionType convers_tp>
-void convertHits(policy_tp &policy, std::vector<MPHIT_, MPHITAllocator> &external_order_data, MPHIT* internal_oder_data) {
+template<typename policy_tp, FieldOrder order, ConversionType convers_tp>
+void convertHits(policy_tp &policy, std::vector<MPHIT_> &external_order_data, MPHIT* internal_oder_data) {
   //create an accessor field:
   std::unique_ptr<MPHITAccessor<order>> ind(new MPHITAccessor<order>(*internal_oder_data));
   // store in element order for bunches of bsize matrices (a la matriplex)
@@ -460,9 +455,7 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-
-template<typename MPTRKAllocator>
-void prepareTracks(std::vector<MPTRK_, MPTRKAllocator> &trcks, ATRK &inputtrk) {
+void prepareTracks(std::vector<MPTRK_> &trcks, ATRK &inputtrk) {
   //
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -484,8 +477,7 @@ void prepareTracks(std::vector<MPTRK_, MPTRKAllocator> &trcks, ATRK &inputtrk) {
   return;
 }
 
-template<typename MPHITAllocator>
-void prepareHits(std::vector<MPHIT_, MPHITAllocator> &hits, std::vector<AHIT>& inputhits) {
+void prepareHits(std::vector<MPHIT_> &hits, std::vector<AHIT>& inputhits) {
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
 
@@ -915,20 +907,20 @@ int main (int argc, char* argv[]) {
    std::unique_ptr<MPTRK> outtrcksPtr(new MPTRK(ntrks, nevts));
    std::unique_ptr<MPTRKAccessorTp> outtrcksAccPtr(new MPTRKAccessorTp(*outtrcksPtr));
    //
-   std::vector<MPTRK_, MPTRKAllocator> trcks(nevts*nb); 
-   prepareTracks<MPTRKAllocator>(trcks, inputtrk);
+   std::vector<MPTRK_> trcks(nevts*nb); 
+   prepareTracks(trcks, inputtrk);
    //
-   std::vector<MPHIT_, MPHITAllocator> hits(nlayer*nevts*nb);
-   prepareHits<MPHITAllocator>(hits, inputhits);
+   std::vector<MPHIT_> hits(nlayer*nevts*nb);
+   prepareHits(hits, inputhits);
    //
-   std::vector<MPTRK_, MPTRKAllocator> outtrcks(nevts*nb);
+   std::vector<MPTRK_> outtrcks(nevts*nb);
    
    auto policy = std::execution::par_unseq;
    //auto policy = std::execution::seq;
    
-   convertHits<decltype(policy)  , order, MPHITAllocator, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(policy, hits,     hitsPtr.get());
-   convertTracks<decltype(policy), order, MPTRKAllocator, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(policy, trcks,    trcksPtr.get());
-   convertTracks<decltype(policy), order, MPTRKAllocator, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(policy, outtrcks, outtrcksPtr.get());
+   convertHits<decltype(policy)  , order, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(policy, hits,     hitsPtr.get());
+   convertTracks<decltype(policy), order, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(policy, trcks,    trcksPtr.get());
+   convertTracks<decltype(policy), order, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(policy, outtrcks, outtrcksPtr.get());
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -980,7 +972,7 @@ int main (int argc, char* argv[]) {
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, -1);
 
-   convertTracks<decltype(policy), order, MPTRKAllocator, ConversionType::P2Z_CONVERT_FROM_INTERNAL_ORDER>(policy, outtrcks, outtrcksPtr.get());
+   convertTracks<decltype(policy), order, ConversionType::P2Z_CONVERT_FROM_INTERNAL_ORDER>(policy, outtrcks, outtrcksPtr.get());
    auto outtrk = outtrcks.data();
 
    int nnans = 0, nfail = 0;

@@ -49,6 +49,16 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #define threadsperblock 32
 #endif
 
+#ifdef include_data
+constexpr bool include_data_transfer = true;
+#else
+constexpr bool include_data_transfer = false;
+#endif
+
+static int nstreams  = num_streams;//we have only one stream, though
+
+constexpr int host_id = -1; /*cudaCpuDeviceId*/
+
 namespace impl {
 
   /**
@@ -156,6 +166,47 @@ namespace impl {
    };
 
 } //impl
+
+//Collection of API functions:
+int p2z_get_compute_device_id(){
+  int dev = -1;
+  cudaGetDevice(&dev);
+  cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
+  return dev;
+}
+
+void p2z_check_error(){
+  //
+  auto error = cudaGetLastError();
+  if(error != cudaSuccess) std::cout << "Error detected, error " << error << std::endl;
+  //
+  return;
+}
+
+decltype(auto) p2z_get_streams(const int n){
+  std::vector<cudaStream_t> streams;
+  streams.reserve(n);
+  for (int i = 0; i < n; i++) {
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    streams.push_back(stream);
+  }
+  return streams;
+}
+
+template <typename data_tp, typename Allocator, typename stream_t, bool is_sync = false>
+void p2z_prefetch(std::vector<data_tp, Allocator> &v, int devId, stream_t stream) {
+  cudaMemPrefetchAsync(v.data(), v.size() * sizeof(data_tp), devId, stream);
+  //
+  if constexpr (is_sync) {cudaStreamSynchronize(stream);}
+
+  return;
+}
+
+void p2z_wait() {
+  cudaDeviceSynchronize();
+  return;
+}
 
 const std::array<int, 36> SymOffsets66{0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
 
@@ -734,14 +785,30 @@ int main (int argc, char* argv[]) {
    long setup_start, setup_stop;
    struct timeval timecheck;
 
+   auto dev_id = p2z_get_compute_device_id();
+   auto streams= p2z_get_streams(nstreams);
+
+   auto stream = streams[0];//with UVM, we use only one compute stream    
+   //
+   std::vector<MPTRK_, MPTRKAllocator> outtrcks(nevts*ntrks);
+   // migrate output object to dev memory:
+   p2z_prefetch<MPTRK_, MPTRKAllocator>(outtrcks, dev_id, stream);
+
    std::vector<MPTRK_, MPTRKAllocator > trcks(nevts*ntrks); 
    prepareTracks<MPTRKAllocator>(trcks, inputtrk);
    //
    std::vector<MPHIT_, MPHITAllocator> hits(nlayer*nevts*ntrks);
    prepareHits<MPHITAllocator>(hits, inputhits);
    //
-   std::vector<MPTRK_, MPTRKAllocator> outtrcks(nevts*ntrks);
-   
+   //
+   if constexpr (include_data_transfer == false) {
+     p2z_prefetch<MPTRK_, MPTRKAllocator>(trcks, dev_id, stream);
+     p2z_prefetch<MPHIT_, MPHITAllocator>(hits,  dev_id, stream);
+   }
+
+   // synchronize to ensure that all needed data is on the device:
+   //p2z_wait();
+
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
@@ -756,25 +823,39 @@ int main (int argc, char* argv[]) {
    //
    dim3 blocks(threadsperblock, 1, 1);
    dim3 grid(((outer_loop_range + threadsperblock - 1)/ threadsperblock),1,1);
-   // A warmup run to migrate data on the device
-   launch_p2z_kernels<<<grid, blocks>>>(outtrcks.data(), trcks.data(), hits.data(), phys_length);
 
-   cudaDeviceSynchronize();
-
-   auto wall_start = std::chrono::high_resolution_clock::now();
+   double wall_time = 0.0;
 
    for(int itr=0; itr<NITER; itr++) {
+     auto wall_start = std::chrono::high_resolution_clock::now();
+     //
+     if constexpr (include_data_transfer) {
+       p2z_prefetch<MPTRK_, MPTRKAllocator>(trcks, dev_id, stream);
+       p2z_prefetch<MPHIT_, MPHITAllocator>(hits,  dev_id, stream);
+     }
 
-     launch_p2z_kernels<<<grid, blocks>>>(outtrcks.data(), trcks.data(), hits.data(), phys_length);
+     launch_p2z_kernels<<<grid, blocks, 0, stream>>>(outtrcks.data(), trcks.data(), hits.data(), phys_length);
 
+     if constexpr (include_data_transfer) {
+       p2z_prefetch<MPTRK_, MPTRKAllocator>(outtrcks, host_id, stream);
+     }
+     //
+     p2z_wait();
+     //
+     auto wall_stop = std::chrono::high_resolution_clock::now();
+     //
+     auto wall_diff = wall_stop - wall_start;
+     //
+     wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+     // reset initial states (don't need if we won't measure data migrations):
+     if constexpr (include_data_transfer) {
+
+       p2z_prefetch<MPTRK_, MPTRKAllocator>(trcks, host_id, stream);
+       p2z_prefetch<MPHIT_, MPHITAllocator>(hits,  host_id, stream);
+       //
+       p2z_prefetch<MPTRK_, MPTRKAllocator, decltype(stream), true>(outtrcks, dev_id, stream);
+     }
    } //end of itr loop
-
-   cudaDeviceSynchronize();
-
-   auto wall_stop = std::chrono::high_resolution_clock::now();
-
-   auto wall_diff = wall_stop - wall_start;
-   auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;   
 
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
