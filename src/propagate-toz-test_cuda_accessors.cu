@@ -405,8 +405,8 @@ struct MPHITAccessor {
 };
 
 
-template<FieldOrder order, typename MPTRKAllocator, ConversionType convers_tp>
-void convertTracks(std::vector<MPTRK_, MPTRKAllocator> &external_order_data, MPTRK* internal_order_data) {
+template<FieldOrder order, ConversionType convers_tp>
+void convertTracks(std::vector<MPTRK_> &external_order_data, MPTRK* internal_order_data) {
   //create an accessor field:
   std::unique_ptr<MPTRKAccessor<order>> ind(new MPTRKAccessor<order>(*internal_order_data));
   // store in element order for bunches of bsize matrices (a la matriplex)
@@ -443,8 +443,8 @@ void convertTracks(std::vector<MPTRK_, MPTRKAllocator> &external_order_data, MPT
 }
 
 
-template<FieldOrder order, typename MPHITAllocator, ConversionType convers_tp>
-void convertHits(std::vector<MPHIT_, MPHITAllocator> &external_order_data, MPHIT* internal_oder_data) {
+template<FieldOrder order, ConversionType convers_tp>
+void convertHits(std::vector<MPHIT_> &external_order_data, MPHIT* internal_oder_data) {
   //create an accessor field:
   std::unique_ptr<MPHITAccessor<order>> ind(new MPHITAccessor<order>(*internal_oder_data));
   // store in element order for bunches of bsize matrices (a la matriplex)
@@ -501,8 +501,7 @@ float randn(float mu, float sigma) {
 }
 
 
-template<typename MPTRKAllocator>
-void prepareTracks(std::vector<MPTRK_, MPTRKAllocator> &trcks, ATRK &inputtrk) {
+void prepareTracks(std::vector<MPTRK_> &trcks, ATRK &inputtrk) {
   //
   for (int ie=0;ie<nevts;++ie) {
     for (int ib=0;ib<ntrks;++ib) {
@@ -524,8 +523,7 @@ void prepareTracks(std::vector<MPTRK_, MPTRKAllocator> &trcks, ATRK &inputtrk) {
   return;
 }
 
-template<typename MPHITAllocator>
-void prepareHits(std::vector<MPHIT_, MPHITAllocator> &hits, std::vector<AHIT>& inputhits) {
+void prepareHits(std::vector<MPHIT_> &hits, std::vector<AHIT>& inputhits) {
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (int lay=0;lay<nlayer;++lay) {
 
@@ -927,6 +925,14 @@ __global__ void launch_p2z_kernels(MPTRKAccessor<order> &obtracksAcc, MPTRKAcces
   return;
 }
 
+void p2z_check_error(){
+  //	
+  auto error = cudaGetLastError();
+  if(error != cudaSuccess) std::cout << "Error detected, error " << error << std::endl;
+  //
+  return;
+}
+
 
 int main (int argc, char* argv[]) {
 
@@ -972,22 +978,31 @@ int main (int argc, char* argv[]) {
    std::unique_ptr<MPTRK> outtrcksPtr(new MPTRK(ntrks, nevts));
    auto outtrcksAccPtr = std::allocate_shared<MPTRKAccessorTp>(mptrk_uvm_alloc, *outtrcksPtr);
    //
-   using hostmptrk_allocator = std::allocator<MPTRK_>;
-   using hostmphit_allocator = std::allocator<MPHIT_>;
-
-   std::vector<MPTRK_, hostmptrk_allocator > trcks(nevts*ntrks); 
-   prepareTracks<hostmptrk_allocator>(trcks, inputtrk);
+   std::vector<MPTRK_> trcks(nevts*ntrks); 
+   prepareTracks(trcks, inputtrk);
    //
-   std::vector<MPHIT_, hostmphit_allocator> hits(nlayer*nevts*ntrks);
-   prepareHits<hostmphit_allocator>(hits, inputhits);
+   std::vector<MPHIT_> hits(nlayer*nevts*ntrks);
+   prepareHits(hits, inputhits);
    //
-   std::vector<MPTRK_, hostmptrk_allocator> outtrcks(nevts*ntrks);
+   std::vector<MPTRK_> outtrcks(nevts*ntrks);
    
-   convertHits<order, hostmphit_allocator, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(hits,     hitsPtr.get());
-   convertTracks<order, hostmptrk_allocator, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(trcks,    trcksPtr.get());
-   convertTracks<order, hostmptrk_allocator, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(outtrcks, outtrcksPtr.get());
-
+   convertHits<order,   ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(hits,     hitsPtr.get());
+   convertTracks<order, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(trcks,    trcksPtr.get());
+   convertTracks<order, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(outtrcks, outtrcksPtr.get());
+   
+   int devId = -1;
+   //
+   cudaGetDevice(&devId);
+   cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
+   //
+   //migrate data on the device
+   cudaMemPrefetchAsync(trcksPtr.get(),    nevts*ntrks * sizeof(MPTRK), devId, 0);
+   cudaMemPrefetchAsync(outtrcksPtr.get(), nevts*ntrks * sizeof(MPTRK), devId, 0);
+   cudaMemPrefetchAsync(hitsPtr.get(),     nlayer*nevts*ntrks * sizeof(MPHIT), devId, 0);
+   //
    cudaDeviceSynchronize();
+   
+   p2z_check_error();
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -1003,10 +1018,6 @@ int main (int argc, char* argv[]) {
    //
    dim3 blocks(threadsperblock, 1, 1);
    dim3 grid(((outer_loop_range + threadsperblock - 1)/ threadsperblock),1,1);
-   // A warmup run to migrate data on the device
-   launch_p2z_kernels<<<grid, blocks>>>(*outtrcksAccPtr, *trcksAccPtr, *hitsAccPtr, phys_length);
-
-   cudaDeviceSynchronize();
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
@@ -1017,6 +1028,7 @@ int main (int argc, char* argv[]) {
    } //end of itr loop
 
    cudaDeviceSynchronize();
+   p2z_check_error();
 
    auto wall_stop = std::chrono::high_resolution_clock::now();
 
@@ -1027,7 +1039,7 @@ int main (int argc, char* argv[]) {
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, 1, ntrks, wall_time, (setup_stop-setup_start)*0.001, -1);
 
-   convertTracks<order, hostmptrk_allocator, ConversionType::P2Z_CONVERT_FROM_INTERNAL_ORDER>(outtrcks, outtrcksPtr.get());
+   convertTracks<order, ConversionType::P2Z_CONVERT_FROM_INTERNAL_ORDER>(outtrcks, outtrcksPtr.get());
    auto outtrk = outtrcks.data();
 
    int nnans = 0, nfail = 0;
