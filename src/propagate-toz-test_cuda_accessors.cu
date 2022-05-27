@@ -444,9 +444,9 @@ void convertTracks(std::vector<MPTRK_> &external_order_data, MPTRK* internal_ord
 
 
 template<FieldOrder order, ConversionType convers_tp>
-void convertHits(std::vector<MPHIT_> &external_order_data, MPHIT* internal_oder_data) {
+void convertHits(std::vector<MPHIT_> &external_order_data, MPHIT* internal_order_data) {
   //create an accessor field:
-  std::unique_ptr<MPHITAccessor<order>> ind(new MPHITAccessor<order>(*internal_oder_data));
+  std::unique_ptr<MPHITAccessor<order>> ind(new MPHITAccessor<order>(*internal_order_data));
   // store in element order for bunches of bsize matrices (a la matriplex)
   const int outer_loop_range = nevts*ntrks;
   
@@ -989,20 +989,6 @@ int main (int argc, char* argv[]) {
    convertHits<order,   ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(hits,     hitsPtr.get());
    convertTracks<order, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(trcks,    trcksPtr.get());
    convertTracks<order, ConversionType::P2Z_CONVERT_TO_INTERNAL_ORDER>(outtrcks, outtrcksPtr.get());
-   
-   int devId = -1;
-   //
-   cudaGetDevice(&devId);
-   cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
-   //
-   //migrate data on the device
-   cudaMemPrefetchAsync(trcksPtr.get(),    nevts*ntrks * sizeof(MPTRK), devId, 0);
-   cudaMemPrefetchAsync(outtrcksPtr.get(), nevts*ntrks * sizeof(MPTRK), devId, 0);
-   cudaMemPrefetchAsync(hitsPtr.get(),     nlayer*nevts*ntrks * sizeof(MPHIT), devId, 0);
-   //
-   cudaDeviceSynchronize();
-   
-   p2z_check_error();
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -1018,6 +1004,12 @@ int main (int argc, char* argv[]) {
    //
    dim3 blocks(threadsperblock, 1, 1);
    dim3 grid(((outer_loop_range + threadsperblock - 1)/ threadsperblock),1,1);
+   // A warmup run to migrate data on the device
+   launch_p2z_kernels<<<grid, blocks>>>(*outtrcksAccPtr, *trcksAccPtr, *hitsAccPtr, phys_length);
+
+   cudaDeviceSynchronize();
+
+   p2z_check_error();
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
