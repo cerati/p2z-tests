@@ -758,6 +758,9 @@ int main (int argc, char* argv[]) {
                    impl::counting_iterator(0),
                    impl::counting_iterator(outer_loop_range),
                    p2z_kernels);
+     if constexpr (include_data_transfer) {
+        std::copy(outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
+     }
      //
      auto wall_stop = std::chrono::high_resolution_clock::now();
      //
@@ -768,9 +771,9 @@ int main (int argc, char* argv[]) {
      if constexpr (include_data_transfer) {
         std::copy(trcks.begin(), trcks.end(), h_trcks.begin());
         //
-        std::copy(outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
-        //
         std::copy(hits.begin(), hits.end(), h_hits.begin());
+	//
+        std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
      }
 
    } //end of itr loop
