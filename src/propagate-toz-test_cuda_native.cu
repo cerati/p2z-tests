@@ -752,10 +752,8 @@ __global__ void launch_p2z_kernels(MPTRK_ *obtracks_, MPTRK_ *btracks_, MPHIT_ *
      //
      obtracks_[i].save(obtracks);
      
-     if (grid_stride)
-       i += gridDim.x * blockDim.x;
-     else
-       break;
+     if constexpr (grid_stride) i += gridDim.x * blockDim.x;
+     else break;
   }
   return;
 }
@@ -807,7 +805,7 @@ int main (int argc, char* argv[]) {
    }
 
    // synchronize to ensure that all needed data is on the device:
-   //p2z_wait();
+   p2z_wait();
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
