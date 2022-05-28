@@ -10,6 +10,7 @@ dpcpp -std=c++17 -O2 src/propagate-tor-test_dpl.cpp -o test-dpl.exe -Dntrks=8192
 #include <oneapi/dpl/execution>
 #include <oneapi/dpl/iterator>
 #include <oneapi/dpl/random>
+#include <oneapi/dpl/async>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -627,25 +628,26 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    //
-   //create fake objects to emulate data transfers
+   //create fake object to emulate data transfers
    std::vector<MPTRK, decltype(MPTRKAllocator)> h_outtrcks(nevts*nb, MPTRKAllocator);
    //
+   std::vector<MPTRK, decltype(MPTRKAllocator)> outtrcks(nevts*nb, MPTRKAllocator);
+   //
+   auto policy = oneapi::dpl::execution::make_device_policy(cq);
+   //enforce data migration
+   oneapi::dpl::experimental::copy_async(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
+ 
+   //create fake object to emulate data transfers
    std::vector<MPTRK, decltype(MPTRKAllocator)> h_trcks(nevts*nb, MPTRKAllocator); 
    prepareTracks<decltype(MPTRKAllocator)>(h_trcks, inputtrk);
    //
    std::vector<MPHIT, decltype(MPHITAllocator)> h_hits(nlayer*nevts*nb, MPHITAllocator);
    prepareHits<decltype(MPHITAllocator)>(h_hits, inputhits);
-   //
-   std::vector<MPTRK, decltype(MPTRKAllocator)> outtrcks(nevts*nb, MPTRKAllocator);
    
    std::vector<MPTRK, decltype(MPTRKAllocator)> trcks(nevts*nb, MPTRKAllocator);
    //
    std::vector<MPHIT, decltype(MPHITAllocator)> hits(nlayer*nevts*nb, MPHITAllocator);
-   //
-   auto policy = oneapi::dpl::execution::make_device_policy(cq);
-   //enforce data migration
-   std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
-   
+   //  
    if constexpr (include_data_transfer == false){
      //enforce data migration:
      std::copy(policy, h_trcks.begin(), h_trcks.end(), trcks.begin());
@@ -674,8 +676,8 @@ int main (int argc, char* argv[]) {
                          //
                          outtracksPtr[i].save(obtracks);
                        };
-
-   const int outer_loop_range = nevts*nb;
+   
+   cq.wait();
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -686,20 +688,24 @@ int main (int argc, char* argv[]) {
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
    
+   const int outer_loop_range = nevts*nb;
+   
    double wall_time = 0.0;
 
    for(int itr=0; itr<NITER; itr++) {
      //
      auto wall_start = std::chrono::high_resolution_clock::now();
      //
-     std::for_each(policy,
-                   counting_iterator(0),
-                   counting_iterator(outer_loop_range),
-                   p2z_kernels);
+     oneapi::dpl::experimental::for_each_async(policy,
+                                               counting_iterator(0),
+                                               counting_iterator(outer_loop_range),
+                                               p2z_kernels);
      //
      if constexpr (include_data_transfer) {
         std::copy(outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
      }
+     //
+     cq.wait();
      //
      auto wall_stop = std::chrono::high_resolution_clock::now();
      //

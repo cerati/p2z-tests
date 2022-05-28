@@ -234,45 +234,29 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-template<bool include_data_transfer = false>
 void prepareTracks(std::vector<MPTRK> &trcks, ATRK &inputtrk) {
-  //
-  const int elems = trcks.size();
-  //
-  std::vector<MPTRK> h_trcks(elems);
   //
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
 	      //par
 	      for (size_t ip=0;ip<6;++ip) {
-	        h_trcks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+	        trcks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
 	      }
 	      //cov, scale by factor 100
 	      for (size_t ip=0;ip<21;++ip) {
-	        h_trcks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip]*100;
+	        trcks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip]*100;
 	      }
 	      //q
-	      h_trcks[ib + nb*ie].q.data[it] = inputtrk.q;//can't really smear this or fit will be wrong
+	      trcks[ib + nb*ie].q.data[it] = inputtrk.q;//can't really smear this or fit will be wrong
       }
     }
-  }
-  //we need this step to migrate data on the device
-  if constexpr (include_data_transfer == false) {
-    std::copy(std::execution::par_unseq, h_trcks.begin(), h_trcks.end(), trcks.begin());
-  } else {
-    std::copy(h_trcks.begin(), h_trcks.end(), trcks.begin());	  
   }
   //
   return;
 }
 
-template<bool include_data_transfer = false>
 void prepareHits(std::vector<MPHIT> &hits, std::vector<AHIT>& inputhits) {
-  //
-  const int elems = hits.size();
-  //
-  std::vector<MPHIT> h_hits(elems);
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
 
@@ -288,21 +272,15 @@ void prepareHits(std::vector<MPHIT> &hits, std::vector<AHIT>& inputhits) {
         for (size_t it=0;it<bsize;++it) {
         	//pos
         	for (size_t ip=0;ip<3;++ip) {
-        	  h_hits[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+        	  hits[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
         	}
         	//cov
         	for (size_t ip=0;ip<6;++ip) {
-        	  h_hits[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+        	  hits[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
         	}
         }
       }
     }
-  }
-  //we need this step to migrate data on the device
-  if constexpr (include_data_transfer == false) {
-    std::copy(std::execution::par_unseq, h_hits.begin(), h_hits.end(), hits.begin());
-  } else {//just do a regular copy
-    std::copy(h_hits.begin(), h_hits.end(), hits.begin());	  
   }
 
   return;
@@ -691,28 +669,30 @@ int main (int argc, char* argv[]) {
    //
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-   //~//
-   std::vector<MPTRK> trcks(nevts*nb);
-   prepareTracks<include_data_transfer>(trcks, inputtrk);
+   //~//create fake objects to emulate data transfers
+   std::vector<MPTRK> h_outtrcks(nevts*nb);
+   //
+   std::vector<MPTRK> h_trcks(nevts*nb);
+   prepareTracks(h_trcks, inputtrk);
    // 
-   std::vector<MPHIT> hits(nlayer*nevts*nb);
-   prepareHits<include_data_transfer>(hits, inputhits);
+   std::vector<MPHIT> h_hits(nlayer*nevts*nb);
+   prepareHits(h_hits, inputhits);
    //
    std::vector<MPTRK> outtrcks(nevts*nb);
    //
+   std::vector<MPTRK> trcks(nevts*nb);
+   //
+   std::vector<MPHIT> hits(nlayer*nevts*nb);
+   //
+   //
    auto policy = std::execution::par_unseq;
-   //auto policy = std::execution::seq;
-
-   //create fake objects to emulate data transfers
-   std::vector<MPTRK> h_trcks(nevts*nb);
-   //
-   std::vector<MPTRK> h_outtrcks(nevts*nb);
-   //
-   std::vector<MPHIT> h_hits(nlayer*nevts*nb);
-   //
+   //enforce data migration:
+   std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
+   
    if constexpr (include_data_transfer == false){
      //enforce data migration:
-     std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
+     std::copy(policy, h_trcks.begin(), h_trcks.end(), trcks.begin());
+     std::copy(policy, h_hits.begin(), h_hits.end(), hits.begin());
    }
 
    auto p2z_kernels = [=,btracksPtr    = trcks.data(),
@@ -758,6 +738,7 @@ int main (int argc, char* argv[]) {
                    impl::counting_iterator(0),
                    impl::counting_iterator(outer_loop_range),
                    p2z_kernels);
+                   
      if constexpr (include_data_transfer) {
         std::copy(outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
      }
