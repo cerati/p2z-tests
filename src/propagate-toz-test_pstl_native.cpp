@@ -693,6 +693,9 @@ int main (int argc, char* argv[]) {
      //enforce data migration:
      std::copy(policy, h_trcks.begin(), h_trcks.end(), trcks.begin());
      std::copy(policy, h_hits.begin(), h_hits.end(), hits.begin());
+   } else {//just a regular copy, no migration
+     std::copy(h_trcks.begin(), h_trcks.end(), trcks.begin());
+     std::copy(h_hits.begin(), h_hits.end(), hits.begin());
    }
 
    auto p2z_kernels = [=,btracksPtr    = trcks.data(),
