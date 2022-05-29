@@ -627,6 +627,12 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    //
+   std::vector<MPTRK, decltype(MPTRKAllocator)> outtrcks(nevts*nb, MPTRKAllocator);
+
+   std::vector<MPTRK, decltype(MPTRKAllocator)> trcks(nevts*nb, MPTRKAllocator);
+   //
+   std::vector<MPHIT, decltype(MPHITAllocator)> hits(nlayer*nevts*nb, MPHITAllocator);
+
    //create fake objects to emulate data transfers
    std::vector<MPTRK, decltype(MPTRKAllocator)> h_outtrcks(nevts*nb, MPTRKAllocator);
    //
@@ -635,12 +641,6 @@ int main (int argc, char* argv[]) {
    //
    std::vector<MPHIT, decltype(MPHITAllocator)> h_hits(nlayer*nevts*nb, MPHITAllocator);
    prepareHits<decltype(MPHITAllocator)>(h_hits, inputhits);
-   //
-   std::vector<MPTRK, decltype(MPTRKAllocator)> outtrcks(nevts*nb, MPTRKAllocator);
-   
-   std::vector<MPTRK, decltype(MPTRKAllocator)> trcks(nevts*nb, MPTRKAllocator);
-   //
-   std::vector<MPHIT, decltype(MPHITAllocator)> hits(nlayer*nevts*nb, MPHITAllocator);
    //
    auto policy = oneapi::dpl::execution::make_device_policy(cq);
    //enforce data migration
@@ -651,6 +651,10 @@ int main (int argc, char* argv[]) {
      std::copy(policy, h_trcks.begin(), h_trcks.end(), trcks.begin());
      //
      std::copy(policy, h_hits.begin(), h_hits.end(), hits.begin());
+   } else {//do  a regular copy :
+     std::copy(h_trcks.begin(), h_trcks.end(), trcks.begin());
+     //
+     std::copy(h_hits.begin(), h_hits.end(), hits.begin());
    }
 
    auto p2z_kernels = [=,btracksPtr    = trcks.data(),

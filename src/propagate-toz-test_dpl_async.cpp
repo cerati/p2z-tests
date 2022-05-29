@@ -628,31 +628,37 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    //
-   //create fake object to emulate data transfers
-   std::vector<MPTRK, decltype(MPTRKAllocator)> h_outtrcks(nevts*nb, MPTRKAllocator);
+   auto policy = oneapi::dpl::execution::make_device_policy(cq);
    //
    std::vector<MPTRK, decltype(MPTRKAllocator)> outtrcks(nevts*nb, MPTRKAllocator);
    //
-   auto policy = oneapi::dpl::execution::make_device_policy(cq);
+   std::vector<MPTRK, decltype(MPTRKAllocator)> trcks(nevts*nb, MPTRKAllocator);
+   //
+   std::vector<MPHIT, decltype(MPHITAllocator)> hits(nlayer*nevts*nb, MPHITAllocator);
+
+   //create fake objects to emulate data transfers
+   std::vector<MPTRK, decltype(MPTRKAllocator)> h_outtrcks(nevts*nb, MPTRKAllocator);
+   //
    //enforce data migration
-   oneapi::dpl::experimental::copy_async(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
- 
-   //create fake object to emulate data transfers
    std::vector<MPTRK, decltype(MPTRKAllocator)> h_trcks(nevts*nb, MPTRKAllocator); 
    prepareTracks<decltype(MPTRKAllocator)>(h_trcks, inputtrk);
    //
    std::vector<MPHIT, decltype(MPHITAllocator)> h_hits(nlayer*nevts*nb, MPHITAllocator);
    prepareHits<decltype(MPHITAllocator)>(h_hits, inputhits);
-   
-   std::vector<MPTRK, decltype(MPTRKAllocator)> trcks(nevts*nb, MPTRKAllocator);
-   //
-   std::vector<MPHIT, decltype(MPHITAllocator)> hits(nlayer*nevts*nb, MPHITAllocator);
    //  
    if constexpr (include_data_transfer == false){
      //enforce data migration:
+     std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
+     //
      std::copy(policy, h_trcks.begin(), h_trcks.end(), trcks.begin());
      //
      std::copy(policy, h_hits.begin(), h_hits.end(), hits.begin());
+   } else {
+     std::copy(h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
+     //
+     std::copy(h_trcks.begin(), h_trcks.end(), trcks.begin());
+     //
+     std::copy(h_hits.begin(), h_hits.end(), hits.begin());
    }
 
    auto p2z_kernels = [=,btracksPtr    = trcks.data(),
@@ -695,15 +701,11 @@ int main (int argc, char* argv[]) {
    for(int itr=0; itr<NITER; itr++) {
      //
      auto wall_start = std::chrono::high_resolution_clock::now();
-     //
+     //not so usefull, needs asynchronous prefetchers
      oneapi::dpl::experimental::for_each_async(policy,
                                                counting_iterator(0),
                                                counting_iterator(outer_loop_range),
                                                p2z_kernels);
-     //
-     if constexpr (include_data_transfer) {
-        std::copy(outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
-     }
      //
      cq.wait();
      //
@@ -718,7 +720,7 @@ int main (int argc, char* argv[]) {
         //
         std::copy(hits.begin(), hits.end(), h_hits.begin());
         //
-        std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
+        std::copy(outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
      }
    } //end of itr loop
 
