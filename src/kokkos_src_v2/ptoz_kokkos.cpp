@@ -21,17 +21,13 @@
 #define TOL 0.0001
 
 
-void prepareTracks(ATRK inputtrk, MPTRK* &result);
-void separateTracks(MPTRK* &mp_in, CBTRK &cb_out);
-void prepareHits(AHIT inputhit, MPHIT* &result);
-void separateHits(MPHIT* &mp_in, CBHIT &cb_out);
-void allocateOutTracks(MPTRK* &trk);
-void convertOutput(CBTRK &cb_in, MPTRK* &mp_out);
+void prepareTracks(ATRK inputtrk, MPTRK &intrk);
+void prepareHits(AHIT inputhit, MPHIT &inhit);
 
 void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks, 
                   ViewMatrixCB &errorProp, ViewMatrixCB &temp);
 void update(const CBTRK &inTrks, const CBHIT &inHits);
-void averageOutputs(MPTRK* &outtrk, MPHIT* &hit);
+void averageOutputs(MPTRK &outtrk, MPHIT &hit);
 
 void invert_33(const ViewMatrixCB &mat, int batch);
 KOKKOS_INLINE_FUNCTION
@@ -77,18 +73,9 @@ int main( int argc, char* argv[] )
   Kokkos::initialize( argc, argv );
   {
 
-  double start_t, prep_t, convert_in_t, p2z_t, convert_out_t, end_t;
+  double start_t, prep_t, p2z_t, end_t;
 
   start_t = get_time();
-
-  MPTRK* trk;
-  prepareTracks(inputtrk, trk);
-  MPHIT* hit;
-  prepareHits(inputhit, hit);
-  MPTRK* outtrk;
-  allocateOutTracks(outtrk);
-
-  prep_t = get_time();
 
   CBTRK all_tracks;
   new(&(all_tracks.cov))  ViewMatrixCB("cov", nevts*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
@@ -101,22 +88,43 @@ int main( int argc, char* argv[] )
   new(&(all_out.cov))  ViewMatrixCB("cov", nevts*nb, 6, 6, bsize); // 6x6 symmetric batch matrix
   new(&(all_out.par))  ViewVectorCB("par", nevts*nb, 6, bsize);    // batch of len 6 vectors
   new(&(all_out.q))    ViewIntCB("q", nevts*nb, bsize);            // bsize array of int
-  separateTracks(trk, all_tracks);
-  separateHits(hit, all_hits);
+  MPTRK trk; 
+  trk.cov = Kokkos::create_mirror_view(all_tracks.cov);
+  trk.par = Kokkos::create_mirror_view(all_tracks.par);
+  trk.q = Kokkos::create_mirror_view(all_tracks.q);
+  prepareTracks(inputtrk, trk);
+  MPHIT hit;
+  hit.cov = Kokkos::create_mirror_view(all_hits.cov);
+  hit.pos = Kokkos::create_mirror_view(all_hits.pos);
+  prepareHits(inputhit, hit);
+  MPTRK outtrk;
+  outtrk.cov = Kokkos::create_mirror_view(all_out.cov);
+  outtrk.par = Kokkos::create_mirror_view(all_out.par);
+  outtrk.q = Kokkos::create_mirror_view(all_out.q);
 
   ViewMatrixCB errorProp("ep", nevts*nb, 6, 6, bsize),
                temp("temp", nevts*nb, 6, 6, bsize);
 
+
   printf("done preparing!\n");
-  
-  convert_in_t = get_time();
+
+  prep_t = get_time();
   
   auto wall_start = std::chrono::high_resolution_clock::now();
 
   for(itr=0; itr<NITER; itr++) {
+      Kokkos::deep_copy(all_tracks.cov, trk.cov);
+      Kokkos::deep_copy(all_tracks.par, trk.par);
+      Kokkos::deep_copy(all_tracks.q, trk.q);
+      Kokkos::deep_copy(all_hits.cov, hit.cov);
+      Kokkos::deep_copy(all_hits.pos, hit.pos);
   
       propagateToZ(all_tracks, all_hits, all_out, errorProp, temp);
       update(all_out, all_hits);
+
+      Kokkos::deep_copy(outtrk.cov, all_out.cov);
+      Kokkos::deep_copy(outtrk.par, all_out.par);
+      Kokkos::deep_copy(outtrk.q, all_out.q);
 
   } // end of itr loop
   Kokkos::fence();
@@ -124,19 +132,6 @@ int main( int argc, char* argv[] )
 
   p2z_t = get_time();
 
-
-  // TODO allout -> outtrk
-  convertOutput(all_out, outtrk);
-  // for (size_t ie=0;ie<nevts;++ie) {
-  //   for (size_t it=0;it<ntrks;++it) {
-  //     printf("ie=%lu it=%lu\n",ie,it);
-  //     printf("tx=%f\n",x(&outtrk,ie,it));
-  //     printf("ty=%f\n",y(&outtrk,ie,it));
-  //     printf("tz=%f\n",z(&outtrk,ie,it));
-  //   }
-  // }
-
-  convert_out_t = get_time();
 
   averageOutputs(outtrk, hit);
 
@@ -146,16 +141,15 @@ int main( int argc, char* argv[] )
   printf("done niter   =%i \n", NITER);
   printf("total tracks =%i \n", nevts*ntrks*NITER);
   printf("Total time   =%f \n", end_t - start_t);
-  printf("MP prep time =%f \n", prep_t - start_t);
-  printf("CB convert   =%f \n", (convert_in_t - prep_t) + (convert_out_t - p2z_t));
-  printf("p2z time     =%f \n", p2z_t - convert_in_t);
-  printf("Time / track =%e \n", (p2z_t - convert_in_t) / (float)(nevts*ntrks*NITER) );
+  printf("Setup time =%f \n", prep_t - start_t);
+  printf("p2z time     =%f \n", p2z_t - prep_t);
+  printf("Time / track =%e \n", (p2z_t - prep_t) / (float)(nevts*ntrks*NITER) );
 
   auto wall_diff = wall_stop - wall_start;
   auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
-  printf("setup time time=%f (s)\n", (convert_in_t - start_t));
+  printf("setup time time=%f (s)\n", (prep_t - start_t));
   printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*NITER));
-  printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (convert_in_t - start_t), -1);
+  printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (prep_t - start_t), -1);
 
   // for (size_t ie=0;ie<nevts;++ie) {
   //   for (size_t ib=0;ib<nb;++ib) {
@@ -173,9 +167,6 @@ int main( int argc, char* argv[] )
       // delete &(hit[ib + nb*ie].cov);
   //   }
   // }
-  free(trk);
-  free(hit);
-  free(outtrk);
 
   // delete(&(all_tracks.par));
   // delete(&(all_tracks.cov));
@@ -194,25 +185,7 @@ int main( int argc, char* argv[] )
   return 0;
 }
 
-
-
-// take the one track defined in main and make a bunch of "smeared" copies
-// bsize is block size defined in ptoz_data.h
-// nb is number of blocks
-// TODO adjust so everything is a full matrix
-void prepareTracks(ATRK inputtrk, MPTRK* &result) { // TODO the type on result is wrong
-
-  result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
-
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      new(&(result[ib + nb*ie].par))    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
-      new(&(result[ib + nb*ie].cov))    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
-      new(&(result[ib + nb*ie].q))      ViewVectorINT("q", bsize);          // bsize array of int
-      //      new(&(result[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
-    }
-  }
-
+void prepareTracks(ATRK inputtrk, MPTRK &intrk) { 
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -220,150 +193,21 @@ void prepareTracks(ATRK inputtrk, MPTRK* &result) { // TODO the type on result i
 
   //par
   for (size_t ip=0;ip<6;++ip) {
-    result[ib + nb*ie].par(ip,it) = (1+smear*randn(0,1))*inputtrk.par[ip];
+    intrk.par(ib + nb*ie,ip,it) = (1+smear*randn(0,1))*inputtrk.par[ip];
   }
   //cov
   for (size_t i=0;i<6;++i)
     for (size_t j=0;j<6;++j)
-      result[ib + nb*ie].cov(i,j,it) = (1+smear*randn(0,1))*inputtrk.cov[SymOffsets66(PosInMtrx(i,j,6))];
+      intrk.cov(ib + nb*ie,i,j,it) = (1+smear*randn(0,1))*inputtrk.cov[SymOffsets66(PosInMtrx(i,j,6))];
   //q
-  result[ib + nb*ie].q(it) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+  intrk.q(ib + nb*ie,it) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
       
       } // block loop
     } // nb
   } // nevts
 }
 
-
-void separateTracks(MPTRK* &mp_in, CBTRK &cb_out) {
-
-  for (size_t ie=0;ie<nevts;++ie) {
-  for (size_t ib=0;ib<nb;++ib) {
-    int batch = ib + nb*ie;
-
-    // q int batch
-    for (size_t it=0;it<bsize;++it) 
-      cb_out.q(batch, it) = mp_in[batch].q(it);
-
-    // par length 6 vector batch
-    for (size_t ip=0;ip<6;++ip) {
-      for (size_t it=0;it<bsize;++it) 
-        cb_out.par(batch, ip, it) = mp_in[batch].par(ip,it);
-    }
-
-    // cov 6x6 matrix batch
-    for (size_t i=0;i<6;++i) {
-      for (size_t j=0;j<6;++j) {
-        for (size_t it=0;it<bsize;++it) 
-          cb_out.cov(batch, i, j, it) = mp_in[batch].cov(i,j,it);
-      }
-    }
-      
-  } // nb
-  } // nevts
-
-}
-
-void convertOutput(CBTRK &cb_in, MPTRK* &mp_out) {
-
-  for (size_t ie=0;ie<nevts;++ie) {
-  for (size_t ib=0;ib<nb;++ib) {
-    int batch = ib + nb*ie;
-
-    // q int batch
-    for (size_t it=0;it<bsize;++it) 
-      mp_out[batch].q(it) = cb_in.q(batch, it);
-
-    // par length 6 vector batch
-    for (size_t ip=0;ip<6;++ip) {
-      for (size_t it=0;it<bsize;++it) 
-        mp_out[batch].par(ip,it) = cb_in.par(batch, ip, it);
-    }
-
-    // cov 6x6 matrix batch
-    for (size_t i=0;i<6;++i) {
-      for (size_t j=0;j<6;++j) {
-        for (size_t it=0;it<bsize;++it) 
-          mp_out[batch].cov(i,j,it) = cb_in.cov(batch, i, j, it);
-      }
-    }
-      
-  } // nb
-  } // nevts
-
-  for (size_t ie=0;ie<nevts;++ie) {
-  for (size_t ib=0;ib<nb;++ib) {
-    int batch = ib + nb*ie;
-
-    // q int batch
-    for (size_t it=0;it<bsize;++it) 
-      mp_out[batch].q(it) = cb_in.q(batch, it);
-
-    // par length 6 vector batch
-    for (size_t ip=0;ip<6;++ip) {
-      for (size_t it=0;it<bsize;++it) 
-        mp_out[batch].par(ip,it) = cb_in.par(batch, ip, it);
-    }
-
-    // cov 6x6 matrix batch
-    for (size_t i=0;i<6;++i) {
-      for (size_t j=0;j<6;++j) {
-        for (size_t it=0;it<bsize;++it) 
-          mp_out[batch].cov(i,j,it) = cb_in.cov(batch, i, j, it);
-      }
-    }
-      
-  } // nb
-  } // nevts
-  
-  // // q int batch
-  // for (size_t it=0;it<bsize;++it) {
-  //   mp_out[0].q(it) = cb_in.q(0, it);
-  //   mp_out[10].q(it) = cb_in.q(10, it);
-  // }
-
-  // // par length 6 vector batch
-  // for (size_t ip=0;ip<6;++ip) {
-  //   for (size_t it=0;it<bsize;++it) {
-  //     mp_out[0].par(ip,it) = cb_in.par(0, ip, it);
-  //     mp_out[10].par(ip,it) = cb_in.par(10, ip, it);
-  //   }
-  // }
-
-  // // cov 6x6 matrix batch
-  // for (size_t i=0;i<6;++i) {
-  //   for (size_t j=0;j<6;++j) {
-  //     for (size_t it=0;it<bsize;++it) {
-  //       mp_out[0].cov(i,j,it) = cb_in.cov(0, i, j, it);
-  //       mp_out[10].cov(i,j,it) = cb_in.cov(10, i, j, it);
-  //     }
-  //   }
-  // }
-
-  // for (size_t it=0;it<bsize;++it) {
-  //   float x_cb = cb_in.par(10, X_IND, it);
-  //   float y_cb = cb_in.par(10, Y_IND, it);
-  //   float z_cb = cb_in.par(10, Z_IND, it);
-  //   printf ("it, x_, y_, z_: %d %f %f %f\n",it,x_cb,y_cb,z_cb);
-  //   float x_mp = mp_out[10].par(X_IND,it);
-  //   float y_mp = mp_out[10].par(Y_IND,it);
-  //   float z_mp = mp_out[10].par(Z_IND,it);
-  //   printf ("it, x_, y_, z_: %d %f %f %f\n",it,x_mp,y_mp,z_mp);
-  // }
-
-}
-
-
-void prepareHits(AHIT inputhit, MPHIT* &result) {
-
-  result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
-
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      new(&(result[ib + nb*ie].pos))    ViewVectorMP("pos", 3, bsize);      // batch of len 3 vectors
-      new(&(result[ib + nb*ie].cov))    ViewMatrixMP("cov", 3, 3, bsize);   // 6x6 symmetric batch matrix
-    }
-  } 
+void prepareHits(AHIT inputhit, MPHIT &inhit) {
 
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
@@ -372,56 +216,16 @@ void prepareHits(AHIT inputhit, MPHIT* &result) {
     
     //pos
     for (size_t ip=0;ip<3;++ip) {
-      result[ib + nb*ie].pos(ip,it) = (1+smear*randn(0,1))*inputhit.pos[ip];
+      inhit.pos(ib + nb*ie,ip,it) = (1+smear*randn(0,1))*inputhit.pos[ip];
     }
     //cov
     for (size_t i=0;i<3;++i)
       for (size_t j=0;j<3;++j)
-        result[ib + nb*ie].cov(i,j,it) = (1+smear*randn(0,1))*inputhit.cov[SymOffsets66(PosInMtrx(i,j,6))];
+        inhit.cov(ib + nb*ie,i,j,it) = (1+smear*randn(0,1))*inputhit.cov[SymOffsets66(PosInMtrx(i,j,6))];
       
       } // bsize
     } // nb
   } // nevts
-}
-
-
-void separateHits(MPHIT* &mp_in, CBHIT &cb_out) {
-
-  for (size_t ie=0;ie<nevts;++ie) {
-  for (size_t ib=0;ib<nb;++ib) {
-    int batch = ib + nb*ie;
-
-    // pos length 3 vector batch
-    for (size_t ip=0;ip<3;++ip) {
-      for (size_t it=0;it<bsize;++it) 
-        cb_out.pos(batch, ip, it) = mp_in[batch].pos(ip,it);
-    }
-
-    // cov 6x6 matrix batch
-    for (size_t i=0;i<3;++i) {
-      for (size_t j=0;j<3;++j) {
-        for (size_t it=0;it<bsize;++it) 
-          cb_out.cov(batch, i, j, it) = mp_in[batch].cov(i,j,it);
-      }
-    }
-      
-  } // nb
-  } // nevts
-
-}
-
-void allocateOutTracks(MPTRK* &outtrk) {
-
-  outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
-  for (size_t ie=0;ie<nevts;++ie) {
-    for (size_t ib=0;ib<nb;++ib) {
-      new(&(outtrk[ib + nb*ie].par))    ViewVectorMP("par", 6, bsize);      // batch of len 6 vectors
-      new(&(outtrk[ib + nb*ie].cov))    ViewMatrixMP("cov", 6, 6, bsize);   // 6x6 symmetric batch matrix
-      new(&(outtrk[ib + nb*ie].q))      ViewVectorINT("q", bsize);          // bsize array of int
-      //      new(&(outtrk[ib + nb*ie].hitidx)) ViewVectorINT("hidx", 22);          // unused? array len 22 of int
-    }
-  }
-
 }
 
 // MP version
@@ -717,22 +521,22 @@ void update(const CBTRK &trk, const CBHIT &hit) {
 
 }
 
-void averageOutputs(MPTRK* &outtrk, MPHIT* &hit) {
+void averageOutputs(MPTRK &outtrk, MPHIT &hit) {
 
   float avgx = 0, avgy = 0, avgz = 0;
   float avgdx = 0, avgdy = 0, avgdz = 0;
   for (size_t ie=0;ie<nevts;++ie) { // loop over events
     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
       for (size_t it=0;it<bsize;++it) {
-        float x_ = outtrk[ib + nb*ie].par(X_IND,it);
-        float y_ = outtrk[ib + nb*ie].par(Y_IND,it);
-        float z_ = outtrk[ib + nb*ie].par(Z_IND,it);
+        float x_ = outtrk.par(ib + nb*ie,X_IND,it);
+        float y_ = outtrk.par(ib + nb*ie,Y_IND,it);
+        float z_ = outtrk.par(ib + nb*ie,Z_IND,it);
         avgx += x_;
         avgy += y_;
         avgz += z_;
-        float hx_ = hit[ib + nb*ie].pos(X_IND,it);
-        float hy_ = hit[ib + nb*ie].pos(Y_IND,it);
-        float hz_ = hit[ib + nb*ie].pos(Z_IND,it);
+        float hx_ = hit.pos(ib + nb*ie,X_IND,it);
+        float hy_ = hit.pos(ib + nb*ie,Y_IND,it);
+        float hz_ = hit.pos(ib + nb*ie,Z_IND,it);
         avgdx += (x_-hx_)/x_;
         avgdy += (y_-hy_)/y_;
         avgdz += (z_-hz_)/z_;
@@ -751,15 +555,15 @@ void averageOutputs(MPTRK* &outtrk, MPHIT* &hit) {
   for (size_t ie=0;ie<nevts;++ie) { // loop over events
     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
       for (size_t it=0;it<bsize;++it) {
-        float x_ = outtrk[ib + nb*ie].par(X_IND,it);
-        float y_ = outtrk[ib + nb*ie].par(Y_IND,it);
-        float z_ = outtrk[ib + nb*ie].par(Z_IND,it);
+        float x_ = outtrk.par(ib + nb*ie,X_IND,it);
+        float y_ = outtrk.par(ib + nb*ie,Y_IND,it);
+        float z_ = outtrk.par(ib + nb*ie,Z_IND,it);
         stdx += (x_-avgx)*(x_-avgx);
         stdy += (y_-avgy)*(y_-avgy);
         stdz += (z_-avgz)*(z_-avgz);
-        float hx_ = hit[ib + nb*ie].pos(X_IND,it);
-        float hy_ = hit[ib + nb*ie].pos(Y_IND,it);
-        float hz_ = hit[ib + nb*ie].pos(Z_IND,it);
+        float hx_ = hit.pos(ib + nb*ie,X_IND,it);
+        float hy_ = hit.pos(ib + nb*ie,Y_IND,it);
+        float hz_ = hit.pos(ib + nb*ie,Z_IND,it);
         stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
         stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
         stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
