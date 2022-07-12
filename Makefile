@@ -426,7 +426,6 @@ endif
 #################
 ifeq ($(MODE),cuda)
 CSRCS = propagate-toz-test_CUDA.cu
-#CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread
@@ -435,7 +434,6 @@ endif
 endif
 
 ifeq ($(MODE),cudav2)
-#CSRCS = propagate-toz-test_CUDA.cu
 CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
@@ -448,7 +446,10 @@ ifeq ($(MODE),cudav3)
 CSRCS = propagate-toz-test_CUDA_v3.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
+# Use below for testing synchronous version
+#CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
+# Use below for testing asynchronous version
+CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU -DUSE_ASYNC --default-stream per-thread -maxrregcount 64
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
 endif
 endif
