@@ -105,6 +105,8 @@ constexpr int iparTheta = 5;
 template <typename T, int N, int bSize>
 struct MPNX_ {
    std::array<T,N*bSize> data;
+   
+   MPNX_() = default;   
    //basic accessors
    const T& operator[](const int idx) const {return data[idx];}
    T& operator[](const int idx) {return data[idx];}
@@ -129,12 +131,14 @@ struct MPTRK_ {
   MP6x6SF_ cov;
   MP1I_    q;
 
-  //  MP22I   hitidx;
+  MPTRK_() = default;
 };
 
 struct MPHIT_ {
   MP3F_    pos;
   MP3x3SF_ cov;
+  
+  MPHIT_() = default;
 };
 
 template <typename T, int n, int bSize>
@@ -283,18 +287,20 @@ struct MPTRKAccessor {
   MPTRKAccessor() : par(), cov(), q() {}
   MPTRKAccessor(const MPTRK &in) : par(in.par), cov(in.cov), q(in.q) {}
   
-  void load(MPTRK_ &dst, const int tid, const int layer = 0) const {
-    this->par.load(dst.par, tid, layer);
-    this->cov.load(dst.cov, tid, layer);
-    this->q.load(dst.q, tid, layer);
+  const MPTRK_ load(const int tid) const {
+    MPTRK_ dst;
+
+    par.load(dst.par, tid, 0);
+    cov.load(dst.cov, tid, 0);
+    q.load(dst.q, tid, 0);
     
-    return;
+    return std::move(dst);
   }
   
-  void save(MPTRK_ &src, const int tid, const int layer = 0) {
-    this->par.save(src.par, tid, layer);
-    this->cov.save(src.cov, tid, layer);
-    this->q.save(src.q, tid, layer);
+  void save(MPTRK_ &src, const int tid) {
+    par.save(src.par, tid, 0);
+    cov.save(src.cov, tid, 0);
+    q.save(src.q, tid, 0);
     
     return;
   }
@@ -320,19 +326,14 @@ struct MPHITAccessor {
   MPHITAccessor() : pos(), cov() {}
   MPHITAccessor(const MPHIT &in) : pos(in.pos), cov(in.cov) {}
   
-  void load(MPHIT_ &dst, const int tid, const int layer = 0) const {
+  const MPHIT_ load(const int tid, const int layer = 0) const {
+    MPHIT_ dst;
+
     this->pos.load(dst.pos, tid, layer);
     this->cov.load(dst.cov, tid, layer);
-    
-    return;
+
+    return std::move(dst);
   }
-  
-  void save(MPHIT_ &src, const int tid, const int layer = 0) {
-    this->pos.save(src.pos, tid, layer);
-    this->cov.save(src.cov, tid, layer);
-    
-    return;
-  } 
 };
 
 
@@ -964,18 +965,19 @@ int main (int argc, char* argv[]) {
                         &bhitsAccessor      = *hitsAccPtr,
                         &outtracksAccessor  = *outtrcksAccPtr] (const auto i) {
                         //  
-                        MPTRK_ btracks;
+                        //  
                         MPTRK_ obtracks;
-                        MPHIT_ bhits;   
                         //
-		        btracksAccessor.load(btracks, i);
-		        //
+                        const MPTRK_ btracks = btracksAccessor.load(i);
+		         //
+			 constexpr int N = is_cuda_kernel ? 1 : bsize;//inner loop range
+		         //
                         for(int layer=0; layer<nlayer; ++layer) {  
                         //
-                          bhitsAccessor.load(bhits, i, layer);
+                          const MPHIT_ bhits = bhitsAccessor.load(i, layer);
                           //
-                          propagateToZ<bsize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
-                          KalmanUpdate<bsize>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
+                          propagateToZ<N>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
+                          KalmanUpdate<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
                           //
                         }
 		        //

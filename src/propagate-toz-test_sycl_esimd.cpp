@@ -171,28 +171,17 @@ struct MPTRK {
   MP6x6SF cov;
   MP1I    q;
 
-  //  MP22I   hitidx;
-  void load(MPTRK &dst){
-    par.load(dst.par);
-    cov.load(dst.cov);
-    q.load(dst.q);    
-    return;	  
-  }
+  MPTRK() = default; 
   //
-  void simd_load(MPTRK_ &dst){
+  const MPTRK_ simd_load(){
+  
+    MPTRK_ dst;
     //
     par.simd_load(dst.par);
     cov.simd_load(dst.cov);
     q.simd_load(dst.q);
     //   
-    return;	  
-  }
-  //
-  void save(const MPTRK &src){
-    par.save(src.par);
-    cov.save(src.cov);
-    q.save(src.q);
-    return;
+    return std::move(dst);	  
   }
   //
   void simd_save(const MPTRK_ &src){
@@ -209,35 +198,18 @@ struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
   //
-  void load(MPHIT &dst){
-    pos.load(dst.pos);
-    cov.load(dst.cov);
-    return;
-  }
+  //
+  MPHIT() = default;
   
-  void simd_load(MPHIT_ &dst){
+  const MPHIT_ simd_load(){
+    //
+    MPHIT_ dst;
     //
     pos.simd_load(dst.pos);
     cov.simd_load(dst.cov);
     //
-    return;
+    return std::move(dst);
   }
-  
-  void save(const MPHIT &src){
-    pos.save(src.pos);
-    cov.save(src.cov);
-
-    return;
-  }
-  
-  void simd_save(const MPHIT_ &src){
-    //
-    pos.simd_save(src.pos);
-    cov.simd_save(src.cov);
-    //
-    return;
-  }
-
 };
 
 
@@ -758,12 +730,12 @@ int main (int argc, char* argv[]) {
                          bhitsPtr      = hits.data()] (const nd_item<1> ndi) [[intel::sycl_explicit_simd]] {
                          //  
                          const int i = ndi.get_global_id(0);
-                         //
-                         MPTRK_ btracks;
+
                          MPTRK_ obtracks;
-                         MPHIT_ bhits;
                          //
-                         btracksPtr[i].simd_load(btracks);
+                         const MPTRK_ btracks = btracksPtr[i].simd_load();
+                         //
+                         constexpr int N = bsize;
                          //
                          for(int layer=0; layer<nlayer; ++layer) {
                            //

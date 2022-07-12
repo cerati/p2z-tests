@@ -353,12 +353,14 @@ struct MPTRKAccessor {
   MPTRKAccessor() : par(), cov(), q() {}
   MPTRKAccessor(const MPTRK &in) : par(in.par), cov(in.cov), q(in.q) {}
   
-  __device__ __host__ inline void load(MPTRK_ &dst, const int tid, const int layer = 0) const {
-    this->par.load(dst.par, tid, layer);
-    this->cov.load(dst.cov, tid, layer);
-    this->q.load(dst.q, tid, layer);
+   __device__ __host__ inline const MPTRK_ load(const int tid) const {
+    MPTRK_ dst;
+
+    this->par.load(dst.par, tid, 0);
+    this->cov.load(dst.cov, tid, 0);
+    this->q.load(dst.q, tid, 0);
     
-    return;
+    return std::move(dst);
   }
   
   __device__ __host__ inline void save(MPTRK_ &src, const int tid, const int layer = 0) {
@@ -389,18 +391,13 @@ struct MPHITAccessor {
   MPHITAccessor() : pos(), cov() {}
   MPHITAccessor(const MPHIT &in) : pos(in.pos), cov(in.cov) {}
   
-  __device__ __host__ void load(MPHIT_ &dst, const int tid, const int layer = 0) const {
+  __device__ __host__ inline const MPHIT_ load(const int tid, const int layer = 0) const {
+    MPHIT_ dst;
+
     this->pos.load(dst.pos, tid, layer);
     this->cov.load(dst.cov, tid, layer);
     
-    return;
-  }
-  
-  __device__ __host__ void save(MPHIT_ &src, const int tid, const int layer = 0) {
-    this->pos.save(src.pos, tid, layer);
-    this->cov.save(src.cov, tid, layer);
-    
-    return;
+    return std::move(dst);
   } 
 };
 
@@ -901,16 +898,15 @@ template <FieldOrder order = FieldOrder::P2Z_TRACKBLK_EVENT_LAYER_MATIDX_ORDER, 
 __global__ void launch_p2z_kernels(MPTRKAccessor<order> &obtracksAcc, MPTRKAccessor<order> &btracksAcc, MPHITAccessor<order> &bhitsAcc, const int length){
    auto i = threadIdx.x + blockIdx.x * blockDim.x;
 
-   MPTRK_ btracks;
    MPTRK_ obtracks;
-   MPHIT_ bhits;
 
    while (i < length) {
      //
-     btracksAcc.load(btracks, i);
+     const MPTRK_ btracks = btracksAcc.load(i);
+     
      for(int layer=0; layer<nlayer; ++layer) {  
        //
-       bhitsAcc.load(bhits, i, layer);
+       const MPHIT_ bhits = bhitsAcc.load(i, layer);
        //
        propagateToZ(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
        KalmanUpdate(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);

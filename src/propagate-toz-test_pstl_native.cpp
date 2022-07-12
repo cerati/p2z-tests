@@ -178,18 +178,13 @@ struct MPTRK {
   MP6x6SF cov;
   MP1I    q;
 
-  //  MP22I   hitidx;
-  void load(MPTRK &dst){
-    par.load(dst.par);
-    cov.load(dst.cov);
-    q.load(dst.q);    
-    return;	  
-  }
-  void save(const MPTRK &src){
-    par.save(src.par);
-    cov.save(src.cov);
-    q.save(src.q);
-    return;
+  MPTRK() = default;
+  //
+  MPTRK& operator=(const MPTRK &src){
+    par.copy(src.par);
+    cov.copy(src.cov);
+    q.copy(src.q);
+    return *this;
   }
 };
 
@@ -197,18 +192,12 @@ struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
   //
-  void load(MPHIT &dst){
-    pos.load(dst.pos);
-    cov.load(dst.cov);
-    return;
+  MPHIT() = default;
+  //
+  MPHIT(const MPHIT &src) {
+    pos.copy(src.pos);
+    cov.copy(src.cov);
   }
-  void save(const MPHIT &src){
-    pos.save(src.pos);
-    cov.save(src.cov);
-
-    return;
-  }
-
 };
 
 ///////////////////////////////////////
@@ -702,22 +691,22 @@ int main (int argc, char* argv[]) {
                          outtracksPtr  = outtrcks.data(),
                          bhitsPtr      = hits.data()] (const auto i) {
                          //  
-                         MPTRK btracks;
                          MPTRK obtracks;
-                         MPHIT bhits;
                          //
-                         btracksPtr[i].load(btracks);
+                         const MPTRK btracks = btracksPtr[i];
+                         //
+			  constexpr int N = bsize;
                          //
                          for(int layer=0; layer<nlayer; ++layer) {
                            //
-                           bhitsPtr[layer+nlayer*i].load(bhits);
+                           const MPHIT bhits = MPHIT(bhitsPtr[layer+nlayer*i]);
                            //
-                           propagateToZ<bsize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
-                           KalmanUpdate<bsize>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
+                           propagateToZ<N>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
+                           KalmanUpdate<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
                            //
                          }
                          //
-                         outtracksPtr[i].save(obtracks);
+                         outtracksPtr[i] = obtracks;
                        };
 
    const int outer_loop_range = nevts*nb;

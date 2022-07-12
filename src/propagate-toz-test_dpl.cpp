@@ -83,18 +83,7 @@ struct MPNX {
    const T& operator()(const int m, const int b) const {return data[m*bSize+b];}
    T& operator()(const int m, const int b) {return data[m*bSize+b];}
    //
-   void load(MPNX& dst) const{
-     for (int it=0;it<bSize;++it) {
-     //const int l = it+ib*bsize+ie*nb*bsize;
-       for (int ip=0;ip<N;++ip) {    	
-    	 dst.data[it + ip*bSize] = this->operator()(ip, it);  
-       }
-     }//
-     
-     return;
-   }
-
-   void save(const MPNX& src) {
+   void copy(const MPNX& src) {
      for (int it=0;it<bSize;++it) {
      //const int l = it+ib*bsize+ie*nb*bsize;
        for (int ip=0;ip<N;++ip) {    	
@@ -123,18 +112,13 @@ struct MPTRK {
   MP6x6SF cov;
   MP1I    q;
 
-  //  MP22I   hitidx;
-  void load(MPTRK &dst){
-    par.load(dst.par);
-    cov.load(dst.cov);
-    q.load(dst.q);    
-    return;	  
-  }
-  void save(const MPTRK &src){
-    par.save(src.par);
-    cov.save(src.cov);
-    q.save(src.q);
-    return;
+  MPTRK() = default;
+  //
+  MPTRK& operator=(const MPTRK &src){
+    par.copy(src.par);
+    cov.copy(src.cov);
+    q.copy(src.q);
+    return *this;
   }
 };
 
@@ -142,18 +126,12 @@ struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
   //
-  void load(MPHIT &dst){
-    pos.load(dst.pos);
-    cov.load(dst.cov);
-    return;
+  MPHIT() = default;
+  //
+  MPHIT(const MPHIT &src) {
+    pos.copy(src.pos);
+    cov.copy(src.cov);
   }
-  void save(const MPHIT &src){
-    pos.save(src.pos);
-    cov.save(src.cov);
-
-    return;
-  }
-
 };
 
 ///////////////////////////////////////
@@ -320,7 +298,7 @@ float z(const MPHIT* hits, size_t ev, size_t tk)    { return Pos(hits, ev, tk, 2
 
 template<int N = 1>
 inline void MultHelixPropEndcap(const MP6x6F &a, const MP6x6SF &b, MP6x6F &c) {
-//#pragma omp simd 
+#pragma unroll 
  for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -365,7 +343,7 @@ inline void MultHelixPropEndcap(const MP6x6F &a, const MP6x6SF &b, MP6x6F &c) {
 
 template<int N = 1>
 inline void MultHelixPropTranspEndcap(const MP6x6F &a, const MP6x6F &b, MP6x6SF &c) {
-//#pragma omp simd
+#pragma unroll
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -396,7 +374,7 @@ inline void MultHelixPropTranspEndcap(const MP6x6F &a, const MP6x6F &b, MP6x6SF 
 template<int N = 1>
 inline void KalmanGainInv(const MP6x6SF &a, const MP3x3SF &b, MP3x3 &c) {
 
-//#pragma omp simd
+#pragma unroll
   for (int n = 0; n < N; ++n)
   {
     float det =
@@ -422,7 +400,7 @@ inline void KalmanGainInv(const MP6x6SF &a, const MP3x3SF &b, MP3x3 &c) {
 template <int N = 1>
 inline void KalmanGain(const MP6x6SF &a, const MP3x3 &b, MP3x6 &c) {
 
-//#pragma omp simd
+#pragma unroll
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[ 1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
@@ -458,7 +436,7 @@ void KalmanUpdate(MP6x6SF &trkErr, MP6F &inPar, const MP3x3SF &hitErr, const MP3
   KalmanGainInv<N>(trkErr, hitErr, inverse_temp);
   KalmanGain<N>(trkErr, inverse_temp, kGain);
 
-//#pragma omp simd
+#pragma unroll
   for (int it = 0;it < N;++it) {
     const auto xin     = inPar(iparX,it);
     const auto yin     = inPar(iparY,it);
@@ -532,7 +510,7 @@ void propagateToZ(const MP6x6SF &inErr, const MP6F &inPar, const MP1I &inChg,
   MP6x6F temp;
   
   auto PosInMtrx = [=] (int i, int j, int D, int bsz = 1) constexpr {return bsz*(i*D+j);};
-//#pragma omp simd
+#pragma unroll
   for (int it=0;it<N;++it) {	
     const auto zout = msP(iparZ,it);
     //note: in principle charge is not needed and could be the sign of ipt
@@ -660,23 +638,23 @@ int main (int argc, char* argv[]) {
    auto p2z_kernels = [=,btracksPtr    = trcks.data(),
                          outtracksPtr  = outtrcks.data(),
                          bhitsPtr      = hits.data()] (const int i) {
-                         //  
-                         MPTRK btracks;
+                         //    
                          MPTRK obtracks;
-                         MPHIT bhits;
                          //
-                         btracksPtr[i].load(btracks);
+                         const MPTRK btracks = btracksPtr[i];
+                         //
+                         constexpr int N = bsize;
                          //
                          for(int layer=0; layer<nlayer; ++layer) {
                            //
                            bhitsPtr[layer+nlayer*i].load(bhits);
                            //
-                           propagateToZ<bsize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
-                           KalmanUpdate<bsize>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
+                           propagateToZ<N>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
+                           KalmanUpdate<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
                            //
                          }
                          //
-                         outtracksPtr[i].save(obtracks);
+                         outtracksPtr[i] = obtracks;
                        };
 
    const int outer_loop_range = nevts*nb;

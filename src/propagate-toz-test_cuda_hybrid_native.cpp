@@ -290,26 +290,20 @@ constexpr int iparTheta = 5;
 template <typename T, int N, int bSize>
 struct MPNX {
    std::array<T,N*bSize> data;
+   
+   MPNX() = default;
+      
    //basic accessors
    const T& operator[](const int idx) const {return data[idx];}
    T& operator[](const int idx) {return data[idx];}
    const T& operator()(const int m, const int b) const {return data[m*bSize+b];}
    T& operator()(const int m, const int b) {return data[m*bSize+b];}
    //
-   void load(MPNX& dst) const{
+   void copy(const MPNX& src) {
+#pragma unroll
      for (size_t it=0;it<bSize;++it) {
      //const int l = it+ib*bsize+ie*nb*bsize;
-       for (size_t ip=0;ip<N;++ip) {    	
-    	 dst.data[it + ip*bSize] = this->operator()(ip, it);  
-       }
-     }//
-     
-     return;
-   }
-
-   void save(const MPNX& src) {
-     for (size_t it=0;it<bSize;++it) {
-     //const int l = it+ib*bsize+ie*nb*bsize;
+#pragma unroll
        for (size_t ip=0;ip<N;++ip) {    	
     	 this->operator()(ip, it) = src.data[it + ip*bSize];  
        }
@@ -336,18 +330,13 @@ struct MPTRK {
   MP6x6SF cov;
   MP1I    q;
 
-  //  MP22I   hitidx;
-  void load(MPTRK &dst){
-    par.load(dst.par);
-    cov.load(dst.cov);
-    q.load(dst.q);    
-    return;	  
-  }
-  void save(const MPTRK &src){
-    par.save(src.par);
-    cov.save(src.cov);
-    q.save(src.q);
-    return;
+  MPTRK() = default;
+
+  MPTRK& operator=(const MPTRK &src){
+    par.copy(src.par);
+    cov.copy(src.cov);
+    q.copy(src.q);
+    return *this;
   }
 };
 
@@ -355,18 +344,15 @@ struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
   //
-  void load(MPHIT &dst){
-    pos.load(dst.pos);
-    cov.load(dst.cov);
+  MPHIT() = default;
+
+  MPHIT(const MPHIT &src){
+    //
+    pos.copy(src.pos);
+    cov.copy(src.cov);
+    //
     return;
   }
-  void save(const MPHIT &src){
-    pos.save(src.pos);
-    cov.save(src.cov);
-
-    return;
-  }
-
 };
 
 ///////////////////////////////////////
@@ -911,22 +897,22 @@ int main (int argc, char* argv[]) {
                          outtracksPtr  = outtrcks.data(),
                          bhitsPtr      = hits.data()] (const auto i) {
                          //  
-                         MPTRK btracks;
                          MPTRK obtracks;
-                         MPHIT bhits;
                          //
-                         btracksPtr[i].load(btracks);
+                         const MPTRK btracks = btracksPtr[i];
+                         //
+			  constexpr int N = bsize;
                          //
                          for(int layer=0; layer<nlayer; ++layer) {
                            //
-                           bhitsPtr[layer+nlayer*i].load(bhits);
+                           const MPHIT bhits = MPHIT(bhitsPtr[layer+nlayer*i]);
                            //
-                           propagateToZ<bsize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
-                           KalmanUpdate<bsize>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
+                           propagateToZ<N>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
+                           KalmanUpdate<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
                            //
                          }
                          //
-                         outtracksPtr[i].save(obtracks);
+                         outtracksPtr[i] = obtracks;
                        };
    // synchronize to ensure that all needed data is on the device:
    p2z_wait<enable_cuda>();
