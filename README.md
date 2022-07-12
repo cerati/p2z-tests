@@ -99,7 +99,8 @@ Version 3 has the same computation and communiation patterns as OpenACC async ve
 ```shell
 $ make COMPILER=nvcc MODE=cuda
 $ make COMPILER=nvcc MODE=cudav2
-$ make COMPILER=nvcc MODE=cudav3
+$ make COMPILER=nvcc MODE=cudav3 USE_ASYNC=1 #for asynchronous execution
+$ make COMPILER=nvcc MODE=cudav3 USE_ASYNC=0 #for synchronous execution
 ```
 
 ## Eigen
