@@ -78,50 +78,20 @@ struct MPNX {
    T& operator[](const int idx) {return data[idx];}
    const T& operator()(const int m, const int b) const {return data[m*bSize+b];}
    T& operator()(const int m, const int b) {return data[m*bSize+b];}
-   //
-   //std::enable_if_t<std::is_arithmetic_v<T>,void> load(MPNX& dst) const{
-   void load(MPNX& dst) const{
-     for (int it=0;it<bSize_;++it) {
-     //const int l = it+ib*bsize+ie*nb*bsize;
-       for (int ip=0;ip<N;++ip) {    	
-    	 dst.data[it + ip*bSize_] = this->operator()(ip, it);  
-       }
-     }//
-     
-     return;
-   }
-   
+   //   
    [[intel::sycl_explicit_simd]] void simd_load(MPNX<simd<T, bSize_>, N, 1>& dst){
-     //
-     {
-     //const int l = it+ib*bsize+ie*nb*bsize;
-       for (int ip=0;ip<N;++ip) {    	
-    	 dst.data[ip] = block_load<T, bSize_>(&data[ip*bSize_]); //this->operator()(ip, 0);  
-       }
+#pragma unroll
+     for (int ip=0;ip<N;++ip) {    	
+       dst.data[ip] = block_load<T, bSize_>(&data[ip*bSize_]); //this->operator()(ip, 0);  
      }//
-     
-     return;
-   }
-
-   //std::enable_if_t<std::is_arithmetic_v<T>,void> save(const MPNX& src) {
-   void save(const MPNX& src) {
-     for (int it=0;it<bSize_;++it) {
-     //const int l = it+ib*bsize+ie*nb*bsize;
-       for (int ip=0;ip<N;++ip) {    	
-    	 this->operator()(ip, it) = src.data[it + ip*bSize_];  
-       }
-     }//
-     
      return;
    }
 //
    [[intel::sycl_explicit_simd]] void simd_save(const MPNX<simd<T, bSize_>, N, 1>& src) {
-     {
-     //const int l = it+ib*bsize+ie*nb*bsize;
-       for (int ip=0;ip<N;++ip) {    	
-    	 block_store<T, bSize_>(&data[ip*bSize_], src.data[ip]); 
-       }
-     }//
+#pragma unroll
+     for (int ip=0;ip<N;++ip) {    	
+       block_store<T, bSize_>(&data[ip*bSize_], src.data[ip]); 
+     }
      
      return;
    }
@@ -739,7 +709,7 @@ int main (int argc, char* argv[]) {
                          //
                          for(int layer=0; layer<nlayer; ++layer) {
                            //
-                           bhitsPtr[layer+nlayer*i].simd_load(bhits);
+                           const MPHIT_ bhits = bhitsPtr[layer+nlayer*i].simd_load();
                            //
                            propagateToZ<bSize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
                            KalmanUpdate<bSize>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);

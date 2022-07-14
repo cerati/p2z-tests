@@ -647,7 +647,7 @@ int main (int argc, char* argv[]) {
                          //
                          for(int layer=0; layer<nlayer; ++layer) {
                            //
-                           bhitsPtr[layer+nlayer*i].load(bhits);
+                           const MPHIT bhits = bhitsPtr[layer+nlayer*i];
                            //
                            propagateToZ<N>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
                            KalmanUpdate<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);

@@ -138,25 +138,14 @@ struct MPNX {
    const T& operator()(const int m, const int b) const {return data[m*bSize+b];}
    T& operator()(const int m, const int b) {return data[m*bSize+b];}
    //
-   void load(MPNX& dst) const{
+   void copy(const MPNX& src) {
+#pragma unroll
      for (size_t it=0;it<bSize;++it) {
-     //const int l = it+ib*bsize+ie*nb*bsize;
-       for (size_t ip=0;ip<N;++ip) {    	
-    	 dst.data[it + ip*bSize] = this->operator()(ip, it);  
-       }
-     }//
-     
-     return;
-   }
-
-   void save(const MPNX& src) {
-     for (size_t it=0;it<bSize;++it) {
-     //const int l = it+ib*bsize+ie*nb*bsize;
+#pragma unroll
        for (size_t ip=0;ip<N;++ip) {    	
     	 this->operator()(ip, it) = src.data[it + ip*bSize];  
        }
      }//
-     
      return;
    }
 };
