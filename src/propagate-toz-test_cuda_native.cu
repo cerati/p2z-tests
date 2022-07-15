@@ -24,7 +24,7 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 
 
 #ifndef ntrks
-#define ntrks 8192
+#define ntrks 9600
 #endif
 
 //#define ntrks    (ntrks/bsize)
@@ -229,84 +229,62 @@ constexpr int iparPhi   = 4;
 constexpr int iparTheta = 5;
 
 template <typename T, int N>
-struct MPNX_ {
+struct MPNX {
    impl::array<T,N> data;
    //basic accessors
    __device__ __host__ inline const T& operator[](const int idx) const {return data[idx];}
    __device__ __host__ inline T& operator[](const int idx) {return data[idx];}
-   
-   __device__ __host__ void load(MPNX_& dst) const{
-     //const int l = it+ib*bsize+ie*nb*bsize;
-     for (size_t ip=0;ip<N;++ip) {    	
-       dst.data[ip] = this->data[ip];  
-     }
-     return;
-   }
 
-   __device__ __host__ void save(const MPNX_& src) {
-     //const int l = it+ib*bsize+ie*nb*bsize;
-     for (size_t ip=0;ip<N;++ip) {    	
-       this->data[ip] = src.data[ip];  
+   __device__ __host__ void copy(const MPNX& src) {
+#pragma unroll
+     for (size_t ip=0;ip<N;++ip){
+       this->data[ip] = src.data[ip];
      }
      return;
    }
 
 };
 
-using MP1I_    = MPNX_<int,   1 >;
-using MP1F_    = MPNX_<float, 1 >;
-using MP2F_    = MPNX_<float, 3 >;
-using MP3F_    = MPNX_<float, 3 >;
-using MP6F_    = MPNX_<float, 6 >;
-using MP2x2SF_ = MPNX_<float, 3 >;
-using MP3x3SF_ = MPNX_<float, 6 >;
-using MP6x6SF_ = MPNX_<float, 21>;
-using MP6x6F_  = MPNX_<float, 36>;
-using MP3x3_   = MPNX_<float, 9 >;
-using MP3x6_   = MPNX_<float, 18>;
+using MP1I    = MPNX<int,   1 >;
+using MP1F    = MPNX<float, 1 >;
+using MP2F    = MPNX<float, 3 >;
+using MP3F    = MPNX<float, 3 >;
+using MP6F    = MPNX<float, 6 >;
+using MP2x2SF = MPNX<float, 3 >;
+using MP3x3SF = MPNX<float, 6 >;
+using MP6x6SF = MPNX<float, 21>;
+using MP6x6F  = MPNX<float, 36>;
+using MP3x3   = MPNX<float, 9 >;
+using MP3x6   = MPNX<float, 18>;
 
-struct MPTRK_ {
-  MP6F_    par;
-  MP6x6SF_ cov;
-  MP1I_    q;
+struct MPTRK {
+  MP6F    par;
+  MP6x6SF cov;
+  MP1I    q;
 
   //  MP22I   hitidx;
-  __device__ __host__ void load(MPTRK_ &dst){
-    par.load(dst.par);
-    cov.load(dst.cov);
-    q.load(dst.q);    
-    return;	  
-  }
-  __device__ __host__ void save(const MPTRK_ &src){
-    par.save(src.par);
-    cov.save(src.cov);
-    q.save(src.q);
-    return;
+  __device__ __host__ MPTRK& operator=(const MPTRK &src){
+    par.copy(src.par);
+    cov.copy(src.cov);
+    q.copy(src.q);
+    return *this;
   }
 
 };
 
-struct MPHIT_ {
-  MP3F_    pos;
-  MP3x3SF_ cov;
-  
+struct MPHIT {
+  MP3F    pos;
+  MP3x3SF cov;
   //
-  __device__ __host__  void load(MPHIT_ &dst){
-    pos.load(dst.pos);
-    cov.load(dst.cov);
-    return;
+  __device__ __host__  MPHIT& operator=(const MPHIT &src){
+    pos.copy(src.pos);
+    cov.copy(src.cov);
+    return *this;
   }
-  __device__ __host__  void save(const MPHIT_ &src){
-    pos.save(src.pos);
-    cov.save(src.cov);
-
-    return;
-  }
-
 };
 
-using MPTRKAllocator = impl::UVMAllocator<MPTRK_>;
-using MPHITAllocator = impl::UVMAllocator<MPHIT_>;
+using MPTRKAllocator = impl::UVMAllocator<MPTRK>;
+using MPHITAllocator = impl::UVMAllocator<MPHIT>;
 
 ///////////////////////////////////////
 //Gen. utils
@@ -333,7 +311,7 @@ float randn(float mu, float sigma) {
 
 
 template<typename MPTRKAllocator>
-void prepareTracks(std::vector<MPTRK_, MPTRKAllocator> &trcks, ATRK &inputtrk) {
+void prepareTracks(std::vector<MPTRK, MPTRKAllocator> &trcks, ATRK &inputtrk) {
   //
   for (int ie=0;ie<nevts;++ie) {
     for (int ib=0;ib<ntrks;++ib) {
@@ -356,7 +334,7 @@ void prepareTracks(std::vector<MPTRK_, MPTRKAllocator> &trcks, ATRK &inputtrk) {
 }
 
 template<typename MPHITAllocator>
-void prepareHits(std::vector<MPHIT_, MPHITAllocator> &hits, std::vector<AHIT>& inputhits) {
+void prepareHits(std::vector<MPHIT, MPHITAllocator> &hits, std::vector<AHIT>& inputhits) {
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (int lay=0;lay<nlayer;++lay) {
 
@@ -388,88 +366,88 @@ void prepareHits(std::vector<MPHIT_, MPHITAllocator> &hits, std::vector<AHIT>& i
 
 //////////////////////////////////////////////////////////////////////////////////////
 // Aux utils 
-MPTRK_* bTk(MPTRK_* tracks, int ev, int ib) {
+MPTRK* bTk(MPTRK* tracks, int ev, int ib) {
   return &(tracks[ib + ntrks*ev]);
 }
 
-const MPTRK_* bTk(const MPTRK_* tracks, int ev, int ib) {
+const MPTRK* bTk(const MPTRK* tracks, int ev, int ib) {
   return &(tracks[ib + ntrks*ev]);
 }
 
-float q(const MP1I_* bq, int it){
+float q(const MP1I* bq, int it){
   return (*bq).data[0];
 }
 //
-float par(const MP6F_* bpars, int it, int ipar){
+float par(const MP6F* bpars, int it, int ipar){
   return (*bpars).data[it + ipar];
 }
-float x    (const MP6F_* bpars, int it){ return par(bpars, it, 0); }
-float y    (const MP6F_* bpars, int it){ return par(bpars, it, 1); }
-float z    (const MP6F_* bpars, int it){ return par(bpars, it, 2); }
-float ipt  (const MP6F_* bpars, int it){ return par(bpars, it, 3); }
-float phi  (const MP6F_* bpars, int it){ return par(bpars, it, 4); }
-float theta(const MP6F_* bpars, int it){ return par(bpars, it, 5); }
+float x    (const MP6F* bpars, int it){ return par(bpars, it, 0); }
+float y    (const MP6F* bpars, int it){ return par(bpars, it, 1); }
+float z    (const MP6F* bpars, int it){ return par(bpars, it, 2); }
+float ipt  (const MP6F* bpars, int it){ return par(bpars, it, 3); }
+float phi  (const MP6F* bpars, int it){ return par(bpars, it, 4); }
+float theta(const MP6F* bpars, int it){ return par(bpars, it, 5); }
 //
-float par(const MPTRK_* btracks, int it, int ipar){
+float par(const MPTRK* btracks, int it, int ipar){
   return par(&(*btracks).par,it,ipar);
 }
-float x    (const MPTRK_* btracks, int it){ return par(btracks, it, 0); }
-float y    (const MPTRK_* btracks, int it){ return par(btracks, it, 1); }
-float z    (const MPTRK_* btracks, int it){ return par(btracks, it, 2); }
-float ipt  (const MPTRK_* btracks, int it){ return par(btracks, it, 3); }
-float phi  (const MPTRK_* btracks, int it){ return par(btracks, it, 4); }
-float theta(const MPTRK_* btracks, int it){ return par(btracks, it, 5); }
+float x    (const MPTRK* btracks, int it){ return par(btracks, it, 0); }
+float y    (const MPTRK* btracks, int it){ return par(btracks, it, 1); }
+float z    (const MPTRK* btracks, int it){ return par(btracks, it, 2); }
+float ipt  (const MPTRK* btracks, int it){ return par(btracks, it, 3); }
+float phi  (const MPTRK* btracks, int it){ return par(btracks, it, 4); }
+float theta(const MPTRK* btracks, int it){ return par(btracks, it, 5); }
 //
-float par(const MPTRK_* tracks, int ev, int tk, int ipar){
+float par(const MPTRK* tracks, int ev, int tk, int ipar){
   int ib = tk;
-  const MPTRK_* btracks = bTk(tracks, ev, ib);
+  const MPTRK* btracks = bTk(tracks, ev, ib);
   int it = 0;
   return par(btracks, it, ipar);
 }
-float x    (const MPTRK_* tracks, int ev, int tk){ return par(tracks, ev, tk, 0); }
-float y    (const MPTRK_* tracks, int ev, int tk){ return par(tracks, ev, tk, 1); }
-float z    (const MPTRK_* tracks, int ev, int tk){ return par(tracks, ev, tk, 2); }
-float ipt  (const MPTRK_* tracks, int ev, int tk){ return par(tracks, ev, tk, 3); }
-float phi  (const MPTRK_* tracks, int ev, int tk){ return par(tracks, ev, tk, 4); }
-float theta(const MPTRK_* tracks, int ev, int tk){ return par(tracks, ev, tk, 5); }
+float x    (const MPTRK* tracks, int ev, int tk){ return par(tracks, ev, tk, 0); }
+float y    (const MPTRK* tracks, int ev, int tk){ return par(tracks, ev, tk, 1); }
+float z    (const MPTRK* tracks, int ev, int tk){ return par(tracks, ev, tk, 2); }
+float ipt  (const MPTRK* tracks, int ev, int tk){ return par(tracks, ev, tk, 3); }
+float phi  (const MPTRK* tracks, int ev, int tk){ return par(tracks, ev, tk, 4); }
+float theta(const MPTRK* tracks, int ev, int tk){ return par(tracks, ev, tk, 5); }
 //
 
-const MPHIT_* bHit(const MPHIT_* hits, int ev, int ib) {
+const MPHIT* bHit(const MPHIT* hits, int ev, int ib) {
   return &(hits[ib + ntrks*ev]);
 }
-const MPHIT_* bHit(const MPHIT_* hits, int ev, int ib,int lay) {
+const MPHIT* bHit(const MPHIT* hits, int ev, int ib,int lay) {
 return &(hits[lay + (ib*nlayer) +(ev*nlayer*ntrks)]);
 }
 //
-float Pos(const MP3F_* hpos, int it, int ipar){
+float Pos(const MP3F* hpos, int it, int ipar){
   return (*hpos).data[it + ipar];
 }
-float x(const MP3F_* hpos, int it)    { return Pos(hpos, it, 0); }
-float y(const MP3F_* hpos, int it)    { return Pos(hpos, it, 1); }
-float z(const MP3F_* hpos, int it)    { return Pos(hpos, it, 2); }
+float x(const MP3F* hpos, int it)    { return Pos(hpos, it, 0); }
+float y(const MP3F* hpos, int it)    { return Pos(hpos, it, 1); }
+float z(const MP3F* hpos, int it)    { return Pos(hpos, it, 2); }
 //
-float Pos(const MPHIT_* hits, int it, int ipar){
+float Pos(const MPHIT* hits, int it, int ipar){
   return Pos(&(*hits).pos,it,ipar);
 }
-float x(const MPHIT_* hits, int it)    { return Pos(hits, it, 0); }
-float y(const MPHIT_* hits, int it)    { return Pos(hits, it, 1); }
-float z(const MPHIT_* hits, int it)    { return Pos(hits, it, 2); }
+float x(const MPHIT* hits, int it)    { return Pos(hits, it, 0); }
+float y(const MPHIT* hits, int it)    { return Pos(hits, it, 1); }
+float z(const MPHIT* hits, int it)    { return Pos(hits, it, 2); }
 //
-float Pos(const MPHIT_* hits, int ev, int tk, int ipar){
+float Pos(const MPHIT* hits, int ev, int tk, int ipar){
   int ib = tk;
-  const MPHIT_* bhits = bHit(hits, ev, ib);
+  const MPHIT* bhits = bHit(hits, ev, ib);
   int it = 0;
   return Pos(bhits,it,ipar);
 }
-float x(const MPHIT_* hits, int ev, int tk)    { return Pos(hits, ev, tk, 0); }
-float y(const MPHIT_* hits, int ev, int tk)    { return Pos(hits, ev, tk, 1); }
-float z(const MPHIT_* hits, int ev, int tk)    { return Pos(hits, ev, tk, 2); }
+float x(const MPHIT* hits, int ev, int tk)    { return Pos(hits, ev, tk, 0); }
+float y(const MPHIT* hits, int ev, int tk)    { return Pos(hits, ev, tk, 1); }
+float z(const MPHIT* hits, int ev, int tk)    { return Pos(hits, ev, tk, 2); }
 
 
 ////////////////////////////////////////////////////////////////////////
 ///MAIN compute kernels
 
-__device__ inline void MultHelixPropEndcap(const MP6x6F_ &a, const MP6x6SF_ &b, MP6x6F_ &c) {
+__device__ inline void MultHelixPropEndcap(const MP6x6F &a, const MP6x6SF &b, MP6x6F &c) {
   {
     c[ 0] = b[ 0] + a[ 2]*b[ 3] + a[ 3]*b[ 6] + a[ 4]*b[10] + a[ 5]*b[15];
     c[ 1] = b[ 1] + a[ 2]*b[ 4] + a[ 3]*b[ 7] + a[ 4]*b[11] + a[ 5]*b[16];
@@ -511,7 +489,7 @@ __device__ inline void MultHelixPropEndcap(const MP6x6F_ &a, const MP6x6SF_ &b, 
   return;
 }
 
-__device__ inline void MultHelixPropTranspEndcap(const MP6x6F_ &a, const MP6x6F_ &b, MP6x6SF_ &c) {
+__device__ inline void MultHelixPropTranspEndcap(const MP6x6F &a, const MP6x6F &b, MP6x6SF &c) {
   {
     c[ 0] = b[ 0] + b[ 2]*a[ 2] + b[ 3]*a[ 3] + b[ 4]*a[ 4] + b[ 5]*a[ 5];
     c[ 1] = b[ 6] + b[ 8]*a[ 2] + b[ 9]*a[ 3] + b[10]*a[ 4] + b[11]*a[ 5];
@@ -538,7 +516,7 @@ __device__ inline void MultHelixPropTranspEndcap(const MP6x6F_ &a, const MP6x6F_
   return;
 }
 
-__device__ inline void KalmanGainInv(const MP6x6SF_ &a, const MP3x3SF_ &b, MP3x3_ &c) {
+__device__ inline void KalmanGainInv(const MP6x6SF &a, const MP3x3SF &b, MP3x3 &c) {
 
   {
     double det =
@@ -561,7 +539,7 @@ __device__ inline void KalmanGainInv(const MP6x6SF_ &a, const MP3x3SF_ &b, MP3x3
   return;
 }
 
-__device__ inline void KalmanGain(const MP6x6SF_ &a, const MP3x3_ &b, MP3x6_ &c) {
+__device__ inline void KalmanGain(const MP6x6SF &a, const MP3x3 &b, MP3x6 &c) {
 
   {
     c[ 0] = a[0]*b[0] + a[ 1]*b[3] + a[2]*b[6];
@@ -587,11 +565,11 @@ __device__ inline void KalmanGain(const MP6x6SF_ &a, const MP3x3_ &b, MP3x6_ &c)
   return;
 }
 
-__device__ void KalmanUpdate(MP6x6SF_ &trkErr, MP6F_ &inPar, const MP3x3SF_ &hitErr, const MP3F_ &msP){
+__device__ void KalmanUpdate(MP6x6SF &trkErr, MP6F &inPar, const MP3x3SF &hitErr, const MP3F &msP){
 
-  MP3x3_ inverse_temp;
-  MP3x6_ kGain;
-  MP6x6SF_ newErr;
+  MP3x3 inverse_temp;
+  MP3x6 kGain;
+  MP6x6SF newErr;
   
   KalmanGainInv(trkErr, hitErr, inverse_temp);
   KalmanGain(trkErr, inverse_temp, kGain);
@@ -661,11 +639,11 @@ __device__ void KalmanUpdate(MP6x6SF_ &trkErr, MP6F_ &inPar, const MP3x3SF_ &hit
 //constexpr auto kfact= 100/(-0.299792458*3.8112);
 constexpr auto kfact= 100/3.8;
 
-__device__ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP1I_ &inChg, 
-                  const MP3F_ &msP, MP6x6SF_ &outErr, MP6F_ &outPar) {
+__device__ void propagateToZ(const MP6x6SF &inErr, const MP6F &inPar, const MP1I &inChg, 
+                  const MP3F &msP, MP6x6SF &outErr, MP6F &outPar) {
   
-  MP6x6F_ errorProp;
-  MP6x6F_ temp;
+  MP6x6F errorProp;
+  MP6x6F temp;
 
   auto PosInMtrx = [=] (int i, int j, int D) constexpr {return (i*D+j);};
 //#pragma omp simd
@@ -731,26 +709,25 @@ __device__ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP
 
 
 template <bool grid_stride = true>
-__global__ void launch_p2z_kernels(MPTRK_ *obtracks_, MPTRK_ *btracks_, MPHIT_ *bhits_, const int length){
+__global__ void launch_p2z_kernels(MPTRK *obtracks_, MPTRK *btracks_, MPHIT *bhits_, const int length){
    auto i = threadIdx.x + blockIdx.x * blockDim.x;
-
-   MPTRK_ btracks;
-   MPTRK_ obtracks;
-   MPHIT_ bhits;
 
    while (i < length) {
      //
-     btracks_[i].load(btracks);
+     MPTRK obtracks;
+     //
+     const MPTRK btracks = btracks_[i];
+     //
      for(int layer=0; layer<nlayer; ++layer) {  
        //
-       bhits_[layer+nlayer*i].load(bhits);
+       const MPHIT bhits = bhits_[layer+nlayer*i];
        //
        propagateToZ(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
        KalmanUpdate(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
        //
      }
      //
-     obtracks_[i].save(obtracks);
+     obtracks_[i] = obtracks;
      
      if constexpr (grid_stride) i += gridDim.x * blockDim.x;
      else break;
@@ -788,20 +765,20 @@ int main (int argc, char* argv[]) {
 
    auto stream = streams[0];//with UVM, we use only one compute stream    
    //
-   std::vector<MPTRK_, MPTRKAllocator> outtrcks(nevts*ntrks);
+   std::vector<MPTRK, MPTRKAllocator> outtrcks(nevts*ntrks);
    // migrate output object to dev memory:
-   p2z_prefetch<MPTRK_, MPTRKAllocator>(outtrcks, dev_id, stream);
+   p2z_prefetch<MPTRK, MPTRKAllocator>(outtrcks, dev_id, stream);
 
-   std::vector<MPTRK_, MPTRKAllocator > trcks(nevts*ntrks); 
+   std::vector<MPTRK, MPTRKAllocator > trcks(nevts*ntrks); 
    prepareTracks<MPTRKAllocator>(trcks, inputtrk);
    //
-   std::vector<MPHIT_, MPHITAllocator> hits(nlayer*nevts*ntrks);
+   std::vector<MPHIT, MPHITAllocator> hits(nlayer*nevts*ntrks);
    prepareHits<MPHITAllocator>(hits, inputhits);
    //
    //
    if constexpr (include_data_transfer == false) {
-     p2z_prefetch<MPTRK_, MPTRKAllocator>(trcks, dev_id, stream);
-     p2z_prefetch<MPHIT_, MPHITAllocator>(hits,  dev_id, stream);
+     p2z_prefetch<MPTRK, MPTRKAllocator>(trcks, dev_id, stream);
+     p2z_prefetch<MPHIT, MPHITAllocator>(hits,  dev_id, stream);
    }
 
    // synchronize to ensure that all needed data is on the device:
@@ -812,9 +789,9 @@ int main (int argc, char* argv[]) {
 
    printf("done preparing!\n");
 
-   printf("Size of struct MPTRK trk[] = %ld\n", nevts*ntrks*sizeof(MPTRK_));
-   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*ntrks*sizeof(MPTRK_));
-   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*ntrks*sizeof(MPHIT_));
+   printf("Size of struct MPTRK trk[] = %ld\n", nevts*ntrks*sizeof(MPTRK));
+   printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*ntrks*sizeof(MPTRK));
+   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*ntrks*sizeof(MPHIT));
 
    const int phys_length      = nevts*ntrks;
    const int outer_loop_range = phys_length;
@@ -828,14 +805,14 @@ int main (int argc, char* argv[]) {
      auto wall_start = std::chrono::high_resolution_clock::now();
      //
      if constexpr (include_data_transfer) {
-       p2z_prefetch<MPTRK_, MPTRKAllocator>(trcks, dev_id, stream);
-       p2z_prefetch<MPHIT_, MPHITAllocator>(hits,  dev_id, stream);
+       p2z_prefetch<MPTRK, MPTRKAllocator>(trcks, dev_id, stream);
+       p2z_prefetch<MPHIT, MPHITAllocator>(hits,  dev_id, stream);
      }
 
      launch_p2z_kernels<<<grid, blocks, 0, stream>>>(outtrcks.data(), trcks.data(), hits.data(), phys_length);
 
      if constexpr (include_data_transfer) {
-       p2z_prefetch<MPTRK_, MPTRKAllocator>(outtrcks, host_id, stream);
+       p2z_prefetch<MPTRK, MPTRKAllocator>(outtrcks, host_id, stream);
      }
      //
      p2z_wait();
@@ -848,10 +825,10 @@ int main (int argc, char* argv[]) {
      // reset initial states (don't need if we won't measure data migrations):
      if constexpr (include_data_transfer) {
 
-       p2z_prefetch<MPTRK_, MPTRKAllocator>(trcks, host_id, stream);
-       p2z_prefetch<MPHIT_, MPHITAllocator>(hits,  host_id, stream);
+       p2z_prefetch<MPTRK, MPTRKAllocator>(trcks, host_id, stream);
+       p2z_prefetch<MPHIT, MPHITAllocator>(hits,  host_id, stream);
        //
-       p2z_prefetch<MPTRK_, MPTRKAllocator, decltype(stream), true>(outtrcks, dev_id, stream);
+       p2z_prefetch<MPTRK, MPTRKAllocator, decltype(stream), true>(outtrcks, dev_id, stream);
      }
    } //end of itr loop
 
