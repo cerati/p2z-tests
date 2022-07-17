@@ -27,7 +27,7 @@ using namespace sycl::ext::intel::esimd;
 using namespace sycl::ext::intel;
 
 #ifndef bsize
-constexpr int bSize = 8;
+constexpr int bSize = 16;
 #else
 constexpr int bSize = bsize;
 #endif
@@ -143,7 +143,7 @@ struct MPTRK {
 
   MPTRK() = default; 
   //
-  const MPTRK_ simd_load(){
+  const MPTRK_ load(){
   
     MPTRK_ dst;
     //
@@ -154,7 +154,7 @@ struct MPTRK {
     return std::move(dst);	  
   }
   //
-  void simd_save(const MPTRK_ &src){
+  void save(const MPTRK_ &src){
     //
     par.simd_save(src.par);
     cov.simd_save(src.cov);
@@ -171,7 +171,7 @@ struct MPHIT {
   //
   MPHIT() = default;
   
-  const MPHIT_ simd_load(){
+  const MPHIT_ load(){
     //
     MPHIT_ dst;
     //
@@ -703,20 +703,20 @@ int main (int argc, char* argv[]) {
 
                          MPTRK_ obtracks;
                          //
-                         const MPTRK_ btracks = btracksPtr[i].simd_load();
+                         const MPTRK_ btracks = btracksPtr[i].load();
                          //
                          constexpr int N = bsize;
                          //
                          for(int layer=0; layer<nlayer; ++layer) {
                            //
-                           const MPHIT_ bhits = bhitsPtr[layer+nlayer*i].simd_load();
+                           const MPHIT_ bhits = bhitsPtr[layer+nlayer*i].load();
                            //
                            propagateToZ<bSize>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
                            KalmanUpdate<bSize>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
                            //
                          }
                          //
-                         outtracksPtr[i].simd_save(obtracks);
+                         outtracksPtr[i].save(obtracks);
                        };
 
    gettimeofday(&timecheck, NULL);
