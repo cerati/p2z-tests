@@ -1,10 +1,7 @@
 # KOKKOS_PATH = ${HOME}/kokkos-simd
 # KOKKOS_PATH = ${HOME}/kokkos
- KOKKOS_PATH = ${kokkosopenacc}
-#KOKKOS_DEVICES = "OpenMP"
+KOKKOS_PATH = ${KOKKOS_ROOT}
 KOKKOS_DEVICES = "Cuda"
-# KOKKOS_DEVICES = "OpenMP,Cuda"
-#EXE_NAME = "test"
 
 SRC = $(wildcard *.cpp)
 
@@ -17,27 +14,20 @@ endif
 ifndef NLAYER
 NLAYER=20
 endif
+ifndef num_streams
+num_streams=10
+endif
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
+CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dnum_streams=${num_streams}
 #EXE = ${EXE_NAME}.cuda
 # KOKKOS_ARCH = "HSW,Kepler35"
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
-EXE = "../../bin/propagate_nvcc_kokkos_v2"
+EXE = "../../bin/propagate_nvcc_kokkos_v4"
 USE_GPU=1
-else
-# -9 needed on apollo
-CXX = g++
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
-#CXX = g++-9
-# CXX = icpc
-#EXE = ${EXE_NAME}.host
-EXE = "../../bin/propagate_gcc_kokkos_v2"
-KOKKOS_ARCH = "SKX"
-#KOKKOS_ARCH = "POWER9"
 endif
 
 LINK = ${CXX}

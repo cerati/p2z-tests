@@ -40,11 +40,11 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef threadsperblockx  
-#define threadsperblockx 1
+#define threadsperblockx bsize/elementsperthread
 #endif
 
 #ifndef num_streams
-#define num_streams 1
+#define num_streams 10
 #endif
 
 
@@ -619,33 +619,60 @@ int main (int argc, char* argv[]) {
    #ifdef KOKKOS_ENABLE_CUDA
    #define MemSpace Kokkos::CudaSpace
    #endif
-   #ifdef KOKKOS_ENABLE_HIP
-   #define MemSpace Kokkos::Experimental::HIPSpace
-   #endif
-   #ifdef KOKKOS_ENABLE_OPENMPTARGET
-   #define MemSpace Kokkos::OpenMPTargetSpace
-   #endif
 
    #ifndef MemSpace
-   #define MemSpace Kokkos::HostSpace
+   Kokkos::abort("This Kokkos version of P2Z benchmark works only for the CUDA backend; exit!");
    #endif
 
    printf("After kokkos::init\n");
    using ExecSpace = MemSpace::execution_space;
-   ExecSpace e;
-   e.print_configuration(std::cout, true);
+   cudaStream_t streams[num_streams];
+   for(int s=0; s<num_streams; s++) {
+      cudaStreamCreate(&streams[s]);
+   }
+   ExecSpace ExecSpaceInstances[num_streams];
+   for(int s=0; s<num_streams; s++) {
+      new(&ExecSpaceInstances[s]) ExecSpace(streams[s]);
+   }
+   ExecSpaceInstances[0].print_configuration(std::cout, true);
 
+   int chunkSize = nevts/num_streams;
+   int lastChunkSize = chunkSize;
+   if( nevts%num_streams != 0 ) {
+     lastChunkSize = chunkSize + (nevts - num_streams*chunkSize);
+   }
    Kokkos::View<MPTRK*> trk("trk", nevts*nb);
    Kokkos::View<MPTRK*>::HostMirror h_trk = prepareTracks(inputtrk, trk);
-   //Kokkos::deep_copy(trk, h_trk);
- 
+   Kokkos::View<MPTRK*, Kokkos::LayoutLeft> trk_subviews[num_streams];
+   Kokkos::View<MPTRK*, Kokkos::LayoutLeft>::HostMirror h_trk_subviews[num_streams];
+
    Kokkos::View<MPHIT*> hit("hit", nevts*nb*nlayer);
    Kokkos::View<MPHIT*>::HostMirror h_hit = prepareHits(inputhit, hit);
-   //Kokkos::deep_copy(hit, h_hit);
+   Kokkos::View<MPHIT*, Kokkos::LayoutLeft> hit_subviews[num_streams];
+   Kokkos::View<MPHIT*, Kokkos::LayoutLeft>::HostMirror h_hit_subviews[num_streams];
 
-   //MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
    Kokkos::View<MPTRK*> outtrk("outtrk", nevts*nb);
    Kokkos::View<MPTRK*>::HostMirror h_outtrk = Kokkos::create_mirror_view(outtrk);
+   Kokkos::View<MPTRK*, Kokkos::LayoutLeft> outtrk_subviews[num_streams];
+   Kokkos::View<MPTRK*, Kokkos::LayoutLeft>::HostMirror h_outtrk_subviews[num_streams];
+
+   int localChunkSize = chunkSize;
+   for(int s=0; s<num_streams; s++) {
+       if( s==num_streams-1 ) {
+         localChunkSize = lastChunkSize;
+       } 
+      int nevts_start = s*chunkSize;
+      int nevts_end = nevts_start + localChunkSize;   
+      new(&trk_subviews[s]) Kokkos::View<MPTRK*, Kokkos::LayoutLeft>(trk, std::make_pair(nevts_start*nb, nevts_end*nb));
+      new(&h_trk_subviews[s]) Kokkos::View<MPTRK*, Kokkos::LayoutLeft>::HostMirror(h_trk, std::make_pair(nevts_start*nb, nevts_end*nb));
+
+      new(&hit_subviews[s]) Kokkos::View<MPHIT*, Kokkos::LayoutLeft>(hit, std::make_pair(nevts_start*nb*nlayer, nevts_end*nb*nlayer));
+      new(&h_hit_subviews[s]) Kokkos::View<MPHIT*, Kokkos::LayoutLeft>::HostMirror(h_hit, std::make_pair(nevts_start*nb*nlayer, nevts_end*nb*nlayer));
+
+      new(&outtrk_subviews[s]) Kokkos::View<MPTRK*, Kokkos::LayoutLeft>(outtrk, std::make_pair(nevts_start*nb, nevts_end*nb));
+      new(&h_outtrk_subviews[s]) Kokkos::View<MPTRK*, Kokkos::LayoutLeft>::HostMirror(h_outtrk, std::make_pair(nevts_start*nb, nevts_end*nb));
+   }
+ 
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -674,51 +701,58 @@ int main (int argc, char* argv[]) {
 
    int shared_view_level = 0;
 
-   //int team_policy_range = nevts;
-   int team_policy_range = nevts*nb;  // number of teams
    int team_size = threadsperblockx;  // team size
    int vector_size = elementsperthread;  // thread size
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    for(itr=0; itr<NITER; itr++) {
-     //#pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb*nlayer])
-     Kokkos::deep_copy(trk, h_trk);
-     Kokkos::deep_copy(hit, h_hit);
-     {
-     Kokkos::parallel_for("Kernel", team_policy(team_policy_range,team_size,vector_size).set_scratch_size( 0, Kokkos::PerTeam( total_shared_bytes )),
-                                    KOKKOS_LAMBDA( const member_type &teamMember){
-        int ie = teamMember.league_rank()/nb;
-        int ib = teamMember.league_rank()% nb;
+     localChunkSize = chunkSize;
+     for(int s=0; s<num_streams; s++) {
+       if( s==num_streams-1 ) {
+         localChunkSize = lastChunkSize;
+       } 
+       int team_policy_range = localChunkSize*nb;  // number of teams
+       Kokkos::deep_copy(ExecSpaceInstances[s], trk_subviews[s], h_trk_subviews[s]);
+       Kokkos::deep_copy(ExecSpaceInstances[s], hit_subviews[s], h_hit_subviews[s]);
+       {
+          Kokkos::parallel_for("Kernel", team_policy(ExecSpaceInstances[s], team_policy_range,
+									team_size,vector_size).set_scratch_size( 0, Kokkos::PerTeam( total_shared_bytes )),
+                                      KOKKOS_LAMBDA( const member_type &teamMember){
+            int ie = teamMember.league_rank()/nb + s*chunkSize;
+            int ib = teamMember.league_rank()% nb;
 
-		mp6x6F_view_type errorProp( teamMember.team_scratch(shared_view_level) );
-        mp6x6F_view_type temp ( teamMember.team_scratch(shared_view_level));
-        mp3x3_view_type   inverse_temp ( teamMember.team_scratch(shared_view_level));
-        mp3x6_view_type   kGain ( teamMember.team_scratch(shared_view_level));
-        mp6x6SF_view_type  newErr( teamMember.team_scratch(shared_view_level));
-         const MPTRK* btracks = bTk(trk, ie, ib);
-         MPTRK* obtracks = bTk(outtrk, ie, ib);
-         for(size_t layer=0; layer<nlayer; ++layer) {
-            const MPHIT* bhits = bHit(hit, ie, ib,layer);
-         //
-            propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, (errorProp.data()), (temp.data()), teamMember); // vectorized function
-            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, (inverse_temp.data()), (kGain.data()), (newErr.data()), teamMember);
-         }
-     }); 
-   }  
-   //#pragma acc update host(outtrk[0:nevts*nb])
-   Kokkos::deep_copy(h_outtrk, outtrk);
+		    mp6x6F_view_type errorProp( teamMember.team_scratch(shared_view_level) );
+            mp6x6F_view_type temp ( teamMember.team_scratch(shared_view_level));
+            mp3x3_view_type   inverse_temp ( teamMember.team_scratch(shared_view_level));
+            mp3x6_view_type   kGain ( teamMember.team_scratch(shared_view_level));
+            mp6x6SF_view_type  newErr( teamMember.team_scratch(shared_view_level));
+            const MPTRK* btracks = bTk(trk, ie, ib);
+            MPTRK* obtracks = bTk(outtrk, ie, ib);
+            for(size_t layer=0; layer<nlayer; ++layer) {
+              const MPHIT* bhits = bHit(hit, ie, ib,layer);
+              propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, (errorProp.data()), (temp.data()), teamMember); // vectorized function
+              KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, (inverse_temp.data()), (kGain.data()), (newErr.data()), teamMember);
+            }
+          }); 
+       }  
+       Kokkos::deep_copy(ExecSpaceInstances[s], h_outtrk_subviews[s], outtrk_subviews[s]);
+     } //end of s loop
    } //end of itr loop
 
    //Syncthreads
    Kokkos::fence();
    auto wall_stop = std::chrono::high_resolution_clock::now();
 
+   for(int s=0; s<num_streams; s++) {
+      cudaStreamDestroy(streams[s]);
+   }
+
    auto wall_diff = wall_stop - wall_start;
    auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
    printf("setup time time=%f (s)\n", setup_time);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
-   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, setup_time, -1);
+   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, setup_time, num_streams);
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;

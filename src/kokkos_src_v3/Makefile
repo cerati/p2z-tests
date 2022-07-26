@@ -1,6 +1,6 @@
 # KOKKOS_PATH = ${HOME}/kokkos-simd
 # KOKKOS_PATH = ${HOME}/kokkos
- KOKKOS_PATH = ${kokkosopenacc}
+KOKKOS_PATH = ${KOKKOS_ROOT}
 #KOKKOS_DEVICES = "OpenMP"
 KOKKOS_DEVICES = "Cuda"
 # KOKKOS_DEVICES = "OpenMP,Cuda"
@@ -11,6 +11,12 @@ SRC = $(wildcard *.cpp)
 default: build
 	echo "Start Build"
 
+ifndef NITER
+NITER=5
+endif
+ifndef NLAYER
+NLAYER=20
+endif
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
@@ -32,13 +38,6 @@ CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
 EXE = "../../bin/propagate_gcc_kokkos_v3"
 KOKKOS_ARCH = "SKX"
 #KOKKOS_ARCH = "POWER9"
-endif
-
-ifndef NITER
-NITER=5
-endif
-ifndef NLAYER
-NLAYER=20
 endif
 
 LINK = ${CXX}
