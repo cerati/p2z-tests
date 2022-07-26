@@ -1,0 +1,16 @@
+*.out
+*.txt
+*.bin
+*.o
+*.a
+*.tmp
+KokkosCore_*
+*.host
+*.cuda
+*.optrpt
+
+
+run_tau.sh
+cali*
+*.json
+
