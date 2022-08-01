@@ -8,6 +8,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <unistd.h>
 #include <sys/time.h>
 #include <alpaka/alpaka.hpp>
+//#include <alpaka/example/ExampleDefaultAcc.hpp>
 #include <functional>
 #include <iostream>
 #include <chrono>
@@ -18,26 +19,53 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef bsize
 #define bsize 128
 #endif
+
 #ifndef ntrks
 #define ntrks 9600
 #endif
 
 #define nb    (ntrks/bsize)
+
 #ifndef nevts
 #define nevts 100
 #endif
-#define smear 0.1
+
+#define smear 0.00001
 
 #ifndef NITER
 #define NITER 5
 #endif
+
 #ifndef nlayer
 #define nlayer 20
 #endif
 
-//num_steams = accelerator type| 0: omp2threads, 1: tbb
 #ifndef num_streams 
 #define num_streams 0
+#endif
+
+#ifndef elementsperthready
+#define elementsperthready 1
+#endif
+
+#ifndef elementsperthreadx
+#define elementsperthreadx bsize
+#endif
+
+#ifndef threadsperblocky
+#define threadsperblocky 1
+#endif
+
+#ifndef threadsperblockx
+#define threadsperblockx 1
+#endif
+
+#ifndef blockspergridy
+#define blockspergridy 1
+#endif
+
+#ifndef blockspergridx
+#define blockspergridx 1
 #endif
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
@@ -279,15 +307,17 @@ inline void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, TA
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
-  using Dim = alpaka::dim::Dim<TAcc>;
-  using Idx = alpaka::idx::Idx<TAcc>;
-  using Vec = alpaka::vec::Vec<Dim, Idx>;
-
-  Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
-  Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
   
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0])
-  {
+  
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  for (size_t n=0; n<ElementExtent[1]; n++){
+
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -332,14 +362,16 @@ inline void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF*
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
-  using Dim = alpaka::dim::Dim<TAcc>;
-  using Idx = alpaka::idx::Idx<TAcc>;
-  using Vec = alpaka::vec::Vec<Dim, Idx>;
-
-  Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
-  Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0])
-  {
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+  
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  for (size_t n=0; n<ElementExtent[1]; n++){
+    
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
     c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
@@ -369,14 +401,16 @@ inline void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C, TAcc con
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  using Dim = alpaka::dim::Dim<TAcc>;
-  using Idx = alpaka::idx::Idx<TAcc>;
-  using Vec = alpaka::vec::Vec<Dim, Idx>;
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
 
-  Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
-  Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0])
-  {
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  for (size_t n=0; n<ElementExtent[1]; n++){
+
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
@@ -400,14 +434,16 @@ inline void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C, TAcc const & 
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  using Dim = alpaka::dim::Dim<TAcc>;
-  using Idx = alpaka::idx::Idx<TAcc>;
-  using Vec = alpaka::vec::Vec<Dim, Idx>;
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
 
-  Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
-  Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0])
-  {
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  for (size_t n=0; n<ElementExtent[1]; n++){
+
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
     c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
@@ -437,13 +473,15 @@ inline void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, co
   KalmanGainInv(trkErr,hitErr,&inverse_temp,acc);
   KalmanGain(trkErr,&inverse_temp,&kGain,acc);
 
-  using Dim = alpaka::dim::Dim<TAcc>;
-  using Idx = alpaka::idx::Idx<TAcc>;
-  using Vec = alpaka::vec::Vec<Dim, Idx>;
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
 
-  Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
-  Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) {	
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++){
     const float xin = x(inPar,it);
     const float yin = y(inPar,it);
     const float zin = z(inPar,it);
@@ -495,7 +533,7 @@ inline void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, co
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
-  trkErr = &newErr;
+  (*trkErr) = newErr;
  }
 
 
@@ -503,13 +541,16 @@ const float kfact =100/3.8;
 template< typename TAcc>
 inline void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar,struct MP6x6F* errorProp, struct MP6x6F* temp, TAcc const & acc) {
-  using Dim = alpaka::dim::Dim<TAcc>;
-  using Idx = alpaka::idx::Idx<TAcc>;
-  using Vec = alpaka::vec::Vec<Dim, Idx>;
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
 
-  Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
-  Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) {	
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++){
+    
     const float zout = z(msP,it);
     const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z(inPar,it);
@@ -568,21 +609,21 @@ inline void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,const MP1I* inC
 
 
 
-
-
 template< typename TAcc>
 void ALPAKA_FN_ACC alpaka_kernel(TAcc const & acc, MPTRK* trk, MPHIT* hit, MPTRK* outtrk){
-   using Dim = alpaka::dim::Dim<TAcc>;
-   using Idx = alpaka::idx::Idx<TAcc>;
-   using Vec = alpaka::vec::Vec<Dim, Idx>;
+   using Dim = alpaka::Dim<TAcc>;
+   using Idx = alpaka::Idx<TAcc>;
+   using Vec = alpaka::Vec<Dim, Idx>;
 
-   Vec const threadIdx    = alpaka::idx::getIdx<alpaka::Block, alpaka::Threads>(acc);
-   Vec const threadExtent = alpaka::workdiv::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-   Vec const blockIdx    = alpaka::idx::getIdx<alpaka::Grid, alpaka::Blocks>(acc);
-   Vec const blockExtent = alpaka::workdiv::getWorkDiv<alpaka::Grid, alpaka::Blocks>(acc);
-
-   for (size_t ie=threadIdx[2];ie<nevts;ie+=threadExtent[2]) { // loop over bunches of tracks
-     for (size_t ib=threadIdx[1];ib<nb;ib+=threadExtent[1]) { // loop over bunches of tracks
+   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+   Vec const blockIdx    = alpaka::getIdx<alpaka::Grid, alpaka::Blocks>(acc);
+   Vec const blockExtent = alpaka::getWorkDiv<alpaka::Grid, alpaka::Blocks>(acc);
+   //printf("threadIdx: %ld, blockIdx: %ld, gridsize: %ld\n",threadIdx[0], blockIdx[0], blockExtent[1]);
+   //for (size_t ie=blockIdx[0];ie<nevts;ie+=blockExtent[0]) { //loop for TbbBlocks & Omp2Blocks
+     //for (size_t ib=blockIdx[1];ib<nb;ib+=blockExtent[1]) { //loop for TbbBlocks & Omp2Blocks
+   for (size_t ie=threadIdx[0];ie<nevts;ie+=threadExtent[0]) { //loop for CpuThreads & Omp2Threads
+     for (size_t ib=threadIdx[1];ib<nb;ib+=threadExtent[1]) { //loop for CpuThreads & Omp2Threads
        const MPTRK* btracks = bTk(trk, ie, ib);
        MPTRK* obtracks = bTk(outtrk, ie, ib);
        for(size_t layer=0; layer<nlayer; ++layer) {
@@ -596,60 +637,53 @@ void ALPAKA_FN_ACC alpaka_kernel(TAcc const & acc, MPTRK* trk, MPHIT* hit, MPTRK
    }
 }
 
-
 int main (int argc, char* argv[]) {
 
-  using Dim = alpaka::dim::DimInt<3>;
+  using Dim = alpaka::DimInt<2>;
   using Idx = std::size_t;
-  // set type of accelerator
-  //using Acc = alpaka::acc::AccCpuSerial<Dim, Idx>;
-  //using Acc = alpaka::acc::AccCpuOmp4<Dim, Idx>;
-  //using Acc = alpaka::acc::AccCpuThreads<Dim, Idx>;
-  #if num_streams == 0 
-  using Acc = alpaka::acc::AccCpuOmp2Threads<Dim, Idx>; //BEST TYPE
+  
+  #if num_streams == 0
+  // switch type of CPU accelerator
+  //using Acc = alpaka::AccCpuSerial<Dim, Idx>;
+  //using Acc = alpaka::AccCpuOmp2Blocks<Dim, Idx>;
+  using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
+  //using Acc = alpaka::AccCpuOmp2Threads<Dim, Idx>;
+  //using Acc = alpaka::AccCpuThreads<Dim, Idx>;
   #endif
-  //using Acc = alpaka::acc::AccCpuOmp2Blocks<Dim, Idx>;
-  /////////////
-  #if num_streams == 1 
-  using Acc = alpaka::acc::AccCpuTbbBlocks<Dim, Idx>;
+
+  #if num_streams == 1 // or more
+  using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
   #endif
-  //using Acc = alpaka::acc::AccGpuCudaRt<Dim, Idx>;
 
-  using DevAcc = alpaka::dev::Dev<Acc>;
-  using PltfAcc = alpaka::pltf::Pltf<DevAcc>;
+  using DevAcc = alpaka::Dev<Acc>;
+  using PltfAcc = alpaka::Pltf<DevAcc>;
 
-  using QueueProperty = alpaka::queue::Blocking;
-  using QueueAcc = alpaka::queue::Queue<Acc,QueueProperty>;
+  using QueueProperty = alpaka::Blocking;
+  using QueueAcc = alpaka::Queue<Acc,QueueProperty>;
 
   // select device
-  DevAcc const devAcc(alpaka::pltf::getDevByIdx<PltfAcc>(0u));
+  DevAcc const devAcc(alpaka::getDevByIdx<PltfAcc>(0u));
 
-  //make queue on device
+  // make queue on device
   QueueAcc queue(devAcc);
 
 
-  using Vec = alpaka::vec::Vec<Dim,Idx>;
-  //Vec const elementsPerThread(Vec::all(static_cast<Idx>(4)));
-  //Vec const threadsPerBlock(Vec::all(static_cast<Idx>(8)));
-  //Vec const blocksPerGrid(static_cast<Idx>(4),static_cast<Idx>(1));//,static_cast<Idx>(2));
-  //static constexpr uint64_t blockSize = alpaka::dim::DimInt<2>::value; 
-  //Idx blockCount = static_cast<Idx>(alpaka::acc::getAccDevProps<Acc,DevAcc>(devAcc).m_multiProcessorCount*8);
+  using Vec = alpaka::Vec<Dim,Idx>;
 
   #if num_streams == 0
-  Vec const elementsPerThread(Vec::all(static_cast<Idx>(1)));
-  Vec const threadsPerBlock(static_cast<Idx>(1),static_cast<Idx>(16),static_cast<Idx>(8));
-  Vec const blocksPerGrid(static_cast<Idx>(1),static_cast<Idx>(1),static_cast<Idx>(1));
+  Vec const elementsPerThread(static_cast<Idx>(elementsperthready),static_cast<Idx>(elementsperthreadx));
+  Vec const threadsPerBlock(static_cast<Idx>(threadsperblocky),static_cast<Idx>(threadsperblockx));
+  Vec const blocksPerGrid(static_cast<Idx>(blockspergridy),static_cast<Idx>(blockspergridx));
   #endif
+  
   #if num_streams == 1
   Vec const elementsPerThread(Vec::all(static_cast<Idx>(1)));
   Vec const threadsPerBlock(Vec::all(static_cast<Idx>(1)));
   Vec const blocksPerGrid(static_cast<Idx>(1),static_cast<Idx>(1),static_cast<Idx>(1));
   #endif
-  using WorkDiv = alpaka::workdiv::WorkDivMembers<Dim, Idx>;
-  //WorkDiv const workDiv( static_cast<Idx>(blockCount), static_cast<Idx>(blockSize),block);
-  //WorkDiv workDiv{ static_cast<Idx>(blockCount), static_cast<Idx>(blockSize),static_cast<Idx>(1)};
-  //WorkDiv const workDiv( blocksPerGrid, static_cast<Idx>(blockSize),elementsPerThread);
-  WorkDiv const workDiv( blocksPerGrid, threadsPerBlock,elementsPerThread);
+  using WorkDiv = alpaka::WorkDivMembers<Dim, Idx>;
+
+  WorkDiv const workDiv(blocksPerGrid, threadsPerBlock, elementsPerThread);
 
 
 
@@ -693,7 +727,9 @@ int main (int argc, char* argv[]) {
 
    printf("done preparing!\n");
    
-   
+   printf("Number of struct MPTRK trk[] = %d\n", nevts*nb);
+   printf("Number of struct MPTRK outtrk[] = %d\n", nevts*nb);
+   printf("Number of struct struct MPHIT hit[] = %d\n", nevts*nb);
 
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
@@ -702,12 +738,12 @@ int main (int argc, char* argv[]) {
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    for(itr=0; itr<NITER; itr++) {
-     alpaka::kernel::exec<Acc>( queue,workDiv,
+     alpaka::exec<Acc>( queue,workDiv,
      [] ALPAKA_FN_ACC (Acc const & acc, MPTRK* trk, MPHIT* hit, MPTRK* outtrk){
      alpaka_kernel(acc, trk,hit,outtrk);
      }, trk, hit, outtrk);
 
-     alpaka::wait::wait(queue);
+     alpaka::wait(queue);
    } //end of itr loop
    
    auto wall_stop = std::chrono::high_resolution_clock::now();
