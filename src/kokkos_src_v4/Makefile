@@ -17,16 +17,24 @@ endif
 ifndef num_streams
 num_streams=10
 endif
+ifndef prepin_hostmem
+prepin_hostmem=1
+endif
+ifeq ($(prepin_hostmem),1)
+EXE_S = "_prepin_host"
+else
+EXE_S = ""
+endif
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dnum_streams=${num_streams}
+CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dnum_streams=${num_streams} -Dprepin_hostmem=${prepin_hostmem}
 #EXE = ${EXE_NAME}.cuda
 # KOKKOS_ARCH = "HSW,Kepler35"
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
-EXE = "../../bin/propagate_nvcc_kokkos_v4"
+EXE = "../../bin/propagate_nvcc_kokkos_v4${EXE_S}"
 USE_GPU=1
 endif
 

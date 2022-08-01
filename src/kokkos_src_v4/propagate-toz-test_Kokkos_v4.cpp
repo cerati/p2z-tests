@@ -47,6 +47,14 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define num_streams 10
 #endif
 
+#ifndef prepin_hostmem
+#define prepin_hostmem 1
+#endif
+
+#ifdef KOKKOS_ENABLE_CUDA
+#define MemSpace Kokkos::CudaSpace
+#define ExecSpace Kokkos::Cuda
+#endif
 
 KOKKOS_FUNCTION size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -273,9 +281,11 @@ KOKKOS_FUNCTION float x(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk) 
 KOKKOS_FUNCTION float y(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
 KOKKOS_FUNCTION float z(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
-Kokkos::View<MPTRK*>::HostMirror prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK*> &trk) {
-  //MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
-  auto result = Kokkos::create_mirror_view(trk);
+#if prepin_hostmem == 1
+void prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> &result) {
+#else
+void prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK*>::HostMirror &result) {
+#endif
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -293,12 +303,13 @@ Kokkos::View<MPTRK*>::HostMirror prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK
       }
     }
   }
-  return result;
 }
 
-Kokkos::View<MPHIT*>::HostMirror prepareHits(AHIT inputhit, Kokkos::View<MPHIT*> &hit) {
-  //MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
-  auto result = Kokkos::create_mirror_view(hit);
+#if prepin_hostmem == 1
+void prepareHits(AHIT inputhit, Kokkos::View<MPHIT*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> &result) {
+#else
+void prepareHits(AHIT inputhit, Kokkos::View<MPHIT*>::HostMirror &result) {
+#endif
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
     for (size_t ie=0;ie<nevts;++ie) {
@@ -316,7 +327,6 @@ Kokkos::View<MPHIT*>::HostMirror prepareHits(AHIT inputhit, Kokkos::View<MPHIT*>
       }
     }
   }
-  return result;
 }
 
 #define N bsize
@@ -616,25 +626,20 @@ int main (int argc, char* argv[]) {
    Kokkos::initialize(argc, argv);
    {
 
-   #ifdef KOKKOS_ENABLE_CUDA
-   #define MemSpace Kokkos::CudaSpace
-   #endif
-
    #ifndef MemSpace
    Kokkos::abort("This Kokkos version of P2Z benchmark works only for the CUDA backend; exit!");
    #endif
 
    printf("After kokkos::init\n");
-   using ExecSpace = MemSpace::execution_space;
    cudaStream_t streams[num_streams];
    for(int s=0; s<num_streams; s++) {
       cudaStreamCreate(&streams[s]);
    }
-   ExecSpace ExecSpaceInstances[num_streams];
+   ExecSpace ExecutionSpaceInstances[num_streams];
    for(int s=0; s<num_streams; s++) {
-      new(&ExecSpaceInstances[s]) ExecSpace(streams[s]);
+      new(&ExecutionSpaceInstances[s]) ExecSpace(streams[s]);
    }
-   ExecSpaceInstances[0].print_configuration(std::cout, true);
+   ExecutionSpaceInstances[0].print_configuration(std::cout, true);
 
    int chunkSize = nevts/num_streams;
    int lastChunkSize = chunkSize;
@@ -642,19 +647,39 @@ int main (int argc, char* argv[]) {
      lastChunkSize = chunkSize + (nevts - num_streams*chunkSize);
    }
    Kokkos::View<MPTRK*> trk("trk", nevts*nb);
-   Kokkos::View<MPTRK*>::HostMirror h_trk = prepareTracks(inputtrk, trk);
-   Kokkos::View<MPTRK*, Kokkos::LayoutLeft> trk_subviews[num_streams];
-   Kokkos::View<MPTRK*, Kokkos::LayoutLeft>::HostMirror h_trk_subviews[num_streams];
+   Kokkos::View<MPTRK*, ExecSpace::array_layout> trk_subviews[num_streams];
+#if prepin_hostmem == 1
+   Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_trk("h_trk", nevts*nb);
+   prepareTracks(inputtrk, h_trk);
+   Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_trk_subviews[num_streams];
+#else
+   Kokkos::View<MPTRK*>::HostMirror h_trk = Kokkos::create_mirror_view(trk);
+   prepareTracks(inputtrk, h_trk);
+   Kokkos::View<MPTRK*, ExecSpace::array_layout>::HostMirror h_trk_subviews[num_streams];
+#endif
 
    Kokkos::View<MPHIT*> hit("hit", nevts*nb*nlayer);
-   Kokkos::View<MPHIT*>::HostMirror h_hit = prepareHits(inputhit, hit);
-   Kokkos::View<MPHIT*, Kokkos::LayoutLeft> hit_subviews[num_streams];
-   Kokkos::View<MPHIT*, Kokkos::LayoutLeft>::HostMirror h_hit_subviews[num_streams];
+   Kokkos::View<MPHIT*, ExecSpace::array_layout> hit_subviews[num_streams];
+#if prepin_hostmem == 1
+   Kokkos::View<MPHIT*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_hit("h_hit", nevts*nb*nlayer);
+   prepareHits(inputhit, h_hit);
+   Kokkos::View<MPHIT*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_hit_subviews[num_streams];
+#else
+   Kokkos::View<MPHIT*>::HostMirror h_hit = Kokkos::create_mirror_view(hit);
+   prepareHits(inputhit, h_hit);
+   Kokkos::View<MPHIT*, ExecSpace::array_layout>::HostMirror h_hit_subviews[num_streams];
+#endif
 
    Kokkos::View<MPTRK*> outtrk("outtrk", nevts*nb);
+   Kokkos::View<MPTRK*, ExecSpace::array_layout> outtrk_subviews[num_streams];
+#if prepin_hostmem == 1
+   Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_outtrk("h_outtrk", nevts*nb);
+   Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_outtrk_subviews[num_streams];
+#else
    Kokkos::View<MPTRK*>::HostMirror h_outtrk = Kokkos::create_mirror_view(outtrk);
-   Kokkos::View<MPTRK*, Kokkos::LayoutLeft> outtrk_subviews[num_streams];
-   Kokkos::View<MPTRK*, Kokkos::LayoutLeft>::HostMirror h_outtrk_subviews[num_streams];
+   Kokkos::View<MPTRK*, ExecSpace::array_layout>::HostMirror h_outtrk_subviews[num_streams];
+#endif
+   printf("created views!\n");
 
    int localChunkSize = chunkSize;
    for(int s=0; s<num_streams; s++) {
@@ -663,14 +688,26 @@ int main (int argc, char* argv[]) {
        } 
       int nevts_start = s*chunkSize;
       int nevts_end = nevts_start + localChunkSize;   
-      new(&trk_subviews[s]) Kokkos::View<MPTRK*, Kokkos::LayoutLeft>(trk, std::make_pair(nevts_start*nb, nevts_end*nb));
-      new(&h_trk_subviews[s]) Kokkos::View<MPTRK*, Kokkos::LayoutLeft>::HostMirror(h_trk, std::make_pair(nevts_start*nb, nevts_end*nb));
+      new(&trk_subviews[s]) Kokkos::View<MPTRK*, ExecSpace::array_layout>(trk, std::make_pair(nevts_start*nb, nevts_end*nb));
+#if prepin_hostmem == 1
+      new(&h_trk_subviews[s]) Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace>(h_trk, std::make_pair(nevts_start*nb, nevts_end*nb));
+#else
+      new(&h_trk_subviews[s]) Kokkos::View<MPTRK*, ExecSpace::array_layout>::HostMirror(h_trk, std::make_pair(nevts_start*nb, nevts_end*nb));
+#endif
 
-      new(&hit_subviews[s]) Kokkos::View<MPHIT*, Kokkos::LayoutLeft>(hit, std::make_pair(nevts_start*nb*nlayer, nevts_end*nb*nlayer));
-      new(&h_hit_subviews[s]) Kokkos::View<MPHIT*, Kokkos::LayoutLeft>::HostMirror(h_hit, std::make_pair(nevts_start*nb*nlayer, nevts_end*nb*nlayer));
+      new(&hit_subviews[s]) Kokkos::View<MPHIT*, ExecSpace::array_layout>(hit, std::make_pair(nevts_start*nb*nlayer, nevts_end*nb*nlayer));
+#if prepin_hostmem == 1
+      new(&h_hit_subviews[s]) Kokkos::View<MPHIT*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace>(h_hit, std::make_pair(nevts_start*nb*nlayer, nevts_end*nb*nlayer));
+#else
+      new(&h_hit_subviews[s]) Kokkos::View<MPHIT*, ExecSpace::array_layout>::HostMirror(h_hit, std::make_pair(nevts_start*nb*nlayer, nevts_end*nb*nlayer));
+#endif
 
-      new(&outtrk_subviews[s]) Kokkos::View<MPTRK*, Kokkos::LayoutLeft>(outtrk, std::make_pair(nevts_start*nb, nevts_end*nb));
-      new(&h_outtrk_subviews[s]) Kokkos::View<MPTRK*, Kokkos::LayoutLeft>::HostMirror(h_outtrk, std::make_pair(nevts_start*nb, nevts_end*nb));
+      new(&outtrk_subviews[s]) Kokkos::View<MPTRK*, ExecSpace::array_layout>(outtrk, std::make_pair(nevts_start*nb, nevts_end*nb));
+#if prepin_hostmem == 1
+      new(&h_outtrk_subviews[s]) Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace>(h_outtrk, std::make_pair(nevts_start*nb, nevts_end*nb));
+#else
+      new(&h_outtrk_subviews[s]) Kokkos::View<MPTRK*, ExecSpace::array_layout>::HostMirror(h_outtrk, std::make_pair(nevts_start*nb, nevts_end*nb));
+#endif
    }
  
 
@@ -713,10 +750,10 @@ int main (int argc, char* argv[]) {
          localChunkSize = lastChunkSize;
        } 
        int team_policy_range = localChunkSize*nb;  // number of teams
-       Kokkos::deep_copy(ExecSpaceInstances[s], trk_subviews[s], h_trk_subviews[s]);
-       Kokkos::deep_copy(ExecSpaceInstances[s], hit_subviews[s], h_hit_subviews[s]);
+       Kokkos::deep_copy(ExecutionSpaceInstances[s], trk_subviews[s], h_trk_subviews[s]);
+       Kokkos::deep_copy(ExecutionSpaceInstances[s], hit_subviews[s], h_hit_subviews[s]);
        {
-          Kokkos::parallel_for("Kernel", team_policy(ExecSpaceInstances[s], team_policy_range,
+          Kokkos::parallel_for("Kernel", team_policy(ExecutionSpaceInstances[s], team_policy_range,
 									team_size,vector_size).set_scratch_size( 0, Kokkos::PerTeam( total_shared_bytes )),
                                       KOKKOS_LAMBDA( const member_type &teamMember){
             int ie = teamMember.league_rank()/nb + s*chunkSize;
@@ -736,7 +773,7 @@ int main (int argc, char* argv[]) {
             }
           }); 
        }  
-       Kokkos::deep_copy(ExecSpaceInstances[s], h_outtrk_subviews[s], outtrk_subviews[s]);
+       Kokkos::deep_copy(ExecutionSpaceInstances[s], h_outtrk_subviews[s], outtrk_subviews[s]);
      } //end of s loop
    } //end of itr loop
 

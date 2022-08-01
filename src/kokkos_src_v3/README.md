@@ -25,3 +25,5 @@ Makefile options:
   * the Cuda option builds with -DUSE_GPU which is used in the h files
 * CXX - compiler 
   * use the nvcc wrapper for cuda and your preference for cpu (g++ 9 recommended)
+* NITER - the number of iterations (default: 5)
+* NLAYER - the number of layers (default: 20) 
