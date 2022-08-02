@@ -96,7 +96,7 @@ ifeq ($(MODE),omp4)
 CSRCS = propagate-toz-test_OpenMP4_sync_v1.cpp
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
+CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang++
@@ -124,7 +124,7 @@ ifeq ($(MODE),omp4c)
 CSRCS = propagate-toz-test_OpenMP4_sync.c
 ifeq ($(COMPILER),gcc)
 CXX=gcc
-CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
+CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang
@@ -189,7 +189,7 @@ ifeq ($(MODE),omp4cv3)
 CSRCS = propagate-toz-test_OpenMP4_async.c
 ifeq ($(COMPILER),gcc)
 CXX=gcc
-CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm"
+CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang
@@ -271,6 +271,10 @@ CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge
 #CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -mcmodel=medium -Mlarge_arrays
 #CXX=pgc++
 #CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+else ifeq ($(COMPILER),gcc)
+CXX=g++
+CFLAGS1 += -O3 -I. -fopenacc -foffload="-lm -O3"
+CLIBS1 += -lm
 else
 CSRCS = "NotSupported"
 endif
@@ -280,10 +284,14 @@ endif
 #  ACC C Setting #
 ##################
 ifeq ($(MODE),accc)
-ifeq ($(COMPILER),pgi)
 CSRCS = propagate-toz-test_OpenACC_sync.c
+ifeq ($(COMPILER),pgi)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+else ifeq ($(COMPILER),gcc)
+CXX=gcc
+CFLAGS1 += -O3 -I. -fopenacc -foffload="-lm -O3"
+CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
 #OpenACC C V1: synchronous version
 CSRCS = ../cetus_output/propagate-toz-test_OpenACC_sync.cpp
@@ -321,10 +329,14 @@ endif
 
 ifeq ($(MODE),acccv3)
 #OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
-ifeq ($(COMPILER),pgi)
 CSRCS = propagate-toz-test_OpenACC_async.c
+ifeq ($(COMPILER),pgi)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+else ifeq ($(COMPILER),gcc)
+CXX=gcc
+CFLAGS1 += -O3 -I. -fopenacc -foffload="-lm -O3"
+CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
 CSRCS = ../cetus_output/propagate-toz-test_OpenACC_async.cpp
 ifeq ($(OS),linux)
@@ -363,10 +375,14 @@ endif
 #  ACC C Setting for CPU #
 ##########################
 ifeq ($(MODE),accccpu)
-ifeq ($(COMPILER),pgi)
 CSRCS = propagate-toz-test_OpenACC_sync.c
+ifeq ($(COMPILER),pgi)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc=multicore -mcmodel=medium -Mlarge_arrays
+else ifeq ($(COMPILER),gcc)
+CXX=gcc
+CFLAGS1 += -O3 -I. -fopenacc -foffload=disable -foffload="-lm -O3"
+CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
 #OpenACC C V1: synchronous version
 CSRCS = ../cetus_output/propagate-toz-test_OpenACC_sync.c
@@ -382,10 +398,14 @@ endif
 #  ACC C Setting for CPU #
 ##########################
 ifeq ($(MODE),acccv3cpu)
-ifeq ($(COMPILER),pgi)
 CSRCS = propagate-toz-test_OpenACC_async.c
+ifeq ($(COMPILER),pgi)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc=multicore -mcmodel=medium -Mlarge_arrays
+else ifeq ($(COMPILER),gcc)
+CXX=gcc
+CFLAGS1 += -O3 -I. -fopenacc -foffload=disable -foffload="-lm -O3"
+CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
 #OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
 CSRCS = ../cetus_output/propagate-toz-test_OpenACC_async.c

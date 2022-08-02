@@ -16,6 +16,7 @@ Compile the OpenACC C++ sync version
 
 ```shell
 $ make COMPILER=pgi MODE=acc
+$ make COMPILER=gcc MODE=acc
 ```
 
 ## OpenACC C
@@ -25,6 +26,7 @@ Compile the OpenACC C sync version
 ```shell
 $ make COMPILER=pgi MODE=accc
 $ make COMPILER=openarc MODE=accc
+$ make COMPILER=gcc MODE=accc
 ```
 
 Compile the OpenACC C async version (v3)
@@ -32,6 +34,7 @@ Compile the OpenACC C async version (v3)
 ```shell
 $ make COMPILER=pgi MODE=acccv3
 $ make COMPILER=openarc MODE=acccv3
+$ make COMPILER=gcc MODE=acccv3
 ```
 
 ## OpenACC C for CPU
@@ -41,6 +44,7 @@ Compile the OpenACC C sync version for CPU
 ```shell
 $ make COMPILER=pgi MODE=accccpu
 $ make COMPILER=openarc MODE=accccpu
+$ make COMPILER=gcc MODE=accccpu
 ```
 
 Compile the OpenACC C async version (v3) for CPU
@@ -48,6 +52,7 @@ Compile the OpenACC C async version (v3) for CPU
 ```shell
 $ make COMPILER=pgi MODE=acccv3cpu
 $ make COMPILER=openarc MODE=acccv3cpu
+$ make COMPILER=gcc MODE=acccv3cpu
 ```
 
 ## OpenMP4 C++
