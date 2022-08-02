@@ -247,7 +247,7 @@ struct MPNX {
 
 using MP1I    = MPNX<int,   1 >;
 using MP1F    = MPNX<float, 1 >;
-using MP2F    = MPNX<float, 3 >;
+using MP2F    = MPNX<float, 2 >;
 using MP3F    = MPNX<float, 3 >;
 using MP6F    = MPNX<float, 6 >;
 using MP2x2SF = MPNX<float, 3 >;

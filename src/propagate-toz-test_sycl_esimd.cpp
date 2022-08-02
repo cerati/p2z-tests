@@ -100,7 +100,7 @@ struct MPNX {
 
 using MP1I    = MPNX<int,   1 , bSize>;
 using MP1F    = MPNX<float, 1 , bSize>;
-using MP2F    = MPNX<float, 3 , bSize>;
+using MP2F    = MPNX<float, 2 , bSize>;
 using MP3F    = MPNX<float, 3 , bSize>;
 using MP6F    = MPNX<float, 6 , bSize>;
 using MP2x2SF = MPNX<float, 3 , bSize>;
@@ -113,7 +113,7 @@ using MP3x6   = MPNX<float, 18, bSize>;
 // Native fields:
 using MP1I_    = MPNX<simd<int, bSize>,   1 , 1>;
 using MP1F_    = MPNX<simd<float, bSize>, 1 , 1>;
-using MP2F_    = MPNX<simd<float, bSize>, 3 , 1>;
+using MP2F_    = MPNX<simd<float, bSize>, 2 , 1>;
 using MP3F_    = MPNX<simd<float, bSize>, 3 , 1>;
 using MP6F_    = MPNX<simd<float, bSize>, 6 , 1>;
 using MP2x2SF_ = MPNX<simd<float, bSize>, 3 , 1>;
