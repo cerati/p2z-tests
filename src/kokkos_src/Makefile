@@ -10,6 +10,12 @@ SRC = $(wildcard *.cpp)
 default: build
 	echo "Start Build"
 
+ifndef NITER
+NITER=5
+endif
+ifndef NLAYER
+NLAYER=20
+endif
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
@@ -31,13 +37,6 @@ CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
 EXE = "../../bin/propagate_gcc_kokkos"
 KOKKOS_ARCH = "SKX"
 #KOKKOS_ARCH = "POWER9"
-endif
-
-ifndef NITER
-NITER=5
-endif
-ifndef NLAYER
-NLAYER=20
 endif
 
 LINK = ${CXX}

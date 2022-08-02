@@ -1,6 +1,6 @@
 # KOKKOS_PATH = ${HOME}/kokkos-simd
 # KOKKOS_PATH = ${HOME}/kokkos
- KOKKOS_PATH = ${kokkosopenacc}
+KOKKOS_PATH = ${KOKKOS_ROOT}
 #KOKKOS_DEVICES = "OpenMP"
 KOKKOS_DEVICES = "Cuda"
 # KOKKOS_DEVICES = "OpenMP,Cuda"
@@ -26,7 +26,7 @@ CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
-EXE = "../../bin/propagate_nvcc_kokkos_v2"
+EXE = "../../bin/propagate_nvcc_kokkos_v3"
 USE_GPU=1
 else
 # -9 needed on apollo
@@ -35,7 +35,7 @@ CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
 #CXX = g++-9
 # CXX = icpc
 #EXE = ${EXE_NAME}.host
-EXE = "../../bin/propagate_gcc_kokkos_v2"
+EXE = "../../bin/propagate_gcc_kokkos_v3"
 KOKKOS_ARCH = "SKX"
 #KOKKOS_ARCH = "POWER9"
 endif

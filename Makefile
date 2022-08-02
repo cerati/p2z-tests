@@ -49,6 +49,7 @@ endif
 THREADSX ?= 0
 THREADSY ?= 0
 BLOCKS ?= 0
+USE_ASYNC ?= 0
 ifneq ($(THREADSX),0)
 TUNE += -Dthreadsperblockx=$(THREADSX)
 endif
@@ -57,6 +58,9 @@ TUNE += -Dthreadsperblocky=$(THREADSY)
 endif
 ifneq ($(BLOCKS),0)
 TUNE += -Dblockspergrid=$(BLOCKS)
+endif
+ifneq ($(USE_ASYNC),0)
+TUNE += -DUSE_ASYNC
 endif
 
 ################
@@ -446,7 +450,6 @@ endif
 #################
 ifeq ($(MODE),cuda)
 CSRCS = propagate-toz-test_CUDA.cu
-#CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread
@@ -455,7 +458,6 @@ endif
 endif
 
 ifeq ($(MODE),cudav2)
-#CSRCS = propagate-toz-test_CUDA.cu
 CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
@@ -535,7 +537,15 @@ endif
 # TARGET is where the output binary is stored. #
 ################################################
 TARGET = ./bin
+ifneq ($(MODE),cudav3)
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
+else
+ifneq ($(USE_ASYNC),0)
+BENCHMARK = "propagate_$(COMPILER)_$(MODE)_async"
+else
+BENCHMARK = "propagate_$(COMPILER)_$(MODE)_sync"
+endif
+endif
 
 ifneq ($(MODE),omp4c)
 ifneq ($(MODE),omp4cv3)

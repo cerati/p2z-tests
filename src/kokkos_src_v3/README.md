@@ -19,27 +19,11 @@ Also, use `-j` since build the kokkos library takes time.
 
 Makefile options:
 * KOKKOS_PATH - where the above src is downloaded
-* KOKKOS_DEVICES - type of parallelism: `OpenMP` for cpu; `OpenMP,Cuda` fpr gpu
+* KOKKOS_DEVICES - type of parallelism: `OpenMP` for CPU; `OpenMP,Cuda` or `Cuda` for GPU
+	- For AMD GPU, `HIP` may be used but not fully tested.
 * KOKKOS_ARCH - type of hardware: `SKX` means skylake add Volta70 for V100
   * the Cuda option builds with -DUSE_GPU which is used in the h files
 * CXX - compiler 
   * use the nvcc wrapper for cuda and your preference for cpu (g++ 9 recommended)
 * NITER - the number of iterations (default: 5)
 * NLAYER - the number of layers (default: 20) 
-
-kokkos config h file options
-* lines 53 through 63 contain the settings for GPU and CPU data structures which 
-should be automatically selected based on the KOKKOS_DEVICES option in the Makefile
-* These set how the data is stored and processed
-*  ExecSpace - The backend execution method (OpenMP and CUDA have been tested)
-*  MemSpace - The where the memory is allocated (Cuda, CudaUVM, OpenMP, Host)
-  * CudaUVM - unified memory and current GPU version
-  * Cuda - requires manual data transfers (currently not an option in p2z)
-  * OpenMP / Host - On the CPU difference is unclear
-* Layout - row- or column- wise data layouts
-  * LayoutRight - Row major, for CPU, with logically adjacent element adjacent in memory
-  * LayoutLeft - Column major for GPU, with logically adjacent element adjacent in memory
-
-
-
-
