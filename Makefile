@@ -496,12 +496,6 @@ CFLAGS1+= -fopenmp -O3 -I.
 #CLIBS1 += -lm -lgomp 
 CLIBS1 += -lm -lgomp -L/opt/intel/compilers_and_libraries/linux/tbb/lib/intel64/gcc4.8
 endif
-ifeq ($(COMPILER),icc)
-CXX=icc
-TBB_PREIX := /opt/intel
-CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
-TUNE += -Dnum_streams=1
-endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_alpaka.cu

@@ -17,7 +17,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define FIXED_RSEED
 
 #ifndef bsize
-#define bsize 128
+#define bsize 32
 #endif
 
 #ifndef ntrks
@@ -645,8 +645,8 @@ int main (int argc, char* argv[]) {
   #if num_streams == 0
   // switch type of CPU accelerator
   //using Acc = alpaka::AccCpuSerial<Dim, Idx>;
-  //using Acc = alpaka::AccCpuOmp2Blocks<Dim, Idx>;
-  using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
+  using Acc = alpaka::AccCpuOmp2Blocks<Dim, Idx>;
+  //using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
   //using Acc = alpaka::AccCpuOmp2Threads<Dim, Idx>;
   //using Acc = alpaka::AccCpuThreads<Dim, Idx>;
   #endif
