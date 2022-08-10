@@ -21,4 +21,4 @@ Using Cmake options, requires cudatoolkit. Switch acc in the config.sh
 cd ~/p2z-tests/src/alpaka_src_gpu/build\
 source config.sh\
 make\
-./alpaka_src_gpu\
+./alpaka_src_gpu
