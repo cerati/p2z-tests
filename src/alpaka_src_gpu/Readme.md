@@ -9,7 +9,7 @@ make COMPILER=gcc MODE=alpaka
 ./bin/propagate_gcc_alpaka 
 
 ## For the GPU & CPU version 
-Using Cmake options, requires cmake and cudatoolkit
+Using Cmake options, requires alpaka installation (v0.8), cmake, and cudatoolkit
 
 cd ~/p2z-tests/src/alpaka_src_gpu/build
 
