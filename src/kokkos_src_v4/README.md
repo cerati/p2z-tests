@@ -19,7 +19,7 @@ Also, use `-j` since build the kokkos library takes time.
 
 Makefile options:
 * KOKKOS_PATH - where the above src is downloaded (default: ${KOKKOS_ROOT})
-* KOKKOS_DEVICES - type of parallelism: `OpenMP` for CPU; `OpenMP,Cuda` or `Cuda` for GPU
+* KOKKOS_DEVICES - type of parallelism: `Cuda` for GPU
                    (default: Cuda)
 * KOKKOS_ARCH - type of hardware: `SKX` means skylake add Volta70 for V100
                 (default: Volta70)
