@@ -508,19 +508,15 @@ endif
 ###################
 ifeq ($(MODE),alpaka)
 CSRCS = propagate-toz-test_alpaka.cpp
-#CSRCS = alpaka_test.cpp
+TBB_PREIX := /opt/intel
 CLIBS1 = -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include 
+CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
 CFLAGS1+= -fopenmp -O3 -I.
-CLIBS1 += -lm -lgomp
-endif
-ifeq ($(COMPILER),icc)
-CXX=icc
-TBB_PREIX := /opt/intel
-CFLAGS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
-TUNE += -Dnum_streams=1
+#CLIBS1 += -lm -lgomp 
+CLIBS1 += -lm -lgomp -L/opt/intel/compilers_and_libraries/linux/tbb/lib/intel64/gcc4.8
 endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
@@ -531,6 +527,7 @@ CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_E
 CLIBS1 += -L${CUDALIBDIR} -lcudart -g
 endif
 endif
+
 
 
 ################################################
