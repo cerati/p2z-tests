@@ -1,7 +1,5 @@
-# KOKKOS_PATH = ${HOME}/kokkos-simd
-# KOKKOS_PATH = ${HOME}/kokkos
 KOKKOS_PATH = ${KOKKOS_ROOT}
-KOKKOS_DEVICES = "Cuda"
+KOKKOS_DEVICES ?= "Cuda"
 
 SRC = $(wildcard *.cpp)
 
@@ -29,7 +27,6 @@ endif
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
 CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dnum_streams=${num_streams} -Dprepin_hostmem=${prepin_hostmem}
-#EXE = ${EXE_NAME}.cuda
 # KOKKOS_ARCH = "HSW,Kepler35"
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"

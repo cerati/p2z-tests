@@ -1,10 +1,7 @@
-# KOKKOS_PATH = ${HOME}/kokkos-simd
-# KOKKOS_PATH = ${HOME}/kokkos
- KOKKOS_PATH = ${kokkosopenacc}
+ KOKKOS_PATH ?= ${KOKKOS_ROOT}
 #KOKKOS_DEVICES = "OpenMP"
-KOKKOS_DEVICES = "Cuda"
+KOKKOS_DEVICES ?= "Cuda"
 # KOKKOS_DEVICES = "OpenMP,Cuda"
-#EXE_NAME = "test"
 
 SRC = $(wildcard *.cpp)
 
@@ -21,7 +18,6 @@ endif
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
 CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
-#EXE = ${EXE_NAME}.cuda
 # KOKKOS_ARCH = "HSW,Kepler35"
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"
@@ -34,7 +30,6 @@ CXX = g++
 CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
 #CXX = g++-9
 # CXX = icpc
-#EXE = ${EXE_NAME}.host
 EXE = "../../bin/propagate_gcc_kokkos_v2"
 KOKKOS_ARCH = "SKX"
 #KOKKOS_ARCH = "POWER9"

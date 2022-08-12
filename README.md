@@ -126,13 +126,34 @@ $ make COMPILER=nvcc MODE=alpaka//not yet functional
 ```
 
 ## Kokkos
-The kokkos version exists in its own directory, `src/kokkos_src`, which contains
-the p2z code along with a Makefile and README to help the user make use of the
-Kokkos library. Here we have basic instructions.
+Multiple Kokkos versions exist in the `src` directory: `src/kokkos_src_v1`, 
+..., `src/kokkos_src_v4`, each of which contains the p2z code along with 
+a Makefile and README to help the user make use of the Kokkos library. 
+
+Here is the brief information on each version:
+
+`src/kokkos_src_v1`: target CUDA GPU with unified memory; has user data layouts
+                  different from those in the manual CUDA versions.
+
+`src/kokkos_src_v2`: target CUDA GPU without unified memory; has the same 
+                  user data layouts as `src/kokkos_src_v1` but with explicit
+                  memory transfers at each iteration of the outermost `itr` loop,
+                  as the manual CUDA versions do.
+
+`src/kokkos_src_v3`: target CUDA GPU without unified memory; has the same 
+                  user data layouts and memory transfer patterns as the synchrnonous
+                  manual CUDA version (`propagate-toz-test_CUDA_v2.cu`).
+
+`src/kokkos_src_v4`: target CUDA GPU without unified memory; has the same 
+                  user data layouts and memory transfer patterns as the asynchrnonous
+                  manual CUDA version (`propagate-toz-test_CUDA_v3.cu`);
+                  the best performing version.
+
+Here we have basic instructions.
 
 #### Getting started
-1. clone https://github.com/kokkos/kokkos to ${HOME}/kokkos
-2. in the `src/kokkos_src` direcory edit the Makefile setting to match your needs
+1. clone https://github.com/kokkos/kokkos to ${KOKKOS_ROOT}
+2. in the `src/kokkos_src_v4` direcory edit the Makefile setting to match your needs
 3. run `make` to build
 4. The executable can be found under `bin` with the others
 
