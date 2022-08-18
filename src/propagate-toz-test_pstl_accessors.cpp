@@ -306,14 +306,14 @@ struct MPTRKAccessor {
   MPTRKAccessor() : par(), cov(), q() {}
   MPTRKAccessor(const MPTRK &in) : par(in.par), cov(in.cov), q(in.q) {}
   
-  const MPTRK_ load(const int tid) const {
+  const auto load(const int tid) const {
     MPTRK_ dst;
 
     par.load(dst.par, tid, 0);
     cov.load(dst.cov, tid, 0);
     q.load(dst.q, tid, 0);
     
-    return std::move(dst);
+    return dst;
   }
   
   void save(MPTRK_ &src, const int tid) {
@@ -346,12 +346,12 @@ struct MPHITAccessor {
   MPHITAccessor() : pos(), cov() {}
   MPHITAccessor(const MPHIT &in) : pos(in.pos), cov(in.cov) {}
   
-  const MPHIT_ load(const int tid, const int layer = 0) const {
+  const auto load(const int tid, const int layer = 0) const {
     MPHIT_ dst;
     this->pos.load(dst.pos, tid, layer);
     this->cov.load(dst.cov, tid, layer);
     
-    return std::move(dst);
+    return dst;
   } 
 };
 
@@ -589,9 +589,8 @@ float z(const MPHIT_* hits, size_t ev, size_t tk)    { return Pos(hits, ev, tk, 
 
 template<int N = 1>
 inline void MultHelixPropEndcap(const MP6x6F_ &a, const MP6x6SF_ &b, MP6x6F_ &c) {
-//#pragma omp simd 
- for (int n = 0; n < N; ++n)
-  {
+#pragma unroll
+ for (int n = 0; n < N; ++n) {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -634,9 +633,8 @@ inline void MultHelixPropEndcap(const MP6x6F_ &a, const MP6x6SF_ &b, MP6x6F_ &c)
 
 template<int N = 1>
 inline void MultHelixPropTranspEndcap(const MP6x6F_ &a, const MP6x6F_ &b, MP6x6SF_ &c) {
-//#pragma omp simd
-  for (int n = 0; n < N; ++n)
-  {
+#pragma unroll
+  for (int n = 0; n < N; ++n) {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
     c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
@@ -665,9 +663,8 @@ inline void MultHelixPropTranspEndcap(const MP6x6F_ &a, const MP6x6F_ &b, MP6x6S
 template<int N = 1>
 inline void KalmanGainInv(const MP6x6SF_ &a, const MP3x3SF_ &b, MP3x3_ &c) {
 
-//#pragma omp simd
-  for (int n = 0; n < N; ++n)
-  {
+#pragma unroll
+  for (int n = 0; n < N; ++n) {
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
@@ -691,9 +688,8 @@ inline void KalmanGainInv(const MP6x6SF_ &a, const MP3x3SF_ &b, MP3x3_ &c) {
 template <int N = 1>
 inline void KalmanGain(const MP6x6SF_ &a, const MP3x3_ &b, MP3x6_ &c) {
 
-//#pragma omp simd
-  for (int n = 0; n < N; ++n)
-  {
+#pragma unroll
+  for (int n = 0; n < N; ++n) {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[ 1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[ 1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
     c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[ 1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
@@ -944,13 +940,14 @@ int main (int argc, char* argv[]) {
                      //  
                      MPTRK_ obtracks;
                      //
-		     const MPTRK_ btracks = btracksAccessor.load(i);
+		     const auto& btracks = btracksAccessor.load(i);
 		     //
-		     constexpr int N = bsize;
+		     constexpr int N      = bsize;
+		     constexpr int layers = nlayer;
 		     //
-                     for(int layer=0; layer<nlayer; ++layer) {  
+                     for(int layer = 0; layer < layers; ++layer) {  
                        //
-                       const MPHIT_ bhits = bhitsAccessor.load(i, layer);
+                       const auto& bhits = bhitsAccessor.load(i, layer);
                        //
                        propagateToZ<N>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
                        KalmanUpdate<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);

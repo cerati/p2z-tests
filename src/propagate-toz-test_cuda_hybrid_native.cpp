@@ -28,11 +28,7 @@ nvc++ -O2 -std=c++20 --gcc-toolchain=path-to-gnu-compiler -stdpar=multicore ./sr
 #include <random>
 
 #ifndef bsize
-#if defined(__NVCOMPILER_CUDA__)
-#define bsize 1
-#else
-#define bsize 128
-#endif//__NVCOMPILER_CUDA__
+#define bsize 32
 #endif
 
 #ifndef ntrks
@@ -287,32 +283,58 @@ constexpr int iparIpt   = 3;
 constexpr int iparPhi   = 4;
 constexpr int iparTheta = 5;
 
-template <typename T, int N, int bSize>
+template <typename T, int N, int bSize = 1>
 struct MPNX {
    std::array<T,N*bSize> data;
-   
+
    MPNX() = default;
-      
+   MPNX(const MPNX<T, N, bSize> &) = default;
+   MPNX(MPNX<T, N, bSize> &&)      = default;
+   
    //basic accessors
-   const T& operator[](const int idx) const {return data[idx];}
-   T& operator[](const int idx) {return data[idx];}
-   const T& operator()(const int m, const int b) const {return data[m*bSize+b];}
-   T& operator()(const int m, const int b) {return data[m*bSize+b];}
+   constexpr T &operator[](const int i) { return data[i]; }
+   constexpr const T &operator[](const int i) const { return data[i]; }
+   constexpr T& operator()(const int i, const int j) {return data[i*bSize+j];}
+   constexpr const T& operator()(const int i, const int j) const {return data[i*bSize+j];}
+
+   constexpr int size() const { return N*bSize; }   
    //
-   void copy(const MPNX& src) {
+   inline void load(MPNX<T, N, 1>& dst, const int b) const {
 #pragma unroll
-     for (size_t it=0;it<bSize;++it) {
-     //const int l = it+ib*bsize+ie*nb*bsize;
-#pragma unroll
-       for (size_t ip=0;ip<N;++ip) {    	
-    	 this->operator()(ip, it) = src.data[it + ip*bSize];  
-       }
-     }//
+     for (int ip=0;ip<N;++ip) {   	
+    	dst.data[ip] = data[ip*bSize + b]; 
+     }
      
      return;
    }
+
+   inline void save(const MPNX<T, N, 1>& src, const int b) {
+#pragma unroll
+     for (int ip=0;ip<N;++ip) {    	
+    	 data[ip*bSize + b] = src.data[ip]; 
+     }
+     
+     return;
+   }  
+
+   auto operator=(const MPNX&) -> MPNX& = default;
+   auto operator=(MPNX&&     ) -> MPNX& = default;
 };
 
+// internal data formats (coinside with external ones for x86):
+template<int bSize = 1> using MP1I_    = MPNX<int,   1 , bSize>;
+template<int bSize = 1> using MP1F_    = MPNX<float, 1 , bSize>;
+template<int bSize = 1> using MP2F_    = MPNX<float, 2 , bSize>;
+template<int bSize = 1> using MP3F_    = MPNX<float, 3 , bSize>;
+template<int bSize = 1> using MP6F_    = MPNX<float, 6 , bSize>;
+template<int bSize = 1> using MP2x2SF_ = MPNX<float, 3 , bSize>;
+template<int bSize = 1> using MP3x3SF_ = MPNX<float, 6 , bSize>;
+template<int bSize = 1> using MP6x6SF_ = MPNX<float, 21, bSize>;
+template<int bSize = 1> using MP6x6F_  = MPNX<float, 36, bSize>;
+template<int bSize = 1> using MP3x3_   = MPNX<float, 9 , bSize>;
+template<int bSize = 1> using MP3x6_   = MPNX<float, 18, bSize>;
+
+// external data formats:
 using MP1I    = MPNX<int,   1 , bsize>;
 using MP1F    = MPNX<float, 1 , bsize>;
 using MP2F    = MPNX<float, 2 , bsize>;
@@ -325,6 +347,19 @@ using MP6x6F  = MPNX<float, 36, bsize>;
 using MP3x3   = MPNX<float, 9 , bsize>;
 using MP3x6   = MPNX<float, 18, bsize>;
 
+template <int N = 1>
+struct MPTRK_ {
+  MP6F_<N>    par;
+  MP6x6SF_<N> cov;
+  MP1I_<N>    q;
+};
+
+template <int N = 1>
+struct MPHIT_ {
+  MP3F_<N>    pos;
+  MP3x3SF_<N> cov;
+};
+
 struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
@@ -332,11 +367,44 @@ struct MPTRK {
 
   MPTRK() = default;
 
-  MPTRK& operator=(const MPTRK &src){
-    par.copy(src.par);
-    cov.copy(src.cov);
-    q.copy(src.q);
-    return *this;
+  template<int S>
+  inline decltype(auto) load(const int batch_id = 0) const{
+  
+    MPTRK_<S> dst;
+
+    if constexpr (std::is_same<MP6F, MP6F_<S>>::value        
+                  and std::is_same<MP6x6SF, MP6x6SF_<S>>::value
+                  and std::is_same<MP1I, MP1I_<S>>::value)  { //just do a copy of the whole objects
+      dst.par = this->par;
+      dst.cov = this->cov;
+      dst.q   = this->q;
+      
+    } else { //ok, do manual load of the batch component instead
+      this->par.load(dst.par, batch_id);
+      this->cov.load(dst.cov, batch_id);
+      this->q.load(dst.q, batch_id);
+    }//done
+    
+    return dst;  
+  }
+  
+  template<int S>
+  inline void save(MPTRK_<S> &src, const int batch_id = 0) {
+  
+    if constexpr (std::is_same<MP6F, MP6F_<S>>::value        
+                  and std::is_same<MP6x6SF, MP6x6SF_<S>>::value
+                  and std::is_same<MP1I, MP1I_<S>>::value) { //just do a copy of the whole objects
+      this->par = src.par;
+      this->cov = src.cov;
+      this->q   = src.q;
+
+    } else { //ok, do manual load of the batch component instead
+      this->par.save(src.par, batch_id);
+      this->cov.save(src.cov, batch_id);
+      this->q.save(src.q, batch_id);
+    }//done
+    
+    return;
   }
 };
 
@@ -346,14 +414,23 @@ struct MPHIT {
   //
   MPHIT() = default;
 
-  MPHIT(const MPHIT &src){
-    //
-    pos.copy(src.pos);
-    cov.copy(src.cov);
-    //
-    return;
+  template<int S>
+  inline decltype(auto) load(const int batch_id = 0) const {
+    MPHIT_<S> dst;
+    
+    if constexpr (std::is_same<MP3F, MP3F_<S>>::value        
+                  and std::is_same<MP3x3SF, MP3x3SF_<S>>::value) { //just do a copy of the whole object
+      dst.pos = this->pos;
+      dst.cov = this->cov;
+    } else { //ok, do manual load of the batch component instead
+      this->pos.load(dst.pos, batch_id);
+      this->cov.load(dst.cov, batch_id);
+    }//done    
+    
+    return dst;
   }
 };
+
 
 ///////////////////////////////////////
 //Gen. utils
@@ -512,10 +589,9 @@ float z(const MPHIT* hits, size_t ev, size_t tk)    { return Pos(hits, ev, tk, 2
 ////////////////////////////////////////////////////////////////////////
 ///MAIN compute kernels
 template<int N = 1>
-inline void MultHelixPropEndcap(const MP6x6F &a, const MP6x6SF &b, MP6x6F &c) {
-//#pragma omp simd 
- for (int n = 0; n < N; ++n)
-  {
+inline void MultHelixPropEndcap(const MP6x6F_<N> &a, const MP6x6SF_<N> &b, MP6x6F_<N> &c) {
+#pragma unroll
+ for (int n = 0; n < N; ++n) {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -557,10 +633,9 @@ inline void MultHelixPropEndcap(const MP6x6F &a, const MP6x6SF &b, MP6x6F &c) {
 }
 
 template<int N = 1>
-inline void MultHelixPropTranspEndcap(const MP6x6F &a, const MP6x6F &b, MP6x6SF &c) {
-//#pragma omp simd
-  for (int n = 0; n < N; ++n)
-  {
+inline void MultHelixPropTranspEndcap(const MP6x6F_<N> &a, const MP6x6F_<N> &b, MP6x6SF_<N> &c) {
+#pragma unroll
+  for (int n = 0; n < N; ++n) {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
     c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
@@ -587,11 +662,10 @@ inline void MultHelixPropTranspEndcap(const MP6x6F &a, const MP6x6F &b, MP6x6SF 
 }
 
 template<int N = 1>
-inline void KalmanGainInv(const MP6x6SF &a, const MP3x3SF &b, MP3x3 &c) {
+inline void KalmanGainInv(const MP6x6SF_<N> &a, const MP3x3SF_<N> &b, MP3x3_<N> &c) {
 
-//#pragma omp simd
-  for (int n = 0; n < N; ++n)
-  {
+#pragma unroll
+  for (int n = 0; n < N; ++n) {
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
@@ -613,11 +687,10 @@ inline void KalmanGainInv(const MP6x6SF &a, const MP3x3SF &b, MP3x3 &c) {
 }
 
 template <int N = 1>
-inline void KalmanGain(const MP6x6SF &a, const MP3x3 &b, MP3x6 &c) {
+inline void KalmanGain(const MP6x6SF_<N> &a, const MP3x3_<N> &b, MP3x6_<N> &c) {
 
-//#pragma omp simd
-  for (int n = 0; n < N; ++n)
-  {
+#pragma unroll
+  for (int n = 0; n < N; ++n) {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[ 1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[ 1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
     c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[ 1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
@@ -642,11 +715,11 @@ inline void KalmanGain(const MP6x6SF &a, const MP3x3 &b, MP3x6 &c) {
 }
 
 template <int N = 1>
-void KalmanUpdate(MP6x6SF &trkErr, MP6F &inPar, const MP3x3SF &hitErr, const MP3F &msP){
+void KalmanUpdate(MP6x6SF_<N> &trkErr, MP6F_<N> &inPar, const MP3x3SF_<N> &hitErr, const MP3F_<N> &msP){
 
-  MP3x3 inverse_temp;
-  MP3x6 kGain;
-  MP6x6SF newErr;
+  MP3x3_<N> inverse_temp;
+  MP3x6_<N> kGain;
+  MP6x6SF_<N> newErr;
   
   KalmanGainInv<N>(trkErr, hitErr, inverse_temp);
   KalmanGain<N>(trkErr, inverse_temp, kGain);
@@ -718,11 +791,11 @@ void KalmanUpdate(MP6x6SF &trkErr, MP6F &inPar, const MP3x3SF &hitErr, const MP3
 constexpr auto kfact= 100/3.8;
 
 template<int N = 1>
-void propagateToZ(const MP6x6SF &inErr, const MP6F &inPar, const MP1I &inChg, 
-                  const MP3F &msP, MP6x6SF &outErr, MP6F &outPar) {
+void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N> &inChg, 
+                  const MP3F_<N> &msP, MP6x6SF_<N> &outErr, MP6F_<N> &outPar) {
   
-  MP6x6F errorProp;
-  MP6x6F temp;
+  MP6x6F_<N> errorProp;
+  MP6x6F_<N> temp;
 
   auto PosInMtrx = [=] (int i, int j, int D, int block_size = 1) consteval {return block_size*(i*D+j);};
 //#pragma omp simd
@@ -786,18 +859,21 @@ void propagateToZ(const MP6x6SF &inErr, const MP6F &inPar, const MP1I &inChg,
   return;
 }
 
-template <typename lambda_tp, bool grid_stride = false>
+template <int bSize, typename lambda_tp, bool grid_stride = false>
 requires (enable_cuda == true)
-__cuda_kernel__ void launch_p2z_cuda_kernel(const lambda_tp p2z_kernel, const int length){
+__cuda_kernel__ void launch_p2z_cuda_kernel(const lambda_tp p2z_kernel, const int ntrks_, const int length){
 
   auto ib = threadIdx.x + blockIdx.x * blockDim.x;
   auto ie = threadIdx.y + blockIdx.y * blockDim.y;
 
-  auto i = ib + nb*ie;
+  auto i = ib + ntrks_*ie;
 
   while (i < length) {
-    p2z_kernel(i);
+    auto tid      = i / bSize;
+    auto batch_id = i % bSize;   
 
+    p2z_kernel(tid, batch_id);
+    
     if constexpr (grid_stride) { i += (gridDim.x * blockDim.x)*(gridDim.y * blockDim.y);}
     else  break;
   }
@@ -806,11 +882,12 @@ __cuda_kernel__ void launch_p2z_cuda_kernel(const lambda_tp p2z_kernel, const in
 }
 
 //CUDA specialized version:
-template <typename stream_tp, bool is_cuda_target>
+template <int bSize, typename stream_tp, bool is_cuda_target>
 requires CudaCompute<is_cuda_target>
-void dispatch_p2z_kernels(auto&& p2z_kernel, stream_tp stream, const int ntrks_, const int nevnts_){
+void dispatch_p2z_kernels(auto&& p2z_kernel, stream_tp stream, const int nb_, const int nevnts_){
 
-  const int outer_loop_range = nevnts_*ntrks_;
+  const int ntrks_ = nb_ * bSize;//re-scale tracks nb domain for the cuda backend 
+  const int outer_loop_range = nevnts_*ntrks_;//re-scale exec domain for the cuda backend
 
   const int blockx = threads_per_blockx;
   const int blocky = threads_per_blocky;
@@ -818,7 +895,7 @@ void dispatch_p2z_kernels(auto&& p2z_kernel, stream_tp stream, const int ntrks_,
   dim3 blocks(blockx, blocky, 1);
   dim3 grid(((ntrks_ + blockx - 1)/ blockx), ((nevnts_ + blocky - 1)/ blocky),1);
   //
-  launch_p2z_cuda_kernel<<<grid, blocks, 0, stream>>>(p2z_kernel, outer_loop_range);
+  launch_p2z_cuda_kernel<bSize><<<grid, blocks, 0, stream>>>(p2z_kernel, ntrks_, outer_loop_range);
   //
   p2z_check_error<is_cuda_target>();
 
@@ -826,12 +903,12 @@ void dispatch_p2z_kernels(auto&& p2z_kernel, stream_tp stream, const int ntrks_,
 }
 
 //General (default) implementation for both x86 and nvidia accelerators:
-template <typename stream_tp, bool is_cuda_target>
-void dispatch_p2z_kernels(auto&& p2z_kernel, stream_tp stream, const int ntrks_, const int nevnts_){
+template <int bSize, typename stream_tp, bool is_cuda_target>
+void dispatch_p2z_kernels(auto&& p2z_kernel, stream_tp stream, const int nb_, const int nevnts_){
   //
   auto policy = std::execution::par_unseq;
   //
-  auto outer_loop_range = std::ranges::views::iota(0, ntrks_*nevnts_);
+  auto outer_loop_range = std::ranges::views::iota(0, nb_*nevnts_);
   //
   std::for_each(policy,
                 std::ranges::begin(outer_loop_range),
@@ -895,24 +972,26 @@ int main (int argc, char* argv[]) {
    //
    auto p2z_kernels = [=,btracksPtr    = trcks.data(),
                          outtracksPtr  = outtrcks.data(),
-                         bhitsPtr      = hits.data()] (const auto i) {
+                         bhitsPtr      = hits.data()] (const auto tid, const  int batch_id = 0) {
                          //  
-                         MPTRK obtracks;
+                         constexpr int N      = enable_cuda ? 1 : bsize;
                          //
-                         const MPTRK btracks = btracksPtr[i];
+                         MPTRK_<N> obtracks;
                          //
-			  constexpr int N = bsize;
+                         const auto& btracks = btracksPtr[tid].load<N>(batch_id);
                          //
-                         for(int layer=0; layer<nlayer; ++layer) {
+                         constexpr int layers = nlayer;
+                         //
+                         for(int layer = 0; layer < layers; ++layer) {
                            //
-                           const MPHIT bhits = MPHIT(bhitsPtr[layer+nlayer*i]);
+                           const auto& bhits = bhitsPtr[layer+layers*tid].load<N>(batch_id);
                            //
                            propagateToZ<N>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
                            KalmanUpdate<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
                            //
                          }
                          //
-                         outtracksPtr[i] = obtracks;
+                         outtracksPtr[tid].save<N>(obtracks, batch_id);
                        };
    // synchronize to ensure that all needed data is on the device:
    p2z_wait<enable_cuda>();
@@ -938,7 +1017,7 @@ int main (int argc, char* argv[]) {
        p2z_prefetch<MPHIT, enable_cuda>(hits,  dev_id, stream);
      }
      //
-     dispatch_p2z_kernels<decltype(stream), enable_cuda>(p2z_kernels, stream, nb, nevts);
+     dispatch_p2z_kernels<bsize, decltype(stream), enable_cuda>(p2z_kernels, stream, nb, nevts);
      //
      if constexpr (include_data_transfer) {  
        p2z_prefetch<MPTRK, enable_cuda>(outtrcks, host_id, stream); 
