@@ -51,6 +51,13 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 #endif
 
+#ifndef num_streams
+#define num_streams 10
+#ifdef _OPENARC_
+#pragma openarc #define num_streams 10
+#endif
+#endif
+
 
 size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -289,12 +296,15 @@ struct MPHIT* prepareHits(struct AHIT inputhit) {
 }
 
 #define N bsize
-#pragma acc routine vector nohost
+#ifdef _OPENARC_
+#pragma openarc #define N bsize
+#endif
+#pragma omp declare target
 void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct MP6x6F* C) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
- #pragma acc loop vector
+ #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -335,13 +345,14 @@ void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct
     c[35*N+n] = b[20*N+n];
   }
 }
+#pragma omp end declare target
 
-#pragma acc routine vector nohost
+#pragma omp declare target
 void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, struct MP6x6SF* C) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
- #pragma acc loop vector
+ #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -367,13 +378,14 @@ void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, s
     c[20*N+n] = b[35*N+n];
   }
 }
+#pragma omp end declare target
 
-#pragma acc routine vector nohost
+#pragma omp declare target
 void KalmanGainInv(const struct MP6x6SF* A, const struct MP3x3SF* B, struct MP3x3* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
- #pragma acc loop vector
+ #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
     double det =
@@ -393,12 +405,14 @@ void KalmanGainInv(const struct MP6x6SF* A, const struct MP3x3SF* B, struct MP3x
     c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
   }
 }
-#pragma acc routine vector nohost
+#pragma omp end declare target
+
+#pragma omp declare target
 void KalmanGain(const struct MP6x6SF* A, const struct MP3x3* B, struct MP3x6* C) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
- #pragma acc loop vector
+ #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
@@ -421,8 +435,9 @@ void KalmanGain(const struct MP6x6SF* A, const struct MP3x3* B, struct MP3x6* C)
     c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
   }
 }
+#pragma omp end declare target
 
-#pragma acc routine vector nohost
+#pragma omp declare target
 void KalmanUpdate(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3SF* hitErr, const struct MP3F* msP, struct MP3x3* inverse_temp, struct MP3x6* kGain, struct MP6x6SF* newErr){
   //struct MP3x3 inverse_temp1;
   //struct MP3x6 kGain1;
@@ -434,7 +449,7 @@ void KalmanUpdate(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3
   KalmanGain(trkErr,inverse_temp,kGain);
 
 
- #pragma acc loop vector
+ #pragma omp parallel for num_threads(bsize)
   for (size_t it=0;it<bsize;++it) {
     const float xin = x1(inPar,it);
     const float yin = _y1(inPar,it);
@@ -495,17 +510,18 @@ void KalmanUpdate(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3
   //[DEBUG on Dec.8, 2020] below does not have any effect since trkErr is a local variable.
   //trkErr = newErr;
 }
+#pragma omp end declare target
 
 
 //const float kfact = 100/3.8;
 #define kfact 100/3.8
-#pragma acc routine vector nohost
+#pragma omp declare target
 void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
 		  const struct MP1I* inChg, const struct MP3F* msP,
 	                struct MP6x6SF* outErr, struct MP6F* outPar,
  		struct MP6x6F* errorProp, struct MP6x6F* temp) {
   //
- #pragma acc loop vector
+ #pragma omp parallel for num_threads(bsize)
   for (size_t it=0;it<bsize;++it) {	
     const float zout = z_pos1(msP,it);
     const float k = q(inChg,it)*kfact;//100/3.8;
@@ -561,6 +577,7 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
   MultHelixPropEndcap(errorProp, inErr, temp);
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }
+#pragma omp end declare target
 
 int main (int argc, char* argv[]) {
 
@@ -602,7 +619,7 @@ int main (int argc, char* argv[]) {
    struct MPHIT* hit = prepareHits(inputhit);
    struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
 
-#pragma acc enter data create(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
+#pragma omp target enter data map(alloc: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -620,34 +637,48 @@ int main (int argc, char* argv[]) {
    gettimeofday(&timecheck, NULL);
    start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
+   int chunkSize = nevts/num_streams;
+   int lastChunkSize = chunkSize;
+   if( nevts%num_streams != 0 ) {
+     lastChunkSize = chunkSize + (nevts - num_streams*chunkSize);
+   }
    for(itr=0; itr<NITER; itr++) {
-     #pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb*nlayer])
-     {
-     #pragma acc parallel loop gang num_workers(bsize) collapse(2) present(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
-     for (size_t ie=0;ie<nevts;++ie) { // loop over events
-       for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-         //
-		 //[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device functions (propagateToZ and KalmanUpdate) to here.
-   	     struct MP6x6F errorProp, temp;
-  		 struct MP3x3 inverse_temp;
-  		 struct MP3x6 kGain;
-  		 struct MP6x6SF newErr;
-         const struct MPTRK* btracks = bTkC(trk, ie, ib);
-         struct MPTRK* obtracks = bTk(outtrk, ie, ib);
-         for(size_t layer=0; layer<nlayer; ++layer) {
-            const struct MPHIT* bhits = bHit4(hit, ie, ib,layer);
-         //
-            propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-  	        &errorProp, &temp); // vectorized function
-            //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
-            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr);
-         }
-       }
-     }
-   }  
-   #pragma acc update host(outtrk[0:nevts*nb])
+     int localChunkSize = chunkSize;
+     for(int s=0; s<num_streams; s++) {
+		if( s==num_streams-1 ) {
+			localChunkSize = lastChunkSize;
+		}
+     	#pragma omp target update to(trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) nowait depend(out:trk[s*chunkSize*nb:1])
+		//#pragma openarc cuda sharedRW(ie, ib)
+#ifdef _OPENARC_
+     	#pragma omp target teams distribute collapse(2) map(present,to: trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) map(present,from: outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(in:trk[s*chunkSize*nb:1]) depend(out:outtrk[s*chunkSize*nb:1])
+#else
+     	#pragma omp target teams distribute collapse(2) map(to: trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) map(from: outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(in:trk[s*chunkSize*nb:1]) depend(out:outtrk[s*chunkSize*nb:1])
+#endif
+     	for (size_t ie=s*chunkSize;ie<(s*chunkSize+localChunkSize);++ie) { // loop over events
+       		for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
+		 		//[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device functions (propagateToZ and KalmanUpdate) to here.
+   	     		struct MP6x6F errorProp, temp;
+  		 		struct MP3x3 inverse_temp;
+  		 		struct MP3x6 kGain;
+  		 		struct MP6x6SF newErr;
+         		const struct MPTRK* btracks = bTkC(trk, ie, ib);
+         		struct MPTRK* obtracks = bTk(outtrk, ie, ib);
+         		for(size_t layer=0; layer<nlayer; ++layer) {
+            		const struct MPHIT* bhits = bHit4(hit, ie, ib,layer);
+         		//
+            		propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+  	        		&errorProp, &temp); // vectorized function
+            		//KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+            		KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr);
+         		}
+       		}
+     	}
+   		#pragma omp target update from(outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(inout:outtrk[s*chunkSize*nb:1])
+	}  
    } //end of itr loop
 
+   #pragma omp taskwait
    gettimeofday(&timecheck, NULL);
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
@@ -761,10 +792,10 @@ int main (int argc, char* argv[]) {
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
 
+ #pragma omp target exit data map(delete: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
    free(trk);
    free(hit);
    free(outtrk);
-#pragma acc exit data delete(trk[0:nevts*nb], hit[0:nlayer*nevts*nb], outtrk[0:nevts*nb])
 
    return 0;
 }

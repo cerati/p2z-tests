@@ -13,18 +13,21 @@
 // our typedefs curtisy of the examples
 #include "kokkos_config.h"
 
-#define nlayers 20      // number of events
-#define nevts 100      // number of events
-#define nb    ntrks/bsize     // number of batches? 600
-#define bsize 16       // batch size (tracks per batch?)
+#ifndef bsize
+#define bsize 1       // batch size (tracks per batch?)
+#endif
 
-// #define nevts 100      // number of events
-// #define nb    150      // number of batches?
-// #define bsize 64       // batch size (tracks per batch?) 
-
+#ifndef ntrks
 #define ntrks 9600 // number of tracks per event?
-#define smear 0.1      // for making more tracks for the one
+#endif
 
+#define nb    ntrks/bsize     // number of batches? 600
+
+#ifndef nevts
+#define nevts 100      // number of events
+#endif
+
+#define smear 0.1      // for making more tracks for the one
 
 #ifndef nlayers
 #define nlayers 20     // number of layers
@@ -37,33 +40,12 @@
 // TODO adjust everything so it is all full matrices
 // TODO also to kokkos views eventually
 
-// Allocate y, x vectors and Matrix A on device.
-typedef Kokkos::View<float*, Layout, Kokkos::HostSpace>   ViewVector; 
-typedef Kokkos::View<float**, Layout, Kokkos::HostSpace>  ViewMatrix;
-
-typedef Kokkos::View<int*, Layout,  Kokkos::HostSpace> ViewVectorINT;
-typedef Kokkos::View<float**, Layout,  Kokkos::HostSpace> ViewVectorMP;
-typedef Kokkos::View<float***, Layout,  Kokkos::HostSpace> ViewMatrixMP;
-
-
 struct MP1I {
   int data[1*bsize];
 };
 
 struct MP22I {
   int data[22*bsize];
-};
-
-struct MPTRK {
-  ViewVectorMP  par;    // batch of len 6 vectors
-  ViewMatrixMP  cov;    // 6x6 symmetric batch matrix
-  ViewVectorINT q;      // bsize array of int
-  //  ViewVectorINT hitidx; // unused; array len 22 of int
-};
-
-struct MPHIT {
-  ViewVectorMP pos;     // batch of len 3 vectors
-  ViewMatrixMP cov;     // 3x3 symmetric batch matrix
 };
 
 // for the par vectors
@@ -92,6 +74,17 @@ struct CBTRK {
 struct CBHIT {
   ViewVectorCB pos;     // batch of len 3 vectors
   ViewMatrixCB cov;     // 3x3 symmetric batch matrix
+};
+
+struct MPTRK {
+  ViewVectorCB::HostMirror  par;    // batch of len 6 vectors
+  ViewMatrixCB::HostMirror  cov;    // 6x6 symmetric batch matrix
+  ViewIntCB::HostMirror     q;      // bsize array of int
+};
+
+struct MPHIT {
+  ViewVectorCB::HostMirror pos;     // batch of len 3 vectors
+  ViewMatrixCB::HostMirror cov;     // 3x3 symmetric batch matrix
 };
 
 

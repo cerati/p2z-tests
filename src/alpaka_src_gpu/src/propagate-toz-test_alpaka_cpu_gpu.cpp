@@ -2,45 +2,96 @@
 icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 */
 
+#include <alpaka/alpaka.hpp>
+#include <alpaka/example/ExampleDefaultAcc.hpp>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <iostream>
+#include <vector>
 #include <chrono>
 #include <iomanip>
-#include <sys/time.h>
+
+#ifndef NWARMUP
+#define NWARMUP 2
+#endif
+
+#ifndef EXCLUDE_H2D_TRANSFER
+#define MEASURE_H2D_TRANSFER
+#endif
+
+#ifndef EXCLUDE_D2H_TRANSFER
+#define MEASURE_D2H_TRANSFER
+#endif
+
+#define FIXED_RSEED
 
 #ifndef bsize
-#define bsize 128
+#define bsize 32
 #endif
+
 #ifndef ntrks
 #define ntrks 9600
 #endif
 
 #define nb    (ntrks/bsize)
+
 #ifndef nevts
 #define nevts 100
 #endif
+
 #define smear 0.1
 
 #ifndef NITER
-#define NITER 5
+#define NITER 5 
 #endif
+
 #ifndef nlayer
 #define nlayer 20
 #endif
 
-size_t PosInMtrx(size_t i, size_t j, size_t D) {
+#ifndef num_streams
+#define num_streams 10 // set to 1 if using cpu
+#endif
+
+#ifndef elementsperthready
+#define elementsperthready 1
+#endif
+
+#ifndef elementsperthreadx
+#define elementsperthreadx bsize // set to 1 if using gpu
+#endif
+
+#ifndef threadsperblocky
+#define threadsperblocky 32 // set to 1 if using cpu blocks
+#endif
+
+#ifndef threadsperblockx
+#define threadsperblockx 1 // set to 1 if using cpu blocks
+#endif
+
+#ifndef blockspergridy
+#define blockspergridy 20
+#endif
+
+#ifndef blockspergridx
+#define blockspergridx 15
+#endif
+
+
+ALPAKA_FN_ACC size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
 }
 
-size_t SymOffsets33(size_t i) {
+ALPAKA_FN_ACC size_t SymOffsets33(size_t i) {
   const size_t offs[9] = {0, 1, 3, 1, 2, 4, 3, 4, 5};
   return offs[i];
 }
 
-size_t SymOffsets66(size_t i) {
+ALPAKA_FN_ACC size_t SymOffsets66(size_t i) {
   const size_t offs[36] = {0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
   return offs[i];
 }
@@ -49,7 +100,7 @@ struct ATRK {
   float par[6];
   float cov[21];
   int q;
-  //  int hitidx[22];
+//  int hitidx[22];
 };
 
 struct AHIT {
@@ -76,7 +127,6 @@ struct MP6F {
 struct MP3x3 {
   float data[9*bsize];
 };
-
 struct MP3x6 {
   float data[18*bsize];
 };
@@ -94,15 +144,15 @@ struct MP6x6F {
 };
 
 struct MPTRK {
-  struct MP6F    par;
-  struct MP6x6SF cov;
-  struct MP1I    q;
-  //  struct MP22I   hitidx;
+  MP6F    par;
+  MP6x6SF cov;
+  MP1I    q;
+//  MP22I   hitidx;
 };
 
 struct MPHIT {
-  struct MP3F    pos;
-  struct MP3x3SF cov;
+  MP3F    pos;
+  MP3x3SF cov;
 };
 
 float randn(float mu, float sigma) {
@@ -125,127 +175,126 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-struct MPTRK* bTk(struct MPTRK* tracks, size_t ev, size_t ib) {
-  return &(tracks[ib + nb*ev]);
+ALPAKA_FN_ACC MPTRK* bTk(MPTRK* tracks, size_t ev, size_t ib) {
+   return &(tracks[ib + nb*ev]);
 }
-
-const struct MPTRK* bTkC(const struct MPTRK* tracks, size_t ev, size_t ib) {
-  return &(tracks[ib + nb*ev]);
+ 
+ALPAKA_FN_ACC const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
+   return &(tracks[ib + nb*ev]);
 }
-
-float q(const struct MP1I* bq, size_t it){
+ 
+ALPAKA_FN_ACC float q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
-//
-float par(const struct MP6F* bpars, size_t it, size_t ipar){
+
+ALPAKA_FN_ACC float par(const MP6F* bpars, size_t it, size_t ipar){
   return (*bpars).data[it + ipar*bsize];
 }
-float x    (const struct MP6F* bpars, size_t it){ return par(bpars, it, 0); }
-float y    (const struct MP6F* bpars, size_t it){ return par(bpars, it, 1); }
-float z    (const struct MP6F* bpars, size_t it){ return par(bpars, it, 2); }
-float ipt  (const struct MP6F* bpars, size_t it){ return par(bpars, it, 3); }
-float phi  (const struct MP6F* bpars, size_t it){ return par(bpars, it, 4); }
-float theta(const struct MP6F* bpars, size_t it){ return par(bpars, it, 5); }
-//
-float par(const struct MPTRK* btracks, size_t it, size_t ipar){
+ALPAKA_FN_ACC float x    (const MP6F* bpars, size_t it){ return par(bpars, it, 0); }
+ALPAKA_FN_ACC float y    (const MP6F* bpars, size_t it){ return par(bpars, it, 1); }
+ALPAKA_FN_ACC float z    (const MP6F* bpars, size_t it){ return par(bpars, it, 2); }
+ALPAKA_FN_ACC float ipt  (const MP6F* bpars, size_t it){ return par(bpars, it, 3); }
+ALPAKA_FN_ACC float phi  (const MP6F* bpars, size_t it){ return par(bpars, it, 4); }
+ALPAKA_FN_ACC float theta(const MP6F* bpars, size_t it){ return par(bpars, it, 5); }
+
+ALPAKA_FN_ACC float par(const MPTRK* btracks, size_t it, size_t ipar){
   return par(&(*btracks).par,it,ipar);
 }
-float x    (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
-float y    (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
-float z    (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
-float ipt  (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
-float phi  (const struct MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
-float theta(const struct MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
-//
-float par(const struct MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
+ALPAKA_FN_ACC float x    (const MPTRK* btracks, size_t it){ return par(btracks, it, 0); }
+ALPAKA_FN_ACC float y    (const MPTRK* btracks, size_t it){ return par(btracks, it, 1); }
+ALPAKA_FN_ACC float z    (const MPTRK* btracks, size_t it){ return par(btracks, it, 2); }
+ALPAKA_FN_ACC float ipt  (const MPTRK* btracks, size_t it){ return par(btracks, it, 3); }
+ALPAKA_FN_ACC float phi  (const MPTRK* btracks, size_t it){ return par(btracks, it, 4); }
+ALPAKA_FN_ACC float theta(const MPTRK* btracks, size_t it){ return par(btracks, it, 5); }
+
+ALPAKA_FN_ACC float par(const MPTRK* tracks, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const struct MPTRK* btracks = bTkC(tracks, ev, ib);
+  const MPTRK* btracks = bTk(tracks, ev, ib);
   size_t it = tk % bsize;
   return par(btracks, it, ipar);
 }
-float x    (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
-float y    (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
-float z    (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
-float ipt  (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
-float phi  (const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
-float theta(const struct MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
-//
-void setpar(struct MP6F* bpars, size_t it, size_t ipar, float val){
+ALPAKA_FN_ACC float x    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 0); }
+ALPAKA_FN_ACC float y    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 1); }
+ALPAKA_FN_ACC float z    (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 2); }
+ALPAKA_FN_ACC float ipt  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 3); }
+ALPAKA_FN_ACC float phi  (const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 4); }
+ALPAKA_FN_ACC float theta(const MPTRK* tracks, size_t ev, size_t tk){ return par(tracks, ev, tk, 5); }
+
+ALPAKA_FN_ACC void setpar(MP6F* bpars, size_t it, size_t ipar, float val){
   (*bpars).data[it + ipar*bsize] = val;
 }
-void setx    (struct MP6F* bpars, size_t it, float val){ setpar(bpars, it, 0, val); }
-void sety    (struct MP6F* bpars, size_t it, float val){ setpar(bpars, it, 1, val); }
-void setz    (struct MP6F* bpars, size_t it, float val){ setpar(bpars, it, 2, val); }
-void setipt  (struct MP6F* bpars, size_t it, float val){ setpar(bpars, it, 3, val); }
-void setphi  (struct MP6F* bpars, size_t it, float val){ setpar(bpars, it, 4, val); }
-void settheta(struct MP6F* bpars, size_t it, float val){ setpar(bpars, it, 5, val); }
-//
-void setpar(struct MPTRK* btracks, size_t it, size_t ipar, float val){
+ALPAKA_FN_ACC void setx    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 0, val); }
+ALPAKA_FN_ACC void sety    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 1, val); }
+ALPAKA_FN_ACC void setz    (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 2, val); }
+ALPAKA_FN_ACC void setipt  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 3, val); }
+ALPAKA_FN_ACC void setphi  (MP6F* bpars, size_t it, float val){ setpar(bpars, it, 4, val); }
+ALPAKA_FN_ACC void settheta(MP6F* bpars, size_t it, float val){ setpar(bpars, it, 5, val); }
+
+ALPAKA_FN_ACC void setpar(MPTRK* btracks, size_t it, size_t ipar, float val){
   setpar(&(*btracks).par,it,ipar,val);
 }
-void setx    (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 0, val); }
-void sety    (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 1, val); }
-void setz    (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 2, val); }
-void setipt  (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 3, val); }
-void setphi  (struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 4, val); }
-void settheta(struct MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val); }
-
-const struct MPHIT* bHit(const struct MPHIT* hits, size_t ev, size_t ib) {
+ALPAKA_FN_ACC void setx    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 0, val); }
+ALPAKA_FN_ACC void sety    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 1, val); }
+ALPAKA_FN_ACC void setz    (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 2, val); }
+ALPAKA_FN_ACC void setipt  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 3, val); }
+ALPAKA_FN_ACC void setphi  (MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 4, val); }
+ALPAKA_FN_ACC void settheta(MPTRK* btracks, size_t it, float val){ setpar(btracks, it, 5, val); }
+ 
+ALPAKA_FN_ACC const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib) {
   return &(hits[ib + nb*ev]);
 }
-const struct MPHIT* bHit(const struct MPHIT* hits, size_t ev, size_t ib,size_t lay) {
+ALPAKA_FN_ACC const MPHIT* bHit(const MPHIT* hits, size_t ev, size_t ib,size_t lay) {
   return &(hits[lay + (ib*nlayer) +(ev*nlayer*nb)]);
 }
-//
-float pos(const struct MP3F* hpos, size_t it, size_t ipar){
+
+ALPAKA_FN_ACC float pos(const MP3F* hpos, size_t it, size_t ipar){
   return (*hpos).data[it + ipar*bsize];
 }
-float x(const struct MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
-float y(const struct MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
-float z(const struct MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
-//
-float pos(const struct MPHIT* hits, size_t it, size_t ipar){
+ALPAKA_FN_ACC float x(const MP3F* hpos, size_t it)    { return pos(hpos, it, 0); }
+ALPAKA_FN_ACC float y(const MP3F* hpos, size_t it)    { return pos(hpos, it, 1); }
+ALPAKA_FN_ACC float z(const MP3F* hpos, size_t it)    { return pos(hpos, it, 2); }
+
+ALPAKA_FN_ACC float pos(const MPHIT* hits, size_t it, size_t ipar){
   return pos(&(*hits).pos,it,ipar);
 }
-float x(const struct MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
-float y(const struct MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
-float z(const struct MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
-//
-float pos(const struct MPHIT* hits, size_t ev, size_t tk, size_t ipar){
+ALPAKA_FN_ACC float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
+ALPAKA_FN_ACC float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
+ALPAKA_FN_ACC float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
+
+ALPAKA_FN_ACC float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  const struct MPHIT* bhits = bHit(hits, ev, ib);
+  const MPHIT* bhits = bHit(hits, ev, ib, nlayer-1);
   size_t it = tk % bsize;
   return pos(bhits,it,ipar);
 }
-float x(const struct MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
-float y(const struct MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
-float z(const struct MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
+ALPAKA_FN_ACC float x(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
+ALPAKA_FN_ACC float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
+ALPAKA_FN_ACC float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
-struct MPTRK* prepareTracks(struct ATRK inputtrk) {
-  struct MPTRK* result = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK)); //fixme, align?
+MPTRK* prepareTracks(ATRK inputtrk) {
+  MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
-    	//par
-    	for (size_t ip=0;ip<6;++ip) {
-    	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
-    	}
-    	//cov
-    	for (size_t ip=0;ip<21;++ip) {
-    	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
-    	}
-    	//q
-    	result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+      	//par
+      	for (size_t ip=0;ip<6;++ip) {
+      	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+      	}
+      	//cov
+      	for (size_t ip=0;ip<21;++ip) {
+      	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+      	}
+      	//q
+      	result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
       }
     }
   }
   return result;
 }
-
-struct MPHIT* prepareHits(struct AHIT inputhit) {
-  struct MPHIT* result = (struct MPHIT*) malloc(nlayer*nevts*nb*sizeof(struct MPHIT));  //fixme, align?
-  // store in element order for bunches of bsize matrices (a la matriplex)
+MPHIT* prepareHits(AHIT inputhit) {
+//MPHIT* prepareHits(std::vector<AHIT>& inputhits) {
+  MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
   for (size_t lay=0;lay<nlayer;++lay) {
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
@@ -266,14 +315,22 @@ struct MPHIT* prepareHits(struct AHIT inputhit) {
 }
 
 #define N bsize
-#pragma omp declare target 
-void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct MP6x6F* C) {
+template< typename TAcc>
+inline void ALPAKA_FN_ACC MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, TAcc const & acc) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp parallel for num_threads(N) 
-  for (int n = 0; n < N; ++n)
-  {
+  
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+  
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -312,16 +369,23 @@ void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct
     c[35*N+n] = b[20*N+n];
   }
 }
-#pragma omp end declare target
 
-#pragma omp declare target
-void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, struct MP6x6SF* C) {
+template< typename TAcc>
+inline void ALPAKA_FN_ACC MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, TAcc const & acc) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp parallel for num_threads(N)
-  for (int n = 0; n < N; ++n)
-  {
+  
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+  
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
     c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
@@ -345,17 +409,23 @@ void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, s
     c[20*N+n] = b[35*N+n];
   }
 }
-#pragma omp end declare target
 
-
-#pragma omp declare target
-void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
+template< typename TAcc>
+inline void ALPAKA_FN_ACC KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C, TAcc const & acc) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp parallel for num_threads(N)
-  for (int n = 0; n < N; ++n)
-  {
+  
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ //for gpu
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
@@ -373,16 +443,23 @@ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
     c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
   }
 }
-#pragma omp end declare target
 
-#pragma omp declare target
-void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
+template< typename TAcc>
+inline void ALPAKA_FN_ACC KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C, TAcc const & acc) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-#pragma omp parallel for num_threads(N)
-  for (int n = 0; n < N; ++n)
-  {
+  
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+  
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
     c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
@@ -403,19 +480,23 @@ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
     c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
   }
 }
-#pragma omp end declare target
 
-#pragma omp declare target
-void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP3x3* inverse_temp, MP3x6* kGain, MP6x6SF* newErr){
-  //MP3x3 inverse_temp;
-  //MP3x6 kGain;
-  //MP6x6SF newErr;
-  KalmanGainInv(trkErr,hitErr,inverse_temp);
-  KalmanGain(trkErr,inverse_temp,kGain);
+template< typename TAcc>
+inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP3x3 *inverse_temp, MP3x6 *kGain, MP6x6SF *newErr, TAcc const & acc){
 
+  KalmanGainInv(trkErr,hitErr,inverse_temp,acc);
+  KalmanGain(trkErr,inverse_temp,kGain,acc);
 
-#pragma omp parallel for num_threads(bsize)
-  for (size_t it=0;it<bsize;++it) {
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+  
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  //for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) { // for gpu
     const float xin = x(inPar,it);
     const float yin = y(inPar,it);
     const float zin = z(inPar,it);
@@ -425,7 +506,7 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     const float xout = x(msP,it);
     const float yout = y(msP,it);
     const float zout = z(msP,it);
-  
+
     float xnew = xin + (kGain->data[0*bsize+it]*(xout-xin)) +(kGain->data[1*bsize+it]*(yout-yin));
     float ynew = yin + (kGain->data[3*bsize+it]*(xout-xin)) +(kGain->data[4*bsize+it]*(yout-yin));
     float znew = zin + (kGain->data[6*bsize+it]*(xout-xin)) +(kGain->data[7*bsize+it]*(yout-yin));
@@ -439,47 +520,50 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
     newErr->data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[12*bsize+it]);
     newErr->data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[14*bsize+it]);
-  
+
     newErr->data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[7*bsize+it]);
     newErr->data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[11*bsize+it]);
     newErr->data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[12*bsize+it]);
     newErr->data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[14*bsize+it]);
-  
+
     newErr->data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[11*bsize+it]);
     newErr->data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[12*bsize+it]);
     newErr->data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[14*bsize+it]);
-  
+
     newErr->data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[12*bsize+it]);
     newErr->data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[14*bsize+it]);
-  
+
     newErr->data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[13*bsize+it]);
     newErr->data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[14*bsize+it]);
-  
+
     newErr->data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain->data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[17*bsize+it]*trkErr->data[14*bsize+it]);
 
     setx(inPar,it,xnew );
     sety(inPar,it,ynew );
     setz(inPar,it,znew);
-    setipt(inPar,it, ptnew);
-    setphi(inPar,it, phinew);
-    settheta(inPar,it, thetanew);
+    setipt(inPar,it,ptnew);
+    setphi(inPar,it,phinew);
+    settheta(inPar,it,thetanew);
   }
-  trkErr = newErr;
-}
-#pragma omp end declare target
+  (*trkErr) = *newErr;
+ }
 
-const float kfact = 100/3.8;
-#pragma omp declare target
-void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
-		  const struct MP1I* inChg, const struct MP3F* msP,
-	                struct MP6x6SF* outErr, struct MP6F* outPar,
-			struct MP6x6F* errorProp, struct MP6x6F* temp) {
-  //
-#pragma omp parallel for num_threads(bsize)
-  for (size_t it=0;it<bsize;++it) {	
+const float kfact= 100/3.8;
+template< typename TAcc>
+inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg, const MP3F* msP, MP6x6SF* outErr, MP6F* outPar, MP6x6F* errorProp, MP6x6F* temp, TAcc const & acc) {
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+  
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  #pragma omp simd
+  //for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) {	 //for gpu
     const float zout = z(msP,it);
     const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z(inPar,it);
@@ -493,7 +577,6 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
     const float icosT = 1.0/cosT;
     const float icosTk = icosT/k;
     const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
-    //const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
     setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
@@ -518,28 +601,103 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
     errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT*(icosTk);
     errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
     errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ*(icosT*icosTk);
-//    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-//    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-//    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-//    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-//    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-//    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-//    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-//    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-//    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
-//    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
-//    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
-  //
-  MultHelixPropEndcap(errorProp, inErr, temp);
-  MultHelixPropTranspEndcap(errorProp, temp, outErr);
+  MultHelixPropEndcap(errorProp, inErr, temp,acc);
+  MultHelixPropTranspEndcap(errorProp, temp, outErr,acc);
 }
-#pragma omp end declare target
+
+
+struct alpakaKernel
+{
+public:
+    template<typename TAcc>
+    ALPAKA_FN_ACC auto operator()(
+        TAcc const& acc,
+        MPTRK* trk,
+        MPHIT* hit,
+        MPTRK* outtrk,
+         const int stream
+        ) const -> void
+    {
+        using Dim = alpaka::Dim<TAcc>;
+        using Idx = alpaka::Idx<TAcc>;
+        using Vec = alpaka::Vec<Dim, Idx>;
+
+       Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+       Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+       Vec const blockIdx    = alpaka::getIdx<alpaka::Grid, alpaka::Blocks>(acc);
+       Vec const blockExtent = alpaka::getWorkDiv<alpaka::Grid, alpaka::Blocks>(acc);
+        
+       auto & errorProp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
+       auto & temp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
+       auto & inverse_temp = alpaka::declareSharedVar<MP3x3,__COUNTER__>(acc);
+       auto & kGain = alpaka::declareSharedVar<MP3x6,__COUNTER__>(acc);
+       auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
+
+      int ie_range;  
+      if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
+      else{ie_range = (int)(nevts/num_streams);}
+
+   for (size_t ie=blockIdx[0];ie<ie_range;ie+=blockExtent[0]) { //loop for TbbBlocks & Omp2Blocks & GPU
+     for (size_t ib=blockIdx[1];ib<nb;ib+=blockExtent[1]) { //loop for TbbBlocks & Omp2Blocks & GPU
+           const MPTRK* btracks = bTk(trk, ie, ib);
+           MPTRK* obtracks = bTk(outtrk, ie, ib);
+           for( size_t layer=0; layer<nlayer;++layer){
+              const MPHIT* bhits = bHit(hit, ie, ib,layer);
+               //struct MP6x6F errorProp, temp;
+              propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp, acc); // vectorized function
+              KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,&inverse_temp, &kGain, &(newErr), acc);
+       }
+     }
+   }
+ }
+};
+
 
 int main (int argc, char* argv[]) {
 
-   int itr;
-   struct ATRK inputtrk = {
+   using Dim = alpaka::DimInt<2u>;
+   using Idx = std::size_t;
+   // using accelerator
+   using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
+   //using Acc = alpaka::AccCpuSerial<Dim, Idx>;
+   //using Acc = alpaka::AccCpuOmp2Blocks<Dim, Idx>;
+   //using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
+   using WorkDiv = alpaka::WorkDivMembers<Dim, Idx>;
+   using Vec = alpaka::Vec<Dim, Idx>;
+ 
+   std::cout << "Using alpaka accelerator: " << alpaka::getAccName<Acc>() << std::endl;
+    
+   // cpu host
+   using Host = alpaka::DevCpu;
+   auto const devHost = alpaka::getDevByIdx<Host>(0u);
+   // device
+   auto const devAcc = alpaka::getDevByIdx<Acc>(0u);
+
+   int stream_chunk = ((int)(nevts*nb/num_streams));
+   int stream_remainder = ((int)((nevts*nb)%num_streams));
+   int stream_range;
+   if (stream_remainder == 0){ stream_range =num_streams;}
+   else{stream_range = num_streams+1;}
+   // create a nonblocking queue for the acc, the host side
+   using QueueProperty = alpaka::NonBlocking;
+   using QueueAcc = alpaka::Queue<Acc,QueueProperty>;
+
+   std::vector<QueueAcc> queue;
+   for (int s = 0; s<stream_range;s++) {
+     queue.emplace_back(devAcc);
+   }
+   
+   // grid and block definition
+   Vec const elementsPerThread(static_cast<Idx>(elementsperthready),static_cast<Idx>(elementsperthreadx));
+   Vec const threadsPerBlock(static_cast<Idx>(threadsperblocky),static_cast<Idx>(threadsperblockx));
+   Vec const blocksPerGrid(static_cast<Idx>(blockspergridy),static_cast<Idx>(blockspergridx));
+
+   WorkDiv const workDiv = WorkDiv(blocksPerGrid,threadsPerBlock,elementsPerThread); 
+
+   printf("streams: %d, blockx: %d, blocky: %d, thready: %d, bsize = %i\n",num_streams,blockspergridx,blockspergridy,threadsperblocky,bsize);
+    
+   ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
      {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
       6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
@@ -547,7 +705,7 @@ int main (int argc, char* argv[]) {
      1
    };
 
-   struct AHIT inputhit = {
+   AHIT inputhit = {
      {-20.7824649810791, -12.24150276184082, 57.8067626953125},
      {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
    };
@@ -557,71 +715,197 @@ int main (int argc, char* argv[]) {
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
    printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
-   
+
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
-   
+
    long setup_start, setup_stop;
    struct timeval timecheck;
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-   struct MPTRK* trk = prepareTracks(inputtrk);
-   struct MPHIT* hit = prepareHits(inputhit);
-   struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
 
-#pragma omp target enter data map(alloc: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
+   auto chunkSize = [&](int s) {
+     return s < num_streams ? stream_chunk : stream_remainder;
+   };
+    
+   // buffer dimension definition
+   using buffer_dim = alpaka::DimInt<1u>;
+   using buffer_vec = alpaka::Vec<buffer_dim, Idx>;
+   // create buffers on cpu host
+   using hb_trk = alpaka::Buf<Host, MPTRK, buffer_dim, Idx>;
+   using hb_hit = alpaka::Buf<Host, MPHIT, buffer_dim, Idx>;
+   std::vector<hb_trk> trk_bufHosts,outtrk_bufHosts;
+   std::vector<hb_hit> hit_bufHosts;
+   // create buffers on device memory
+   using db_trk = alpaka::Buf<Acc, MPTRK, buffer_dim, Idx>;
+   using db_hit = alpaka::Buf<Acc, MPHIT, buffer_dim, Idx>;
+   std::vector<db_trk> trk_bufDevs,outtrk_bufDevs;
+   std::vector<db_hit> hit_bufDevs;
+   // create an extent for each buffer, append the extent value
+   std::vector<buffer_vec> extent_trk;
+   std::vector<buffer_vec> extent_hit;
+   for(int s=0;s<num_streams;s++){
+        extent_trk.emplace_back(size_t(chunkSize(s)));
+        extent_hit.emplace_back(size_t(chunkSize(s)*nlayer));
+   }
+    
+   // allocate buffers on host and device memory
+   for(int s=0;s<num_streams;s++){
+        trk_bufHosts.emplace_back(alpaka::allocBuf<MPTRK,Idx>(devHost,extent_trk[s]));
+        hit_bufHosts.emplace_back(alpaka::allocBuf<MPHIT,Idx>(devHost,extent_hit[s]));
+        outtrk_bufHosts.emplace_back(alpaka::allocBuf<MPTRK,Idx>(devHost,extent_trk[s]));
+
+        trk_bufDevs.emplace_back(alpaka::allocBuf<MPTRK,Idx>(devAcc,extent_trk[s]));
+        hit_bufDevs.emplace_back(alpaka::allocBuf<MPHIT,Idx>(devAcc,extent_hit[s]));
+        outtrk_bufDevs.emplace_back(alpaka::allocBuf<MPTRK,Idx>(devAcc,extent_trk[s]));
+   }
+   // pin the existing buffers and prepare for asynchronous memory copy (affects cpu-gpu memory copies)
+   for(int s=0;s<num_streams;s++){
+        prepareForAsyncCopy(trk_bufHosts[s]);
+        prepareForAsyncCopy(hit_bufHosts[s]);
+        prepareForAsyncCopy(outtrk_bufHosts[s]);
+   }
+
+   // prepare input data for computations, all on host
+   MPTRK* input_trk = prepareTracks(inputtrk);
+   MPHIT* input_hit = prepareHits(inputhit);
+   MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); 
+
+   MPTRK* trks_host[num_streams];
+   MPHIT* hits_host[num_streams];
+   MPTRK* outtrks_host[num_streams];
+   MPTRK* trks_dev[num_streams];
+   MPHIT* hits_dev[num_streams];
+   MPTRK* outtrks_dev[num_streams];
+
+   int offset_trks=0;
+   int offset_hits=0;
+   for(int s=0;s<num_streams;s++){
+        // get host pointers to the host buffers
+        trks_host[s] = alpaka::getPtrNative(trk_bufHosts[s]);
+        hits_host[s] = alpaka::getPtrNative(hit_bufHosts[s]);
+        outtrks_host[s] = alpaka::getPtrNative(outtrk_bufHosts[s]); 
+       
+        std::copy(input_trk+offset_trks,input_trk+offset_trks+chunkSize(s), trks_host[s]);
+        std::copy(input_hit+offset_hits,input_hit+offset_hits+chunkSize(s)*nlayer, hits_host[s]);
+        offset_trks+=chunkSize(s);
+        offset_hits+= chunkSize(s)*nlayer;
+     
+        // get device pointers to the device buffers
+        trks_dev[s] = alpaka::getPtrNative(trk_bufDevs[s]);
+        hits_dev[s] = alpaka::getPtrNative(hit_bufDevs[s]);
+        outtrks_dev[s] = alpaka::getPtrNative(outtrk_bufDevs[s]);
+    } 
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    printf("done preparing!\n");
-   
+ 
+   printf("Number of struct MPTRK trk[] = %d\n", nevts*nb);
+   printf("Number of struct MPTRK outtrk[] = %d\n", nevts*nb);
+   printf("Number of struct struct MPHIT hit[] = %d\n", nevts*nb);
   
-
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
-   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
+   printf("Size of struct struct MPHIT hit[] = %ld\n", nlayer*nevts*nb*sizeof(struct MPHIT));
 
-   auto wall_start = std::chrono::high_resolution_clock::now();
+  // kernel instance and create tasks
+  alpakaKernel alpakakernel;
 
-   for(itr=0; itr<NITER; itr++) {
-	#pragma omp target update to(trk[0:nevts*nb], hit[0:nevts*nb*nlayer])
-	{
-	#pragma omp target teams distribute collapse(2) map(to: trk[0:nevts*nb], hit[0:nevts*nb*nlayer]) map(from: outtrk[0:nevts*nb])
-     for (size_t ie=0;ie<nevts;++ie) { // loop over events
-       for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
-         //
-         const struct MPTRK* btracks = bTk(trk, ie, ib);
-         struct MPTRK* obtracks = bTk(outtrk, ie, ib);
-         for(size_t layer=0; layer<nlayer; ++layer) {
-            const struct MPHIT* bhits = bHit(hit, ie, ib, layer);
-   	        struct MP6x6F errorProp, temp;
-			//[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device function (KalmanUpdate) to here.
-			//When using the PGI compiler, all gang-private variable declarations should 
-			//be lexically included in the enclosing compute contruct.
-  			MP3x3 inverse_temp;
-  			MP3x6 kGain;
-  			MP6x6SF newErr;
-         //
-            propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
-  	        &errorProp, &temp); // vectorized function
-            //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
-            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr);
-         }
+  auto const Kernel = [&](int s) {
+        auto taskRunKernel(alpaka::createTaskKernel<Acc>(workDiv, alpakakernel, trks_dev[s], hits_dev[s], outtrks_dev[s], s));
+        return taskRunKernel;
+    };
+   // kernel execution and measurement, same thing as p2r
+   auto doWork = [&](const char* msg, int nIters) {
+     std::cout<< msg <<std::endl;
+     double wall_time = 0;
+
+#ifdef MEASURE_H2D_TRANSFER
+     for(int itr=0; itr<nIters; itr++) {
+       auto wall_start = std::chrono::high_resolution_clock::now();
+       for (int s = 0; s<num_streams;s++) {
+         // HtoD
+         alpaka::memcpy(queue[s], trk_bufDevs[s], trk_bufHosts[s], extent_trk[s]);
+         alpaka::memcpy(queue[s], hit_bufDevs[s], hit_bufHosts[s], extent_hit[s]);}
+       for (int s = 0; s<num_streams;s++) {
+         alpaka::enqueue(queue[s], Kernel(s));
        }
+#ifdef MEASURE_D2H_TRANSFER
+       for (int s = 0; s<num_streams;s++) {
+         // DtoH
+         alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
+       }
+#endif
+       for (int s = 0; s<num_streams;s++) {
+        alpaka::wait(queue[s]); 
+        }
+       auto wall_stop = std::chrono::high_resolution_clock::now();
+       wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
      }
-   }  
-   #pragma omp target update from(outtrk[0:nevts*nb])
-   } //end of itr loop
+#else
+     for (int s = 0; s<num_streams;s++) {
+         // HtoD
+         alpaka::memcpy(queue[s], trk_bufDevs[s], trk_bufHosts[s], extent_trk[s]);
+         alpaka::memcpy(queue[s], hit_bufDevs[s], hit_bufHosts[s], extent_hit[s]);
+     }
+     for (int s = 0; s<num_streams;s++) {
+     alpaka::wait(queue[s]); 
+     }
+     for(int itr=0; itr<nIters; itr++) {
+       auto wall_start = std::chrono::high_resolution_clock::now();
+       for (int s = 0; s<num_streams;s++) {
+         alpaka::enqueue(queue[s], Kernel(s));
+       }
+#ifdef MEASURE_D2H_TRANSFER
+       for (int s = 0; s<num_streams;s++) {
+         // DtoH
+         alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
+       }
+#endif
+       for (int s = 0; s<num_streams;s++) {
+       alpaka::wait(queue[s]); 
+      }
+       auto wall_stop = std::chrono::high_resolution_clock::now();
+       wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
+     }
+#endif
 
-   auto wall_stop = std::chrono::high_resolution_clock::now();
+#ifndef MEASURE_D2H_TRANSFER
+     for (int s = 0; s<num_streams;s++) {
+       // DtoH
+       alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
+       alpaka::wait(queue[s]); 
+     }
+#endif
+     return wall_time;
+   };
 
-   auto wall_diff = wall_stop - wall_start;
-   auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
+   doWork("Warming up", NWARMUP);
+   auto wall_time = doWork("Launching", NITER);
+
+#ifdef MEASURE_H2D_TRANSFER
+   printf("Measuring H2D Transfer\n");
+#else
+   printf("Excluding H2D Transfer\n");
+#endif
+#ifdef MEASURE_D2H_TRANSFER
+   printf("Measuring D2H Transfer\n");
+#else
+   printf("Excluding D2H Transfer\n");
+#endif
+
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
-   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, -1);
+   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER), nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, 1);
+
+   int offset_trk = 0;
+   for(int s=0;s<num_streams;s++){
+    std::copy(outtrks_host[s],outtrks_host[s]+chunkSize(s), outtrk+offset_trk); // stitch the outtrks from different streams together
+    offset_trk += chunkSize(s);
+   }
 
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;
@@ -640,9 +924,9 @@ int main (int argc, char* argv[]) {
        avgx += x_;
        avgy += y_;
        avgz += z_;
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
+       float hx_ = x(input_hit,ie,it);
+       float hy_ = y(input_hit,ie,it);
+       float hz_ = z(input_hit,ie,it);
        avgdx += (x_-hx_)/x_;
        avgdy += (y_-hy_)/y_;
        avgdz += (z_-hz_)/z_;
@@ -668,9 +952,9 @@ int main (int argc, char* argv[]) {
        stdx += (x_-avgx)*(x_-avgx);
        stdy += (y_-avgy)*(y_-avgy);
        stdz += (z_-avgz)*(z_-avgz);
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
+       float hx_ = x(input_hit,ie,it);
+       float hy_ = y(input_hit,ie,it);
+       float hz_ = z(input_hit,ie,it);
        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
@@ -693,11 +977,6 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
-
-   free(trk);
-   free(hit);
-   free(outtrk);
-#pragma omp target exit data map(delete: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
 
    return 0;
 }

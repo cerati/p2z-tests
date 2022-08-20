@@ -239,6 +239,12 @@
 #Set the default value of the allowable margin of error for program verification (default E = 1.0e-6)
 #
 ########################################
+#Option: defaultNumAsyncQueues
+########################################
+#defaultNumAsyncQueues=N
+#Default number of asynchronous queues per device (default value = 4); applicable only to OpenMP-to-OpenACC translation
+#
+########################################
 #Option: defaultNumComputeUnits
 ########################################
 #defaultNumComputeUnits=N
@@ -824,8 +830,9 @@
 #SetAccEntryFunction=functionname
 #SetOutputKernelFileNameBase=filename
 addIncludePath=__openarcrt__
-#macro=_N_=__inputSize__
+macro=num_streams=__numStreams__
 defaultNumWorkers=32
+defaultNumAsyncQueues=10
 #maxNumGangs=N
 #maxNumWorkers=N
 #outdir=cetus_output
@@ -885,7 +892,7 @@ shrdSclrCachingOnSM
 #disableWorkShareLoopCollapsing
 #addErrorCheckingCode
 #addSafetyCheckingCode
-forceSyncKernelCall
+#forceSyncKernelCall
 #CloneKernelCallingProcedures=N
 #debug_parser_input
 #debug_parser_output

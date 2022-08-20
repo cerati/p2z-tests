@@ -52,9 +52,9 @@
 
 #ifdef USE_GPU
 // GPU options
-typedef Kokkos::Cuda          ExecSpace;
-typedef Kokkos::CudaUVMSpace  MemSpace_CB;
-typedef Kokkos::LayoutLeft    Layout;
+typedef Kokkos::Cuda          ExecSpace;    // Backend to execute
+typedef Kokkos::CudaSpace  MemSpace_CB;  // What type of memory to use
+typedef Kokkos::LayoutLeft    Layout;       // Multi dimensional data layout
 #else
 // CPU options
 typedef Kokkos::OpenMP   ExecSpace;

@@ -127,7 +127,6 @@ int main( int argc, char* argv[] )
 
   // TODO allout -> outtrk
   convertOutput(all_out, outtrk);
-  convertOutput(all_out, outtrk);
   // for (size_t ie=0;ie<nevts;++ie) {
   //   for (size_t it=0;it<ntrks;++it) {
   //     printf("ie=%lu it=%lu\n",ie,it);

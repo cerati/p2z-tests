@@ -18,7 +18,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifdef EXPLICIT_STRUCT_MEMBER_BINDING
 #define USE_ASYNC
 #endif
-#define USE_ASYNC
+//#define USE_ASYNC
 #ifndef USE_ASYNC
 #define num_streams 1
 #endif
