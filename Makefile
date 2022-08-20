@@ -7,9 +7,9 @@
 #       Set macros used for the input program            #
 ##########################################################
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
-#                   ibm                                  #
+#                   ibm, nvcpp, dpcpp                    #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
-#               omp4, cudav2, cudav3, accc, acccv3       #
+#               omp4, cudav2, cudav3, pstl, accc, acccv3 #
 #               omp4c, omp4cv3, accccpu, acccv3cpu       #
 ##########################################################
 COMPILER ?= nvcc
@@ -70,7 +70,7 @@ ifeq ($(MODE),omp)
 CSRCS = propagate-toz-test_OMP.cpp
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1 += -O3 -I. -fopenmp 
+CFLAGS1 += -O3 -I. -fopenmp
 CLIBS1 += -lm -lgomp
 endif
 ifeq ($(COMPILER),pgi)
@@ -92,6 +92,37 @@ CXX=xlc
 CFLAGS1 += -I. -Wall -v -O3 -qarch=pwr9 -qsmp=noauto:omp -qnooffload #host power9
 endif
 endif
+
+################
+#  PSTL Setting #
+################
+ifeq ($(MODE),pstl)
+CSRCS = propagate-toz-test_pstl.cpp
+ifeq ($(COMPILER),gcc)
+CXX=g++
+CFLAGS1 += -O3 -I. -fopenmp -std=c++17
+CLIBS1 += -lm -lgomp -L/opt/intel/tbb-gnu9.3/lib -ltbb
+endif
+ifeq ($(COMPILER),nvcpp)
+CXX=nvc++
+CFLAGS1 += -O2 -std=c++17 -stdpar -gpu=cc75
+endif
+ifeq ($(COMPILER),icc)
+CXX=icc
+CFLAGS1 += -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
+endif
+ifeq ($(COMPILER),llvm)
+CSRCS = propagate-toz-test_pstl_dpcpp.cpp	
+CXX=dpcpp
+CFLAGS1 += -std=c++17 -O2
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -lm
+endif
+ifeq ($(COMPILER),ibm)
+CXX=xlc
+CFLAGS1 += -I. -Wall -v -O3 -qarch=pwr9 -qsmp=noauto:omp -qnooffload #host power9
+endif
+endif
+
 
 #################
 #  OMP4 Setting #
@@ -426,7 +457,7 @@ endif
 ################
 ifeq ($(MODE),tbb)
 CSRCS = propagate-toz-test_tbb.cpp
-TBB_PREIX := /opt/intel
+TBB_PREFIX := /opt/intel/tbb-gnu9.3
 CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
 ifeq ($(COMPILER),gcc)
 CXX=g++
@@ -452,8 +483,8 @@ ifeq ($(MODE),cuda)
 CSRCS = propagate-toz-test_CUDA.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread
-CLIBS1 += -L${CUDALIBDIR} -lcudart 
+CFLAGS1 += -arch=sm_75 -O3 -DUSE_GPU --default-stream per-thread
+CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
 
@@ -461,8 +492,8 @@ ifeq ($(MODE),cudav2)
 CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
-CLIBS1 += -L${CUDALIBDIR} -lcudart 
+CFLAGS1 += -arch=sm_75 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
+CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
 
@@ -486,7 +517,7 @@ EIGEN_ROOT ?= /mnt/data1/dsr/mkfit-hackathon/eigen
 CLIBS1 += -I${EIGEN_ROOT} -lcudart
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1 += -fopenmp -O3 -fopenmp-simd -lm -lgomp -march=native 
+CFLAGS1 += -fopenmp -O3 -fopenmp-simd -lm -lgomp -march=native
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
@@ -524,7 +555,7 @@ endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_alpaka.cu
-CFLAGS1+= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda 
+CFLAGS1+= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda
 CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 #CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 CLIBS1 += -L${CUDALIBDIR} -lcudart -g
