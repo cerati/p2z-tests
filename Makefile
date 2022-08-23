@@ -9,13 +9,16 @@
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
 #                   ibm, nvcpp, dpcpp                    #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
-#               omp4, cudav2, cudav3, pstl, accc, acccv3 #
-#               omp4c, omp4cv3, accccpu, acccv3cpu       #
+#               omp4, cudav2, cudav3, cudauvm, cudahyb,  #
+#               pstl, accc, acccv3, omp4c, omp4cv3,      #
+#               accccpu, acccv3cpu                       #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
 OS ?= linux
 DEBUG ?= 0
+CUDA_ARCH ?= sm_70
+CUDA_CC ?= cc70
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
@@ -98,14 +101,15 @@ endif
 ################
 ifeq ($(MODE),pstl)
 CSRCS = propagate-toz-test_pstl.cpp
+CFLAGS1 += -Dinclude_data
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1 += -O3 -I. -fopenmp -std=c++17
+CFLAGS1 += -O3 -I. -fopenmp 
 CLIBS1 += -lm -lgomp -L/opt/intel/tbb-gnu9.3/lib -ltbb
 endif
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
-CFLAGS1 += -O2 -std=c++17 -stdpar -gpu=cc75
+CFLAGS1 += -O2 -stdpar -gpu=$(CUDA_CC)
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
@@ -114,7 +118,7 @@ endif
 ifeq ($(COMPILER),llvm)
 CSRCS = propagate-toz-test_pstl_dpcpp.cpp	
 CXX=dpcpp
-CFLAGS1 += -std=c++17 -O2
+CFLAGS1 += -O2
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -lm
 endif
 ifeq ($(COMPILER),ibm)
@@ -135,7 +139,7 @@ CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang++
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_70
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=$(CUDA_ARCH)
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
 CLIBS1 += -lm
@@ -163,7 +167,7 @@ CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_70
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=$(CUDA_ARCH)
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
 CLIBS1 += -lm
@@ -228,7 +232,7 @@ CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_70
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=$(CUDA_ARCH)
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
 CLIBS1 += -lm
@@ -483,7 +487,7 @@ ifeq ($(MODE),cuda)
 CSRCS = propagate-toz-test_CUDA.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_75 -O3 -DUSE_GPU --default-stream per-thread
+CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread
 CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
@@ -492,7 +496,7 @@ ifeq ($(MODE),cudav2)
 CSRCS = propagate-toz-test_CUDA_v2.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_75 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
+CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
 CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
@@ -501,8 +505,33 @@ ifeq ($(MODE),cudav3)
 CSRCS = propagate-toz-test_CUDA_v3.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
+CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
+endif
+endif
+
+ifeq ($(MODE),cudauvm)
+CSRCS = propagate-toz-test_cuda_uvm.cu
+CFLAGS1 += -Dinclude_data
+ifeq ($(COMPILER),nvcc)
+CXX=nvcc
+CFLAGS1 += -arch=$(CUDA_ARCH) -O3 --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr
+CLIBS1 += -L${CUDALIBDIR} -lcudart 
+endif
+ifeq ($(COMPILER),nvcpp)
+CXX=nvc++
+CFLAGS1 += -gpu=$(CUDA_CC) -O3
+CLIBS1 += -lcudart 
+endif
+endif
+
+ifeq ($(MODE),cudahyb)
+CSRCS = propagate-toz-test_cuda_hybrid.cpp
+CFLAGS1 += -Dinclude_data
+ifeq ($(COMPILER),nvcpp)
+CXX=nvc++
+CFLAGS1 += -stdpar -gpu=$(CUDA_CC) -O3
+CLIBS1 += -lcudart 
 endif
 endif
 
@@ -531,9 +560,9 @@ endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_Eigen.cu
-#CFLAGS1 += -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
-#CFLAGS1 += -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -Ieigen -I/mnt/data1/dsr/cub
-CFLAGS1 += -arch=sm_70 --default-stream per-thread -O3 --expt-relaxed-constexpr -I${EIGEN_ROOT}
+#CFLAGS1 += -arch=$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
+#CFLAGS1 += -arch=$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -Ieigen -I/mnt/data1/dsr/cub
+CFLAGS1 += -arch=$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I${EIGEN_ROOT}
 endif
 endif
 
@@ -555,7 +584,7 @@ endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_alpaka.cu
-CFLAGS1+= -arch=sm_70 -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda
+CFLAGS1+= -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda
 CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 #CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 CLIBS1 += -L${CUDALIBDIR} -lcudart -g
@@ -584,10 +613,14 @@ ifneq ($(MODE),accc)
 ifneq ($(MODE),acccv3)
 ifneq ($(MODE),accccpu)
 ifneq ($(MODE),acccv3cpu)
+ifeq ($(MODE),cudahyb)
+CFLAGS1 += -std=c++20
+else
 ifeq ($(COMPILER),ibm)
 CFLAGS1 += -std=c++11
 else
 CFLAGS1 += -std=c++17
+endif
 endif
 endif
 endif

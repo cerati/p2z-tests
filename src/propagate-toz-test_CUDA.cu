@@ -18,7 +18,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define nevts 100
 #endif
 #ifndef bsize
-#define bsize 128
+#define bsize 32
 #endif
 #ifndef ntrks
 #define ntrks 9600 //122880
@@ -34,16 +34,16 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define nlayer 20
 #endif
 #ifndef num_streams
-#define num_streams 7 //streams changes answers
+#define num_streams 10 //streams changes answers
 #endif
 
 #ifndef threadsperblockx
-#define threadsperblockx 32
+#define threadsperblockx bsize
 #endif
-#define threadsperblocky 512/threadsperblockx
+#define threadsperblocky bsize/threadsperblockx
 //#define threadsperblocky 1024/threadsperblockx  //unclear why bit 1024 total threads per block gives resource error when running with more than one layer
 #ifndef blockspergrid
-#define blockspergrid 15
+#define blockspergrid nevts*nb/num_streams
 #endif
 
 
