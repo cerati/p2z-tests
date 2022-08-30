@@ -19,6 +19,7 @@ OS ?= linux
 DEBUG ?= 0
 CUDA_ARCH ?= sm_70
 CUDA_CC ?= cc70
+GCC_ROOT ?= /sw/summit/gcc/11.1.0-2
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
@@ -530,7 +531,7 @@ CSRCS = propagate-toz-test_cuda_hybrid.cpp
 CFLAGS1 += -Dinclude_data
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
-CFLAGS1 += -stdpar -gpu=$(CUDA_CC) -O3
+CFLAGS1 += -cuda -stdpar=gpu -gpu=$(CUDA_CC) -O2 --gcc-toolchain=$(GCC_ROOT) -gpu=managed
 CLIBS1 += -lcudart 
 endif
 endif
