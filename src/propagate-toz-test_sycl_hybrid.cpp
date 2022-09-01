@@ -725,7 +725,7 @@ int main (int argc, char* argv[]) {
  
    auto p2z_kernels = [=,btracksPtr    = trcks.data(),
                          outtracksPtr  = outtrcks.data(),
-                         bhitsPtr      = hits.data()] (const sycl::id<1> i) {
+                         bhitsPtr      = hits.data()] (const auto& i) {
                          constexpr int N      = enable_gpu_backend ? 1 : bsize;
                          //
                          MPTRK_<N> obtracks;
