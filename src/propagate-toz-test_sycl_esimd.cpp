@@ -15,9 +15,6 @@ clang++ -fsycl -O3 -std=c++17 src/propagate-toz-test_sycl_esimd.cpp -o test-sycl
 #include <iomanip>
 #include <sys/time.h>
 
-#include <concepts>
-//#include <ranges>
-
 #include <vector>
 #include <memory>
 #include <numeric>
@@ -52,9 +49,6 @@ constexpr int bSize = bsize;
 #ifndef nlayer
 #define nlayer 20
 #endif
-
-template <bool is_sycl_target>
-concept SYCLCompute = is_sycl_target == true;
 
 const std::array<size_t, 36> SymOffsets66{0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
 
