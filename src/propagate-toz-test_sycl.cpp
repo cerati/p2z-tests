@@ -23,7 +23,7 @@ dpcpp -std=c++17 -O2 src/propagate-toz-test_sycl.cpp -o test-sycl.exe -Dntrks=81
 #endif
 
 #ifndef bsize
-#define bsize 32
+#define bsize 16
 #endif
 #ifndef ntrks
 #define ntrks 9600
