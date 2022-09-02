@@ -26,10 +26,6 @@ clang++ -std=c++20 -O2 -fsycl --gcc-toolchain={path_to_gcc} src/propagate-toz-te
 #include <execution>
 #include <random>
 
-#ifndef USE_GPU
-#define USE_CPU
-#endif
-
 #ifndef bsize
 #define bsize 16
 #endif
@@ -54,13 +50,19 @@ clang++ -std=c++20 -O2 -fsycl --gcc-toolchain={path_to_gcc} src/propagate-toz-te
 #ifndef __NVCOMPILER_CUDA__
 #include <CL/sycl.hpp>
 
-constexpr bool sycl_backend = true;
+constexpr bool is_sycl_backend = true;
 
 #else
-constexpr bool sycl_backend = false;
+
+constexpr bool is_sycl_backend = false;
+
+#ifndef USE_GPU
+#define USE_GPU
 #endif
 
-#ifdef USE_CPU
+#endif
+
+#ifndef USE_GPU
    constexpr bool enable_gpu_backend = false;
 #else
    constexpr bool enable_gpu_backend = true;
@@ -422,7 +424,7 @@ float z(const MPHIT* hits, size_t ev, size_t tk)    { return Pos(hits, ev, tk, 2
 
 template<int N = 1>
 inline void MultHelixPropEndcap(const MP6x6F_<N> &a, const MP6x6SF_<N> &b, MP6x6F_<N> &c) {
-//#pragma omp simd 
+#pragma ubroll 
  for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -467,7 +469,7 @@ inline void MultHelixPropEndcap(const MP6x6F_<N> &a, const MP6x6SF_<N> &b, MP6x6
 
 template<int N = 1>
 inline void MultHelixPropTranspEndcap(const MP6x6F_<N> &a, const MP6x6F_<N> &b, MP6x6SF_<N> &c) {
-//#pragma omp simd
+#pragma ubroll
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -497,8 +499,8 @@ inline void MultHelixPropTranspEndcap(const MP6x6F_<N> &a, const MP6x6F_<N> &b, 
 
 template<int N = 1>
 inline void KalmanGainInv(const MP6x6SF_<N> &a, const MP3x3SF_<N> &b, MP3x3_<N> &c) {
-
-//#pragma omp simd
+  using Float = float; //FIXME : temporary hack to run on Intel Xe Gen12 graphics.
+#pragma ubroll
   for (int n = 0; n < N; ++n)
   {
     float det =
@@ -524,7 +526,7 @@ inline void KalmanGainInv(const MP6x6SF_<N> &a, const MP3x3SF_<N> &b, MP3x3_<N> 
 template <int N = 1>
 inline void KalmanGain(const MP6x6SF_<N> &a, const MP3x3_<N> &b, MP3x6_<N> &c) {
 
-//#pragma omp simd
+#pragma unroll
   for (int n = 0; n < N; ++n)
   {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[ 1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
@@ -560,7 +562,7 @@ void KalmanUpdate(MP6x6SF_<N> &trkErr, MP6F_<N> &inPar, const MP3x3SF_<N> &hitEr
   KalmanGainInv<N>(trkErr, hitErr, inverse_temp);
   KalmanGain<N>(trkErr, inverse_temp, kGain);
 
-//#pragma omp simd
+#pragma unroll 
   for (int it = 0;it < N;++it) {
     const auto xin     = inPar(iparX,it);
     const auto yin     = inPar(iparY,it);
@@ -634,8 +636,8 @@ void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N
   MP6x6F_<N> temp;
   
   auto PosInMtrx = [=] (int i, int j, int D, int bsz = 1) constexpr {return bsz*(i*D+j);};
-//#pragma omp simd
-  for (int it=0;it<N;++it) {	
+#pragma unroll
+  for (int it = 0; it< N; ++it) {	
     const auto zout = msP(iparZ,it);
     //note: in principle charge is not needed and could be the sign of ipt
     const auto k = inChg[it]*kfact;
@@ -714,7 +716,8 @@ void dispatch_p2z_kernel(auto&& p2z_kernel, queue_tp& cq, const int outer_loop_r
 }
 
 //Generic (default) implementation for both x86 and nvidia accelerators:
-template <typename queue_tp, bool is_cuda_target>
+template <typename queue_tp, bool is_sycl_target>
+//requires (is_sycl_target == false)
 void dispatch_p2z_kernel(auto&& p2z_kernel, queue_tp& cq, const int outer_loop_range){
   // 
 #ifdef __NVCOMPILER_CUDA__ //??
@@ -757,10 +760,10 @@ int main (int argc, char* argv[]) {
    long setup_start, setup_stop;
    struct timeval timecheck;
    //
-   auto cq = p2z_get_queue<sycl_backend, enable_gpu_backend>();
+   auto cq = p2z_get_queue<is_sycl_backend, enable_gpu_backend>();
    //
-   auto MPTRKAllocator = p2z_get_allocator<MPTRK, decltype(cq), sycl_backend>(cq);
-   auto MPHITAllocator = p2z_get_allocator<MPHIT, decltype(cq), sycl_backend>(cq);
+   auto MPTRKAllocator = p2z_get_allocator<MPTRK, decltype(cq), is_sycl_backend>(cq);
+   auto MPHITAllocator = p2z_get_allocator<MPHIT, decltype(cq), is_sycl_backend>(cq);
    //
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -813,12 +816,12 @@ int main (int argc, char* argv[]) {
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
 
    // A warmup run to migrate data on the device:
-   dispatch_p2z_kernel<decltype(cq), sycl_backend>(p2z_kernels, cq, outer_loop_range);  
+   dispatch_p2z_kernel<decltype(cq), is_sycl_backend>(p2z_kernels, cq, outer_loop_range);  
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    for(int itr=0; itr<NITER; itr++) {
-     dispatch_p2z_kernel<decltype(cq), sycl_backend>(p2z_kernels, cq, outer_loop_range);
+     dispatch_p2z_kernel<decltype(cq), is_sycl_backend>(p2z_kernels, cq, outer_loop_range);
    } //end of itr loop
    
    auto wall_stop = std::chrono::high_resolution_clock::now();
