@@ -2,9 +2,10 @@
 export PSTL_USAGE_WARNINGS=1
 export ONEDPL_USE_DPCPP_BACKEND=1
 
-clang++ -std=c++20 -O2 -fsycl src/propagate-toz-test_sycl_hybrid.cpp -o test-sycl.exe -Dntrks=9600 -Dnevts=100 -DNITER=5 -Dbsize=1 -Dnlayer=20
+clang++ -std=c++20 -O2 -fsycl --gcc-toolchain={path_to_gcc} src/propagate-toz-test_sycl_hybrid.cpp -o test-sycl.exe -Dntrks=9600 -Dnevts=100 -DNITER=5 -Dbsize=1 -Dnlayer=20
 
 */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -15,11 +16,15 @@ clang++ -std=c++20 -O2 -fsycl src/propagate-toz-test_sycl_hybrid.cpp -o test-syc
 #include <sys/time.h>
 
 #include <concepts>
-//#include <ranges>
+#include <ranges>
+#include <type_traits>
 
+#include <algorithm>
 #include <vector>
 #include <memory>
 #include <numeric>
+#include <execution>
+#include <random>
 
 #ifndef USE_GPU
 #define USE_CPU
@@ -46,9 +51,14 @@ clang++ -std=c++20 -O2 -fsycl src/propagate-toz-test_sycl_hybrid.cpp -o test-syc
 #define nlayer 20
 #endif
 
+#ifndef __NVCOMPILER_CUDA__
 #include <CL/sycl.hpp>
 
 constexpr bool sycl_backend = true;
+
+#else
+constexpr bool sycl_backend = false;
+#endif
 
 #ifdef USE_CPU
    constexpr bool enable_gpu_backend = false;
@@ -70,14 +80,23 @@ decltype(auto) p2z_get_queue(){
     std::cout << "WARNING: clang++ generated GPU backend.\n" << std::endl;
     return sycl::queue(sycl::gpu_selector{});
   }
-
-  //return std::move(enable_gpu_backend ? sycl::queue(sycl::cpu_selector{}) : sycl::queue(sycl::gpu_selector{}));
 }
 
 template <bool is_sycl_target, bool enable_gpu_backend>
 decltype(auto) p2z_get_queue(){
   std::cout << "WARNING: running regular std::par version.\n" << std::endl;
   return 0;
+}
+
+template <typename T, typename queue_t, bool is_sycl_target>
+requires SYCLCompute<is_sycl_target>
+decltype(auto) p2z_get_allocator(queue_t& cq){
+  return sycl::usm_allocator<T, sycl::usm::alloc::shared>{cq};
+}
+
+template <typename T, typename queue_t, bool is_sycl_target>
+decltype(auto) p2z_get_allocator(queue_t& cq){
+  return std::allocator<T>();
 }
 
 const std::array<size_t, 36> SymOffsets66{0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
@@ -676,6 +695,40 @@ void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N
   return;
 }
 
+//CUDA specialized version:
+template <typename queue_tp, bool is_sycl_target>
+requires SYCLCompute<is_sycl_target>
+void dispatch_p2z_kernel(auto&& p2z_kernel, queue_tp& cq, const int outer_loop_range){
+  //
+  try {
+     cq.submit([&](sycl::handler &h){
+         h.parallel_for(sycl::range(outer_loop_range), p2z_kernel);
+       });
+  } catch (sycl::exception const& e) {
+     std::cout << "Caught SYCL exception: " << e.what() << std::endl;	   
+  }
+  //
+  cq.wait();
+  //
+  return;
+}
+
+//Generic (default) implementation for both x86 and nvidia accelerators:
+template <typename queue_tp, bool is_cuda_target>
+void dispatch_p2z_kernel(auto&& p2z_kernel, queue_tp& cq, const int outer_loop_range){
+  // 
+#ifdef __NVCOMPILER_CUDA__ //??
+  auto policy = std::execution::par_unseq;
+  //
+  auto exe_range = std::ranges::views::iota(0, outer_loop_range);
+  //
+  std::for_each(policy,
+                std::ranges::begin(exe_range),
+                std::ranges::end(exe_range),
+                p2z_kernel);
+#endif
+  return;
+}
 
 int main (int argc, char* argv[]) {
 
@@ -706,8 +759,8 @@ int main (int argc, char* argv[]) {
    //
    auto cq = p2z_get_queue<sycl_backend, enable_gpu_backend>();
    //
-   sycl::usm_allocator<MPTRK, sycl::usm::alloc::shared> MPTRKAllocator(cq);
-   sycl::usm_allocator<MPHIT, sycl::usm::alloc::shared> MPHITAllocator(cq);
+   auto MPTRKAllocator = p2z_get_allocator<MPTRK, decltype(cq), sycl_backend>(cq);
+   auto MPHITAllocator = p2z_get_allocator<MPHIT, decltype(cq), sycl_backend>(cq);
    //
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -760,20 +813,13 @@ int main (int argc, char* argv[]) {
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
 
    // A warmup run to migrate data on the device:
-   cq.submit([&](sycl::handler &h){
-       h.parallel_for(sycl::range(outer_loop_range), p2z_kernels);
-     });
-  
+   dispatch_p2z_kernel<decltype(cq), sycl_backend>(p2z_kernels, cq, outer_loop_range);  
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    for(int itr=0; itr<NITER; itr++) {
-     cq.submit([&](sycl::handler &h){
-       h.parallel_for(sycl::range(outer_loop_range), p2z_kernels);
-     });
+     dispatch_p2z_kernel<decltype(cq), sycl_backend>(p2z_kernels, cq, outer_loop_range);
    } //end of itr loop
-
-   cq.wait();
    
    auto wall_stop = std::chrono::high_resolution_clock::now();
 
