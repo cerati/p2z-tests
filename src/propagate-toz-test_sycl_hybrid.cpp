@@ -1,7 +1,9 @@
 /*
-nvc++ -O2 -std=c++17 -stdpar=gpu -gpu=cc75 -gpu=managed -gpu=fma -gpu=fastmath -gpu=autocollapse -gpu=loadcache:L1 -gpu=unroll  src/propagate-tor-test_pstl.cpp   -o ./propagate_nvcpp_pstl
-nvc++ -O2 -std=c++17 -stdpar=multicore src/propagate-tor-test_pstl.cpp   -o ./propagate_nvcpp_pstl 
-g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -lgomp -Lpath-to-tbb-lib -ltbb  -o ./propagate_gcc_pstl
+export PSTL_USAGE_WARNINGS=1
+export ONEDPL_USE_DPCPP_BACKEND=1
+
+clang++ -std=c++20 -O2 -fsycl --gcc-toolchain={path_to_gcc} src/propagate-toz-test_sycl_hybrid.cpp -o test-sycl.exe -Dntrks=9600 -Dnevts=100 -DNITER=5 -Dbsize=1 -Dnlayer=20
+
 */
 
 #include <stdio.h>
@@ -13,7 +15,9 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #include <iomanip>
 #include <sys/time.h>
 
+#include <concepts>
 #include <ranges>
+#include <type_traits>
 
 #include <algorithm>
 #include <vector>
@@ -22,18 +26,11 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #include <execution>
 #include <random>
 
-#if defined(__NVCOMPILER_CUDA__)
-constexpr bool use_cuda = true;
-#else
-constexpr bool use_cuda = false;
-#endif//__NVCOMPILER_CUDA__
-
-#ifndef ntrks
-#define ntrks 9600//8192
-#endif
-
 #ifndef bsize
-#define bsize 32
+#define bsize 16
+#endif
+#ifndef ntrks
+#define ntrks 9600
 #endif
 
 #define nb    (ntrks/bsize)
@@ -50,19 +47,59 @@ constexpr bool use_cuda = false;
 #define nlayer 20
 #endif
 
-#if defined(__NVCOMPILER_CUDA__)
-#ifdef include_data
-constexpr bool include_data_transfer = true;
+#ifndef __NVCOMPILER_CUDA__
+#include <CL/sycl.hpp>
+
+constexpr bool is_sycl_backend = true;
+
 #else
-constexpr bool include_data_transfer = false;
-#endif
-#else
-constexpr bool include_data_transfer = false;
+
+constexpr bool is_sycl_backend = false;
+
+#ifndef USE_GPU
+#define USE_GPU
 #endif
 
-using namespace std::ranges; 
+#endif
 
-auto PosInMtrx = [](const size_t &&i, const size_t &&j, const size_t &&D, const size_t block_size = 1) constexpr {return block_size*(i*D+j);};
+#ifndef USE_GPU
+   constexpr bool enable_gpu_backend = false;
+#else
+   constexpr bool enable_gpu_backend = true;
+#endif
+
+template <bool is_sycl_target>
+concept SYCLCompute = is_sycl_target == true;
+
+template <bool is_sycl_target, bool enable_gpu_backend = true>
+requires SYCLCompute<is_sycl_target>
+decltype(auto) p2z_get_queue(){
+
+  if constexpr ( enable_gpu_backend == false) {
+    std::cout << "WARNING: clang++ generated x86 backend. For Intel GPUs use -DUSE_GPU option.\n" << std::endl;
+    return sycl::queue(sycl::cpu_selector{});
+  } else {
+    std::cout << "WARNING: clang++ generated GPU backend.\n" << std::endl;
+    return sycl::queue(sycl::gpu_selector{});
+  }
+}
+
+template <bool is_sycl_target, bool enable_gpu_backend>
+decltype(auto) p2z_get_queue(){
+  std::cout << "WARNING: running regular std::par version.\n" << std::endl;
+  return 0;
+}
+
+template <typename T, typename queue_t, bool is_sycl_target>
+requires SYCLCompute<is_sycl_target>
+decltype(auto) p2z_get_allocator(queue_t& cq){
+  return sycl::usm_allocator<T, sycl::usm::alloc::shared>{cq};
+}
+
+template <typename T, typename queue_t, bool is_sycl_target>
+decltype(auto) p2z_get_allocator(queue_t& cq){
+  return std::allocator<T>();
+}
 
 const std::array<size_t, 36> SymOffsets66{0, 1, 3, 6, 10, 15, 1, 2, 4, 7, 11, 16, 3, 4, 5, 8, 12, 17, 6, 7, 8, 9, 13, 18, 10, 11, 12, 13, 14, 19, 15, 16, 17, 18, 19, 20};
 
@@ -84,10 +121,10 @@ constexpr int iparIpt   = 3;
 constexpr int iparPhi   = 4;
 constexpr int iparTheta = 5;
 
-template <typename T, int N, int bSize = 1>
+template <typename T, int N, int bSize>
 struct MPNX {
    std::array<T,N*bSize> data;
-
+   
    MPNX() = default;
    MPNX(const MPNX<T, N, bSize> &) = default;
    MPNX(MPNX<T, N, bSize> &&)      = default;
@@ -98,8 +135,8 @@ struct MPNX {
    constexpr T& operator()(const int i, const int j) {return data[i*bSize+j];}
    constexpr const T& operator()(const int i, const int j) const {return data[i*bSize+j];}
 
-   constexpr int size() const { return N*bSize; }   
-   //
+   constexpr int size() const { return N*bSize; }
+   
    inline void load(MPNX<T, N, 1>& dst, const int b) const {
 #pragma unroll
      for (int ip=0;ip<N;++ip) {   	
@@ -117,7 +154,7 @@ struct MPNX {
      
      return;
    }  
-
+  
    auto operator=(const MPNX&) -> MPNX& = default;
    auto operator=(MPNX&&     ) -> MPNX& = default;
 };
@@ -167,7 +204,7 @@ struct MPTRK {
   MP1I    q;
 
   MPTRK() = default;
-  //
+  
   template<int S>
   inline decltype(auto) load(const int batch_id = 0) const{
   
@@ -206,16 +243,15 @@ struct MPTRK {
     }//done
     
     return;
-  } 
-////
+  }
 };
 
 struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
-
+  //
   MPHIT() = default;
-
+  
   template<int S>
   inline decltype(auto) load(const int batch_id = 0) const {
     MPHIT_<S> dst;
@@ -231,7 +267,7 @@ struct MPHIT {
     
     return dst;
   }
-////
+
 };
 
 ///////////////////////////////////////
@@ -257,47 +293,49 @@ float randn(float mu, float sigma) {
   return (mu + sigma * (float) X1);
 }
 
-void prepareTracks(std::vector<MPTRK> &trcks, ATRK &inputtrk) {
+
+template<typename MPTRKAllocator>
+void prepareTracks(std::vector<MPTRK, MPTRKAllocator> &trcks, ATRK &inputtrk) {
   //
-  auto fill_trck = [=, &inputtrk=inputtrk](auto&& trck) {
-  
-                       for (auto&& it : views::iota(0,bsize)) {
-	                 //par
-	                 for (auto&& ip : views::iota(0,6) ) {
-	                   trck.par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
-	                 }
-	                 //cov, scale by factor 100
-	                 for (auto&& ip : views::iota(0,21)) {
-	                   trck.cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
-	                 }
-	                 //q
-	                 trck.q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//can't really smear this or fit will be wrong
-                       }
-                       
-                   };
-                      
-  for_each(trcks, fill_trck); 
+  for (size_t ie=0;ie<nevts;++ie) {
+    for (size_t ib=0;ib<nb;++ib) {
+      for (size_t it=0;it<bsize;++it) {
+	      //par
+	      for (size_t ip=0;ip<6;++ip) {
+	        trcks[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+	      }
+	      //cov, scale by factor 100
+	      for (size_t ip=0;ip<21;++ip) {
+	        trcks[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+	      }
+	      //q
+	      trcks[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//can't really smear this or fit will be wrong
+      }
+    }
+  }
   //
   return;
 }
 
-void prepareHits(std::vector<MPHIT> &hits, AHIT& inputhits) {
+template<typename MPHITAllocator>
+void prepareHits(std::vector<MPHIT, MPHITAllocator> &hits, AHIT& inputhit) {
   // store in element order for bunches of bsize matrices (a la matriplex)
-  for (auto&& lay : iota_view{0,nlayer}) {
-    for_each(views::iota(0, nevts*nb), [=, &inputhit = inputhits, &hits = hits] (auto&& evtrk) {
-      for (auto&& it : views::iota(0,bsize)) {
-        //pos
-        for (auto&& ip : views::iota(0,3)) {
-          hits[lay+nlayer*evtrk].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
-        }
-        //cov
-        for (auto&& ip : views::iota(0,6)) {
-          hits[lay+nlayer*evtrk].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+  for (size_t lay=0;lay<nlayer;++lay) {
+    for (size_t ie=0;ie<nevts;++ie) {
+      for (size_t ib=0;ib<nb;++ib) {
+        for (size_t it=0;it<bsize;++it) {
+        	//pos
+        	for (size_t ip=0;ip<3;++ip) {
+        	  hits[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+        	}
+        	//cov
+        	for (size_t ip=0;ip<6;++ip) {
+        	  hits[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+        	}
         }
       }
-    }); 
+    }
   }
-
   return;
 }
 
@@ -386,8 +424,9 @@ float z(const MPHIT* hits, size_t ev, size_t tk)    { return Pos(hits, ev, tk, 2
 
 template<int N = 1>
 inline void MultHelixPropEndcap(const MP6x6F_<N> &a, const MP6x6SF_<N> &b, MP6x6F_<N> &c) {
-#pragma unroll
- for (int n = 0; n < N; ++n) {
+#pragma ubroll 
+ for (int n = 0; n < N; ++n)
+  {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -430,8 +469,9 @@ inline void MultHelixPropEndcap(const MP6x6F_<N> &a, const MP6x6SF_<N> &b, MP6x6
 
 template<int N = 1>
 inline void MultHelixPropTranspEndcap(const MP6x6F_<N> &a, const MP6x6F_<N> &b, MP6x6SF_<N> &c) {
-#pragma unroll
-  for (int n = 0; n < N; ++n) {
+#pragma ubroll
+  for (int n = 0; n < N; ++n)
+  {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
     c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
@@ -459,14 +499,15 @@ inline void MultHelixPropTranspEndcap(const MP6x6F_<N> &a, const MP6x6F_<N> &b, 
 
 template<int N = 1>
 inline void KalmanGainInv(const MP6x6SF_<N> &a, const MP3x3SF_<N> &b, MP3x3_<N> &c) {
-
-#pragma unroll
-  for (int n = 0; n < N; ++n) {
-    double det =
+  using Float = float; //FIXME : temporary hack to run on Intel Xe Gen12 graphics.
+#pragma ubroll
+  for (int n = 0; n < N; ++n)
+  {
+    float det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
       ((a[2*N+n]+b[2*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n]))));
-    double invdet = 1.0/det;
+    float invdet = 1.f/det;
 
     c[ 0*N+n] =   invdet*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
     c[ 1*N+n] =  -invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
@@ -486,7 +527,8 @@ template <int N = 1>
 inline void KalmanGain(const MP6x6SF_<N> &a, const MP3x3_<N> &b, MP3x6_<N> &c) {
 
 #pragma unroll
-  for (int n = 0; n < N; ++n) {
+  for (int n = 0; n < N; ++n)
+  {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[ 1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[ 1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
     c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[ 1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
@@ -520,8 +562,8 @@ void KalmanUpdate(MP6x6SF_<N> &trkErr, MP6F_<N> &inPar, const MP3x3SF_<N> &hitEr
   KalmanGainInv<N>(trkErr, hitErr, inverse_temp);
   KalmanGain<N>(trkErr, inverse_temp, kGain);
 
-//#pragma omp simd
-  for (size_t it = 0;it < N;++it) {
+#pragma unroll 
+  for (int it = 0;it < N;++it) {
     const auto xin     = inPar(iparX,it);
     const auto yin     = inPar(iparY,it);
     const auto zin     = inPar(iparZ,it);
@@ -584,7 +626,7 @@ void KalmanUpdate(MP6x6SF_<N> &trkErr, MP6F_<N> &inPar, const MP3x3SF_<N> &hitEr
 }              
 
 //constexpr auto kfact= 100/(-0.299792458*3.8112);
-constexpr auto kfact= 100/3.8;
+constexpr float kfact= 100/3.8f;
 
 template<int N = 1>
 void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N> &inChg, 
@@ -592,8 +634,10 @@ void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N
   
   MP6x6F_<N> errorProp;
   MP6x6F_<N> temp;
-//#pragma omp simd
-  for (size_t it=0;it<N;++it) {	
+  
+  auto PosInMtrx = [=] (int i, int j, int D, int bsz = 1) constexpr {return bsz*(i*D+j);};
+#pragma unroll
+  for (int it = 0; it< N; ++it) {	
     const auto zout = msP(iparZ,it);
     //note: in principle charge is not needed and could be the sign of ipt
     const auto k = inChg[it]*kfact;
@@ -625,7 +669,7 @@ void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N
     const auto sCosPsina = sinf(cosP*sina);
     const auto cCosPsina = cosf(cosP*sina);
     
-    //for (size_t i=0;i<6;++i) errorProp[bsize*PosInMtrx(i,i,6) + it] = 1.;
+    //for (int i=0;i<6;++i) errorProp[bsize*PosInMtrx(i,i,6) + it] = 1.;
     errorProp[PosInMtrx(0,0,6, N) + it] = 1.0f;
     errorProp[PosInMtrx(1,1,6, N) + it] = 1.0f;
     errorProp[PosInMtrx(2,2,6, N) + it] = 1.0f;
@@ -653,6 +697,41 @@ void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N
   return;
 }
 
+//CUDA specialized version:
+template <typename queue_tp, bool is_sycl_target>
+requires SYCLCompute<is_sycl_target>
+void dispatch_p2z_kernel(auto&& p2z_kernel, queue_tp& cq, const int outer_loop_range){
+  //
+  try {
+     cq.submit([&](sycl::handler &h){
+         h.parallel_for(sycl::range(outer_loop_range), p2z_kernel);
+       });
+  } catch (sycl::exception const& e) {
+     std::cout << "Caught SYCL exception: " << e.what() << std::endl;	   
+  }
+  //
+  cq.wait();
+  //
+  return;
+}
+
+//Generic (default) implementation for both x86 and nvidia accelerators:
+template <typename queue_tp, bool is_sycl_target>
+//requires (is_sycl_target == false)
+void dispatch_p2z_kernel(auto&& p2z_kernel, queue_tp& cq, const int outer_loop_range){
+  // 
+#ifdef __NVCOMPILER_CUDA__ //??
+  auto policy = std::execution::par_unseq;
+  //
+  auto exe_range = std::ranges::views::iota(0, outer_loop_range);
+  //
+  std::for_each(policy,
+                std::ranges::begin(exe_range),
+                std::ranges::end(exe_range),
+                p2z_kernel);
+#endif
+  return;
+}
 
 int main (int argc, char* argv[]) {
 
@@ -681,54 +760,40 @@ int main (int argc, char* argv[]) {
    long setup_start, setup_stop;
    struct timeval timecheck;
    //
-   srand(1);
+   auto cq = p2z_get_queue<is_sycl_backend, enable_gpu_backend>();
+   //
+   auto MPTRKAllocator = p2z_get_allocator<MPTRK, decltype(cq), is_sycl_backend>(cq);
+   auto MPHITAllocator = p2z_get_allocator<MPHIT, decltype(cq), is_sycl_backend>(cq);
    //
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
-   //~//create fake objects to emulate data transfers
-   std::vector<MPTRK> h_outtrcks(nevts*nb);
    //
-   std::vector<MPTRK> h_trcks(nevts*nb);
-   prepareTracks(h_trcks, inputtrk);
-   // 
-   std::vector<MPHIT> h_hits(nlayer*nevts*nb);
-   prepareHits(h_hits, inputhit);
+   std::vector<MPTRK, decltype(MPTRKAllocator)> trcks(nevts*nb, MPTRKAllocator); 
+   prepareTracks<decltype(MPTRKAllocator)>(trcks, inputtrk);
    //
-   std::vector<MPTRK> outtrcks(nevts*nb);
+   std::vector<MPHIT, decltype(MPHITAllocator)> hits(nlayer*nevts*nb, MPHITAllocator);
+   prepareHits<decltype(MPHITAllocator)>(hits, inputhit);
    //
-   std::vector<MPTRK> trcks(nevts*nb);
-   //
-   std::vector<MPHIT> hits(nlayer*nevts*nb);
-   //
-   //
-   auto policy = std::execution::par_unseq;
-   //enforce data migration:
-   std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
-   
-   if constexpr (include_data_transfer == false){
-     //enforce data migration:
-     std::copy(policy, h_trcks.begin(), h_trcks.end(), trcks.begin());
-     std::copy(policy, h_hits.begin(), h_hits.end(), hits.begin());
-   } else {//just a regular copy, no migration
-     std::copy(h_trcks.begin(), h_trcks.end(), trcks.begin());
-     std::copy(h_hits.begin(), h_hits.end(), hits.begin());
-   }  
+   std::vector<MPTRK, decltype(MPTRKAllocator)> outtrcks(nevts*nb, MPTRKAllocator);
 
+   const int phys_length      = nevts*nb;
+   const int outer_loop_range = phys_length*(enable_gpu_backend ? bsize : 1);//re-scale the exe domain for the cuda backend!
+ 
    auto p2z_kernels = [=,btracksPtr    = trcks.data(),
                          outtracksPtr  = outtrcks.data(),
-                         bhitsPtr      = hits.data()] (auto&& i) {
+                         bhitsPtr      = hits.data()] (const auto& i) {
+                         constexpr int N      = enable_gpu_backend ? 1 : bsize;
                          //
-                         constexpr int  N             = use_cuda ? 1 : bsize;
-                         constexpr int  layers        = nlayer;
-                         //
-                         const int tid       = use_cuda ? i / bsize : i;
-                         const int batch_id  = use_cuda ? i % bsize : 0;
-                         //  
                          MPTRK_<N> obtracks;
-                          
+                         //
+                         const int tid       = enable_gpu_backend ? static_cast<int>(i) / bsize : static_cast<int>(i);
+                         const int batch_id  = enable_gpu_backend ? static_cast<int>(i) % bsize : 0;
+                         //
                          const auto& btracks = btracksPtr[tid].load<N>(batch_id);
                          //
-#pragma unroll                         
+                         constexpr int layers = nlayer;
+                         //
+#pragma unroll
                          for(int layer=0; layer<nlayer; ++layer) {
                            //
                            const auto& bhits = bhitsPtr[layer+layers*tid].load<N>(batch_id);
@@ -741,7 +806,6 @@ int main (int argc, char* argv[]) {
                          outtracksPtr[tid].save<N>(obtracks, batch_id);
                        };
 
-
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
@@ -751,49 +815,27 @@ int main (int argc, char* argv[]) {
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(MPHIT));
 
-   double wall_time = 0.0;
- 
-   const int phys_length     = nevts*nb;
-   const int tot_phys_length = phys_length*(use_cuda ? bsize : 1);//re-scale the exe domain for the cuda backend! 
-      
-   auto outer_loop_range = views::iota(0, tot_phys_length);
+   // A warmup run to migrate data on the device:
+   dispatch_p2z_kernel<decltype(cq), is_sycl_backend>(p2z_kernels, cq, outer_loop_range);  
+
+   auto wall_start = std::chrono::high_resolution_clock::now();
 
    for(int itr=0; itr<NITER; itr++) {
-     //
-     auto wall_start = std::chrono::high_resolution_clock::now();
-     //
-     std::for_each(policy,
-                   begin(outer_loop_range),
-                   end(outer_loop_range),
-                   p2z_kernels);
-                   
-     if constexpr (include_data_transfer) {
-        std::copy(outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
-     }
-     //
-     auto wall_stop = std::chrono::high_resolution_clock::now();
-     //
-     auto wall_diff = wall_stop - wall_start;
-     //
-     wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
-     //restore initial states:
-     if constexpr (include_data_transfer) {
-        std::copy(trcks.begin(), trcks.end(), h_trcks.begin());
-        //
-        std::copy(hits.begin(), hits.end(), h_hits.begin());
-	//
-        std::copy(policy, h_outtrcks.begin(), h_outtrcks.end(), outtrcks.begin());
-     }
-
+     dispatch_p2z_kernel<decltype(cq), is_sycl_backend>(p2z_kernels, cq, outer_loop_range);
    } //end of itr loop
+   
+   auto wall_stop = std::chrono::high_resolution_clock::now();
+
+   auto wall_diff = wall_stop - wall_start;
+   auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;   
 
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, -1);
 
    auto outtrk = outtrcks.data();
-   auto hit    = hits.data();
-
+   auto hit    = hits.data();   
+   
    double avgx = 0, avgy = 0, avgz = 0;
    double avgpt = 0, avgphi = 0, avgtheta = 0;
    double avgdx = 0, avgdy = 0, avgdz = 0;
@@ -864,6 +906,7 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
+
 
    return 0;
 }
