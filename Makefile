@@ -26,7 +26,7 @@ TUNETRK ?= 0
 TUNEEVT ?= 0
 STREAMS ?= 0
 NTHREADS ?= 0
-NITER ?= 0
+NITER ?= 10
 NLAYER ?= 0
 ifneq ($(TUNEB),0)
 TUNE += -Dbsize=$(TUNEB)
@@ -110,7 +110,7 @@ CLIBS1 += -lm -lgomp -L/opt/intel/tbb-gnu9.3/lib -ltbb
 endif
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
-CFLAGS1 += -O2 -stdpar -gpu=$(CUDA_CC)
+CFLAGS1 += -O2 -stdpar -gpu=$(CUDA_CC) --gcc-toolchain=$(GCC_ROOT)
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
@@ -617,10 +617,14 @@ ifneq ($(MODE),acccv3cpu)
 ifeq ($(MODE),cudahyb)
 CFLAGS1 += -std=c++20
 else
+ifeq ($(MODE),pstl)
+CFLAGS1 += -std=c++20
+else
 ifeq ($(COMPILER),ibm)
 CFLAGS1 += -std=c++11
 else
 CFLAGS1 += -std=c++17
+endif
 endif
 endif
 endif

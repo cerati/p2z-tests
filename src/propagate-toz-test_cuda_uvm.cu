@@ -760,7 +760,7 @@ int main (int argc, char* argv[]) {
    prepareTracks<MPTRKAllocator>(trcks, inputtrk);
    //
    std::vector<MPHIT, MPHITAllocator> hits(nlayer*nevts*nb);
-   prepareHits<MPHITAllocator>(hits, inputhits);
+   prepareHits<MPHITAllocator>(hits, inputhit);
    //
    //
    if constexpr (include_data_transfer == false) {
