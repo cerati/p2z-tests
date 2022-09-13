@@ -27,6 +27,8 @@ nvc++ -O2 -std=c++20 --gcc-toolchain=path-to-gnu-compiler -stdpar=multicore ./sr
 #include <execution>
 #include <random>
 
+#define FIXED_RSEED
+
 #ifndef bsize
 #define bsize 32
 #endif
@@ -954,6 +956,10 @@ int main (int argc, char* argv[]) {
    auto streams= p2z_get_streams<enable_cuda>(nstreams);
 
    auto stream = streams[0];//with UVM, we use only one compute stream 
+#ifdef FIXED_RSEED
+   //Add an explicit srand(1) call to generate fixed inputs for better debugging.
+   srand(1);
+#endif
 
    std::vector<MPTRK> outtrcks(nevts*nb);
    // migrate output object to dev memory:

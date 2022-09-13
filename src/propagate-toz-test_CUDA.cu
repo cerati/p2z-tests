@@ -1,7 +1,6 @@
 /*
 icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 */
-#include <cuda_profiler_api.h>
 #include "cuda_runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -148,7 +147,7 @@ float randn(float mu, float sigma) {
 MPTRK* prepareTracks(ATRK inputtrk) {
   MPTRK* result;
   cudaMallocManaged((void**)&result,nevts*nb*sizeof(MPTRK)); //fixme, align?
-  cudaMemAdvise(result,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
+  //cudaMemAdvise(result,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
@@ -172,7 +171,7 @@ MPHIT* prepareHits(AHIT inputhit) {
   //MPHIT* result = (MPHIT*) malloc(nevts*nb*sizeof(MPHIT));
   MPHIT* result;
   cudaMallocManaged((void**)&result,nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
-  cudaMemAdvise(result,nlayer*nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
+  //cudaMemAdvise(result,nlayer*nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,cudaCpuDeviceId);
   for (int lay=0;lay<nlayer;++lay) {
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
@@ -636,6 +635,7 @@ int main (int argc, char* argv[]) {
   dim3 block(threadsperblockx,threadsperblocky,1); 
   int device = -1;
   cudaGetDevice(&device);
+  cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
   int stream_chunk = ((int)(nevts/num_streams))*nb;//*sizeof(MPTRK);
   int stream_remainder = ((int)(nevts%num_streams))*nb;//*sizeof(MPTRK);
   int stream_range;
@@ -662,9 +662,8 @@ int main (int argc, char* argv[]) {
   for (int s = 0; s<num_streams;s++){
     cudaMemPrefetchAsync(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), device,streams[s]);
       cudaMemPrefetchAsync(hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), device,streams[s]);
-    cudaMemAdvise(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
-      cudaMemAdvise(hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
-    //}
+    //cudaMemAdvise(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
+      //cudaMemAdvise(hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
     //cudaStreamAttachMemAsync(streams[s],trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK),cudaMemAttachHost);
     //cudaStreamAttachMemAsync(streams[s],hit+(s*stream_chunk),stream_chunk*sizeof(MPHIT),cudaMemAttachHost);
     //cudaMemAdvise(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK),cudaMemAdviseSetReadMostly,device);
@@ -674,9 +673,9 @@ int main (int argc, char* argv[]) {
   }
   if(stream_remainder != 0){
     cudaMemPrefetchAsync(trk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), device,streams[num_streams]);
-    cudaMemAdvise(trk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
+    //cudaMemAdvise(trk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
       cudaMemPrefetchAsync(hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), device,streams[num_streams]);
-      cudaMemAdvise(hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
+      //cudaMemAdvise(hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);
   }
 //  cudaMemAdvise(trk,nevts*nb*sizeof(MPTRK),cudaMemAdviseSetPreferredLocation,device);
 //  cudaMemAdvise(hit,nevts*nb*sizeof(MPHIT),cudaMemAdviseSetPreferredLocation,device);

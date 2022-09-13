@@ -488,7 +488,7 @@ ifeq ($(MODE),cuda)
 CSRCS = propagate-toz-test_CUDA.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread
+CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr
 CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 endif
@@ -512,7 +512,8 @@ endif
 endif
 
 ifeq ($(MODE),cudauvm)
-CSRCS = propagate-toz-test_cuda_uvm.cu
+#CSRCS = propagate-toz-test_cuda_uvm.cu
+CSRCS = propagate-toz-test_cuda_uvm_v2.cu
 CFLAGS1 += -Dinclude_data
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc

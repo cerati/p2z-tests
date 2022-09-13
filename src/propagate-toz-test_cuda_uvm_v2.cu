@@ -793,8 +793,8 @@ int main (int argc, char* argv[]) {
 
    double wall_time = 0.0;
 
+   auto wall_start = std::chrono::high_resolution_clock::now();
    for(int itr=0; itr<NITER; itr++) {
-     auto wall_start = std::chrono::high_resolution_clock::now();
      //
      if constexpr (include_data_transfer) {
        p2z_prefetch<MPTRK, MPTRKAllocator>(trcks, dev_id, stream);
@@ -807,14 +807,8 @@ int main (int argc, char* argv[]) {
        p2z_prefetch<MPTRK, MPTRKAllocator>(outtrcks, host_id, stream);
      }
      //
-     p2z_wait();
-     //
-     auto wall_stop = std::chrono::high_resolution_clock::now();
-     //
-     auto wall_diff = wall_stop - wall_start;
-     //
-     wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
      // reset initial states (don't need if we won't measure data migrations):
+/*
      if constexpr (include_data_transfer) {
 
        p2z_prefetch<MPTRK, MPTRKAllocator>(trcks, host_id, stream);
@@ -822,7 +816,15 @@ int main (int argc, char* argv[]) {
        //
        p2z_prefetch<MPTRK, MPTRKAllocator, decltype(stream), true>(outtrcks, dev_id, stream);
      }
+*/
    } //end of itr loop
+   p2z_wait();
+   //
+   auto wall_stop = std::chrono::high_resolution_clock::now();
+   //
+   auto wall_diff = wall_stop - wall_start;
+   //
+   wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
 
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
