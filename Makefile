@@ -101,7 +101,8 @@ endif
 #  PSTL Setting #
 ################
 ifeq ($(MODE),pstl)
-CSRCS = propagate-toz-test_pstl.cpp
+#CSRCS = propagate-toz-test_pstl.cpp
+CSRCS = propagate-toz-test_pstl_v2.cpp
 CFLAGS1 += -Dinclude_data
 ifeq ($(COMPILER),gcc)
 CXX=g++
