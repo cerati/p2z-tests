@@ -485,7 +485,9 @@ endif
 #  CUDA Setting #
 #################
 ifeq ($(MODE),cuda)
-CSRCS = propagate-toz-test_CUDA.cu
+#CSRCS = propagate-toz-test_CUDA.cu
+# CUDA_v1 use USM bu has the same computation patterns and communication patterns as CUDA_v3
+CSRCS = propagate-toz-test_CUDA_v1.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr
@@ -599,14 +601,22 @@ endif
 # TARGET is where the output binary is stored. #
 ################################################
 TARGET = ./bin
-ifneq ($(MODE),cudav3)
-BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
-else
+
+ADD_SUFFIX = 0
+ifeq ($(MODE),cudav3)
+ADD_SUFFIX = 1
+endif
+ifeq ($(MODE),cuda)
+ADD_SUFFIX = 1
+endif
+ifeq ($(ADD_SUFFIX),1)
 ifneq ($(USE_ASYNC),0)
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)_async"
 else
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)_sync"
 endif
+else
+BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
 endif
 
 ifneq ($(MODE),omp4c)

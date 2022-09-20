@@ -1,7 +1,6 @@
 /*
 icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 */
-#include <cuda_profiler_api.h>
 #include "cuda_runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,7 +146,6 @@ float randn(float mu, float sigma) {
 }
 
 MPTRK* prepareTracks(ATRK inputtrk) {
-  //MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
   MPTRK* result;
   cudaMallocHost((void**)&result,nevts*nb*sizeof(MPTRK));
   for (size_t ie=0;ie<nevts;++ie) {
@@ -170,7 +168,6 @@ MPTRK* prepareTracks(ATRK inputtrk) {
 }
 
 MPHIT* prepareHits(AHIT inputhit) {
-  //MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
   MPHIT* result;
   cudaMallocHost((void**)&result,nlayer*nevts*nb*sizeof(MPHIT));
   for (size_t lay=0;lay<nlayer;++lay) {
@@ -747,7 +744,7 @@ int main (int argc, char* argv[]) {
       cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->q).data), &(((trk+(s*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[s]);
 #endif
       
-      cudaMemcpyAsync(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[s]);
+      cudaMemcpyAsync(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[s]);
 #ifdef EXPLICIT_STRUCT_MEMBER_BINDING
       cudaMemcpyAsync(&(hit_dev+(s*stream_chunk*nlayer))->pos,&(hit+(s*stream_chunk*nlayer))->pos,sizeof(MP3F), cudaMemcpyHostToDevice, streams[s]);
       cudaMemcpyAsync(&((hit_dev+(s*stream_chunk*nlayer))->pos).data,&((hit+(s*stream_chunk*nlayer))->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
