@@ -717,7 +717,7 @@ int main (int argc, char* argv[]) {
    prepareTracks<decltype(MPTRKAllocator)>(h_trcks, inputtrk);
    //
    std::vector<MPHIT, decltype(MPHITAllocator)> h_hits(nlayer*nevts*nb, MPHITAllocator);
-   prepareHits<decltype(MPHITAllocator)>(h_hits, inputhits);
+   prepareHits<decltype(MPHITAllocator)>(h_hits, inputhit);
    //
    auto policy = oneapi::dpl::execution::make_device_policy(cq);
    //enforce data migration
