@@ -656,7 +656,7 @@ int main (int argc, char* argv[]) {
    for(itr=0; itr<NITER; itr++) {
      #pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb*nlayer]) 
      {
-     #pragma acc parallel loop gang num_workers(bsize) collapse(2) present(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb]) 
+     #pragma acc parallel loop gang vector_length(bsize) collapse(2) present(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb]) 
      for (size_t ie=0;ie<nevts;++ie) { // loop over events
        for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
          //

@@ -640,7 +640,7 @@ int main (int argc, char* argv[]) {
 		}
      	#pragma acc update device(trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) async(s)
 		//#pragma openarc cuda sharedRW(ie, ib)
-     	#pragma acc parallel loop gang num_workers(bsize) collapse(2) present(trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer], outtrk[s*chunkSize*nb:localChunkSize*nb]) async(s)
+     	#pragma acc parallel loop gang vector_length(bsize) collapse(2) present(trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer], outtrk[s*chunkSize*nb:localChunkSize*nb]) async(s)
      	for (size_t ie=s*chunkSize;ie<(s*chunkSize+localChunkSize);++ie) { // loop over events
        		for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
 		 		//[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device functions (propagateToZ and KalmanUpdate) to here.
