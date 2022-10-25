@@ -13,10 +13,6 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 
 //#define DUMP_OUTPUT
 #define FIXED_RSEED
-//#define EXPLICIT_STRUCT_MEMBER_BINDING
-#ifdef EXPLICIT_STRUCT_MEMBER_BINDING
-#define USE_ASYNC
-#endif
 //#define USE_ASYNC
 #ifndef USE_ASYNC
 #define num_streams 1
@@ -660,59 +656,6 @@ __global__ void GPUsequenceR(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int st
   }
 }
 
-inline void transferAsyncTrk(MPTRK* trk, MPTRK* trk_dev, cudaStream_t stream){
-
-  cudaMemcpyAsync(trk_dev, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyHostToDevice, stream);
-  cudaMemcpyAsync(&trk_dev->par, &trk->par, sizeof(MP6F), cudaMemcpyHostToDevice, stream);
-  cudaMemcpyAsync(&((trk_dev->par).data), &((trk->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice, stream);
-  cudaMemcpyAsync(&trk_dev->cov, &trk->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice, stream);
-  cudaMemcpyAsync(&((trk_dev->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice, stream);
-  cudaMemcpyAsync(&trk_dev->q, &trk->q, sizeof(MP1I), cudaMemcpyHostToDevice, stream);
-  cudaMemcpyAsync(&((trk_dev->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, stream);  
-}
-inline void transferAsyncHit(MPHIT* hit, MPHIT* hit_dev, cudaStream_t stream){
-
-    cudaMemcpyAsync(hit_dev,hit,nlayer*nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(&(hit_dev->pos).data,&(hit->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice, stream);
-    cudaMemcpyAsync(&(hit_dev->cov).data,&(hit->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, stream);
-}
-inline void transfer_backAsync(MPTRK* trk, MPTRK* trk_host,cudaStream_t stream){
-  cudaMemcpyAsync(trk_host, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyDeviceToHost, stream);
-  cudaMemcpyAsync(&trk_host->par, &trk->par, sizeof(MP6F), cudaMemcpyDeviceToHost, stream);
-  cudaMemcpyAsync(&((trk_host->par).data), &((trk->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost,stream);
-  cudaMemcpyAsync(&trk_host->cov, &trk->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost, stream);
-  cudaMemcpyAsync(&((trk_host->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost, stream);
-  cudaMemcpyAsync(&trk_host->q, &trk->q, sizeof(MP1I), cudaMemcpyDeviceToHost, stream);
-  cudaMemcpyAsync(&((trk_host->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost, stream);
-}
-inline void transfer(MPTRK* trk, MPHIT* hit, MPTRK* trk_dev, MPHIT* hit_dev){
-
-  cudaMemcpy(trk_dev, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyHostToDevice);
-  cudaMemcpy(&trk_dev->par, &trk->par, sizeof(MP6F), cudaMemcpyHostToDevice);
-  cudaMemcpy(&((trk_dev->par).data), &((trk->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(&trk_dev->cov, &trk->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice);
-  cudaMemcpy(&((trk_dev->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(&trk_dev->q, &trk->q, sizeof(MP1I), cudaMemcpyHostToDevice);
-  cudaMemcpy(&((trk_dev->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice);
-  
-  cudaMemcpy(hit_dev,hit,nevts*nb*sizeof(MPHIT), cudaMemcpyHostToDevice);
-  cudaMemcpy(&hit_dev->pos,&hit->pos,sizeof(MP3F), cudaMemcpyHostToDevice);
-  cudaMemcpy(&(hit_dev->pos).data,&(hit->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(&hit_dev->cov,&hit->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice);
-  cudaMemcpy(&(hit_dev->cov).data,&(hit->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice);
-}
-inline void transfer_back(MPTRK* trk, MPTRK* trk_host){
-  cudaMemcpy(trk_host, trk, nevts*nb*sizeof(MPTRK), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&trk_host->par, &trk->par, sizeof(MP6F), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&((trk_host->par).data), &((trk->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&trk_host->cov, &trk->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&((trk_host->cov).data), &((trk->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&trk_host->q, &trk->q, sizeof(MP1I), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&((trk_host->q).data), &((trk->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost);
-}
-
 int main (int argc, char* argv[]) {
 
 #ifdef USE_ASYNC
@@ -795,34 +738,17 @@ int main (int argc, char* argv[]) {
   auto wall_start = std::chrono::high_resolution_clock::now();
 
   for(itr=0; itr<NITER; itr++){
-    //  transfer(trk,hit, trk_dev,hit_dev);
     for (int s = 0; s<num_streams;s++){
 #ifdef USE_ASYNC
-//      transferAsyncTrk(trk, trk_dev,streams[s]);
       cudaMemcpyAsync(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[s]);
 #else
       cudaMemcpy(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice);
-#endif
-//[DEBUG by Seyong on Dec. 22, 2020] We don't need explicit struct-member-binding for struct-of-arrays.
-#ifdef EXPLICIT_STRUCT_MEMBER_BINDING
-      cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->par, &(trk+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyHostToDevice, streams[s]);
-      cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->par).data), &(((trk+(s*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
-      cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->cov, &(trk+(s*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice, streams[s]);
-      cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->cov).data), &(((trk+(s*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
-      cudaMemcpyAsync(&(trk_dev+(s*stream_chunk))->q, &(trk+(s*stream_chunk))->q, sizeof(MP1I), cudaMemcpyHostToDevice, streams[s]);
-      cudaMemcpyAsync(&(((trk_dev+(s*stream_chunk))->q).data), &(((trk+(s*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[s]);
 #endif
       
 #ifdef USE_ASYNC
       cudaMemcpyAsync(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[s]);
 #else
       cudaMemcpy(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice);
-#endif
-#ifdef EXPLICIT_STRUCT_MEMBER_BINDING
-      cudaMemcpyAsync(&(hit_dev+(s*stream_chunk*nlayer))->pos,&(hit+(s*stream_chunk*nlayer))->pos,sizeof(MP3F), cudaMemcpyHostToDevice, streams[s]);
-      cudaMemcpyAsync(&((hit_dev+(s*stream_chunk*nlayer))->pos).data,&((hit+(s*stream_chunk*nlayer))->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
-      cudaMemcpyAsync(&(hit_dev+(s*stream_chunk*nlayer))->cov,&(hit+(s*stream_chunk*nlayer))->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice, streams[s]);
-      cudaMemcpyAsync(&((hit_dev+(s*stream_chunk*nlayer))->cov).data,&((hit+(s*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[s]);
 #endif
     }  
     if(stream_remainder != 0){
@@ -831,25 +757,11 @@ int main (int argc, char* argv[]) {
 #else
       cudaMemcpy(trk_dev+(num_streams*stream_chunk), trk+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyHostToDevice);
 #endif
-#ifdef EXPLICIT_STRUCT_MEMBER_BINDING
-      cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->par, &(trk+(num_streams*stream_chunk))->par, sizeof(MP6F), cudaMemcpyHostToDevice, streams[num_streams]);
-      cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->par).data), &(((trk+(num_streams*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
-      cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->cov, &(trk+(num_streams*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyHostToDevice, streams[num_streams]);
-      cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->cov).data), &(((trk+(num_streams*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
-      cudaMemcpyAsync(&(trk_dev+(num_streams*stream_chunk))->q, &(trk+(num_streams*stream_chunk))->q, sizeof(MP1I), cudaMemcpyHostToDevice, streams[num_streams]);
-      cudaMemcpyAsync(&(((trk_dev+(num_streams*stream_chunk))->q).data), &(((trk+(num_streams*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyHostToDevice, streams[num_streams]);
-#endif
       
 #ifdef USE_ASYNC
       cudaMemcpyAsync(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[num_streams]);
 #else
       cudaMemcpy(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice);
-#endif
-#ifdef EXPLICIT_STRUCT_MEMBER_BINDING
-      cudaMemcpyAsync(&(hit_dev+(num_streams*stream_chunk*nlayer))->pos,&(hit+(num_streams*stream_chunk*nlayer))->pos,sizeof(MP3F), cudaMemcpyHostToDevice, streams[num_streams]);
-      cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->pos).data,&((hit+(num_streams*stream_chunk*nlayer))->pos).data,3*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
-      cudaMemcpyAsync(&(hit_dev+(num_streams*stream_chunk*nlayer))->cov,&(hit+(num_streams*stream_chunk*nlayer))->cov,sizeof(MP3x3SF), cudaMemcpyHostToDevice, streams[num_streams]);
-      cudaMemcpyAsync(&((hit_dev+(num_streams*stream_chunk*nlayer))->cov).data,&((hit+(num_streams*stream_chunk*nlayer))->cov).data,6*bsize*sizeof(float), cudaMemcpyHostToDevice, streams[num_streams]);
 #endif
     }
 
@@ -869,20 +781,11 @@ int main (int argc, char* argv[]) {
   	  GPUsequenceR<<<grid,block,0,0>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streams*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
 #endif
     }
-//     // transfer_back(outtrk_dev,outtrk); 
     for (int s = 0; s<num_streams;s++){
 #ifdef USE_ASYNC
       cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
 #else
       cudaMemcpy(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost);
-#endif
-#ifdef EXPLICIT_STRUCT_MEMBER_BINDING
-      cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->par, &(outtrk_dev+(s*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[s]);
-      cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->par).data), &(((outtrk_dev+(s*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[s]);
-      cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->cov, &(outtrk_dev+(s*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost, streams[s]);
-      cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->cov).data), &(((outtrk_dev+(s*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[s]);
-      cudaMemcpyAsync(&(outtrk+(s*stream_chunk))->q, &(outtrk_dev+(s*stream_chunk))->q, sizeof(MP1I), cudaMemcpyDeviceToHost, streams[s]);
-      cudaMemcpyAsync(&(((outtrk+(s*stream_chunk))->q).data), &(((outtrk_dev+(s*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[s]);
 #endif
     }
     if(stream_remainder != 0){
@@ -890,14 +793,6 @@ int main (int argc, char* argv[]) {
       cudaMemcpyAsync(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[num_streams]);
 #else
       cudaMemcpy(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost);
-#endif
-#ifdef EXPLICIT_STRUCT_MEMBER_BINDING
-      cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->par, &(outtrk_dev+(num_streams*stream_chunk))->par, sizeof(MP6F), cudaMemcpyDeviceToHost, streams[num_streams]);
-      cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->par).data), &(((outtrk_dev+(num_streams*stream_chunk))->par).data), 6*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[num_streams]);
-      cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->cov, &(outtrk_dev+(num_streams*stream_chunk))->cov, sizeof(MP6x6SF), cudaMemcpyDeviceToHost, streams[num_streams]);
-      cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->cov).data), &(((outtrk_dev+(num_streams*stream_chunk))->cov).data), 36*bsize*sizeof(float), cudaMemcpyDeviceToHost, streams[num_streams]);
-      cudaMemcpyAsync(&(outtrk+(num_streams*stream_chunk))->q, &(outtrk_dev+(num_streams*stream_chunk))->q, sizeof(MP1I), cudaMemcpyDeviceToHost, streams[num_streams]);
-      cudaMemcpyAsync(&(((outtrk+(num_streams*stream_chunk))->q).data), &(((outtrk_dev+(num_streams*stream_chunk))->q).data), 1*bsize*sizeof(int), cudaMemcpyDeviceToHost, streams[num_streams]);
 #endif
     }
 #ifdef USE_ASYNC

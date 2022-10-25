@@ -21,6 +21,7 @@ find_package(alpaka REQUIRED)
 
 set(CMAKE_CUDA_ARCHITECTURES 70)
 #add_compile_definitions(num_streams=1)
+#add_compile_definitions(NITER=1)
 add_compile_definitions(EXCLUDE_H2D_TRANSFER=1)
 add_compile_definitions(EXCLUDE_D2H_TRANSFER=1)
 #set(CMAKE_BUILD_TYPE Debug)
