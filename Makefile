@@ -144,6 +144,8 @@ CXX=clang++
 CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=$(CUDA_ARCH)
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
+#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=x86_64-pc-linux-gnu
+#CFLAGS1 = -Wall -O3 -I. -fopenmp 
 CLIBS1 += -lm
 else ifeq ($(COMPILER),ibm)
 CXX=xlc++_r
