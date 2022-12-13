@@ -719,6 +719,11 @@ __global__ void launch_p2z_kernels(MPTRK *obtracks_, MPTRK *btracks_, MPHIT *bhi
 
 
 int main (int argc, char* argv[]) {
+#ifdef include_data
+  printf("Measure Both Memory Transfer Times and Compute Times!\n");
+#else
+  printf("Measure Compute Times Only!\n");
+#endif
 
    ATRK inputtrk = {
      {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},

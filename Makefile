@@ -20,6 +20,10 @@ DEBUG ?= 0
 CUDA_ARCH ?= sm_70
 CUDA_CC ?= cc70
 GCC_ROOT ?= /sw/summit/gcc/11.1.0-2
+INCLUDE_DATA ?= 1
+ifneq ($(INCLUDE_DATA),0)
+TUNE += -Dinclude_data=$(INCLUDE_DATA)
+endif
 ###########Tunable parameters############################
 TUNEB ?= 0
 TUNETRK ?= 0
@@ -53,7 +57,7 @@ endif
 THREADSX ?= 0
 THREADSY ?= 0
 BLOCKS ?= 0
-USE_ASYNC ?= 0
+USE_ASYNC ?= 1
 ifneq ($(THREADSX),0)
 TUNE += -Dthreadsperblockx=$(THREADSX)
 endif
@@ -103,7 +107,6 @@ endif
 ifeq ($(MODE),pstl)
 #CSRCS = propagate-toz-test_pstl.cpp
 CSRCS = propagate-toz-test_pstl_v2.cpp
-CFLAGS1 += -Dinclude_data
 ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1 += -O3 -I. -fopenmp 
@@ -489,7 +492,7 @@ endif
 #################
 ifeq ($(MODE),cuda)
 #CSRCS = propagate-toz-test_CUDA.cu
-# CUDA_v1 use USM bu has the same computation patterns and communication patterns as CUDA_v3
+# CUDA_v1 use USM but has the same computation patterns and communication patterns as CUDA_v3
 CSRCS = propagate-toz-test_CUDA_v1.cu
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
@@ -519,7 +522,6 @@ endif
 ifeq ($(MODE),cudauvm)
 #CSRCS = propagate-toz-test_cuda_uvm.cu
 CSRCS = propagate-toz-test_cuda_uvm_v2.cu
-CFLAGS1 += -Dinclude_data
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CFLAGS1 += -arch=$(CUDA_ARCH) -O3 --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr
@@ -534,7 +536,6 @@ endif
 
 ifeq ($(MODE),cudahyb)
 CSRCS = propagate-toz-test_cuda_hybrid.cpp
-CFLAGS1 += -Dinclude_data
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
 CFLAGS1 += -cuda -stdpar=gpu -gpu=$(CUDA_CC) -O2 --gcc-toolchain=$(GCC_ROOT) -gpu=managed

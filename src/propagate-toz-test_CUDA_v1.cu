@@ -660,12 +660,63 @@ __global__ void GPUsequenceR(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int st
   }
 }
 
+void prefetch_device(MPTRK* trk, MPHIT* hit, cudaStream_t* streams, int stream_chunk, int stream_remainder, int device) {
+    for (int s = 0; s<num_streams;s++){
+#ifdef USE_ASYNC
+      cudaMemPrefetchAsync(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), device,streams[s]);
+#else
+      cudaMemPrefetchAsync(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), device,0);
+#endif
+      
+#ifdef USE_ASYNC
+      cudaMemPrefetchAsync(hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), device,streams[s]);
+#else
+      cudaMemPrefetchAsync(hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), device,0);
+#endif
+    }  
+    if(stream_remainder != 0){
+#ifdef USE_ASYNC
+      cudaMemPrefetchAsync(trk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), device,streams[num_streams]);
+#else
+      cudaMemPrefetchAsync(trk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), device,0);
+#endif
+      
+#ifdef USE_ASYNC
+      cudaMemPrefetchAsync(hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), device,streams[num_streams]);
+#else
+      cudaMemPrefetchAsync(hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), device,0);
+#endif
+    }
+}
+
+void prefetch_host(MPTRK* outtrk, cudaStream_t* streams, int stream_chunk, int stream_remainder) {
+    for (int s = 0; s<num_streams;s++){
+#ifdef USE_ASYNC
+      cudaMemPrefetchAsync(outtrk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), cudaCpuDeviceId,streams[s]);
+#else
+      cudaMemPrefetchAsync(outtrk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), cudaCpuDeviceId,0);
+#endif
+    }
+    if(stream_remainder != 0){
+#ifdef USE_ASYNC
+      cudaMemPrefetchAsync(outtrk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), cudaCpuDeviceId,streams[num_streams]);
+#else
+      cudaMemPrefetchAsync(outtrk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), cudaCpuDeviceId,0);
+#endif
+    }
+}
+
 int main (int argc, char* argv[]) {
 
 #ifdef USE_ASYNC
   printf("RUNNING CUDA Async Version!!\n");
 #else
   printf("RUNNING CUDA Sync Version!!\n");
+#endif
+#ifdef include_data
+  printf("Measure Both Memory Transfer Times and Compute Times!\n");
+#else
+  printf("Measure Compute Times Only!\n");
 #endif
   printf("Streams: %d, blocks: %d, threads(x,y): (%d,%d)\n",num_streams,blockspergrid,threadsperblockx,threadsperblocky);
   int itr;
@@ -720,6 +771,12 @@ int main (int argc, char* argv[]) {
     //cudaStreamCreateWithFlags(&streams[s],cudaStreamNonBlocking);
     cudaStreamCreate(&streams[s]);
   }
+#ifndef include_data
+	prefetch_device(trk, hit, streams, stream_chunk, stream_remainder, device);
+#ifdef USE_ASYNC
+    cudaDeviceSynchronize(); 
+#endif
+#endif
 
   gettimeofday(&timecheck, NULL);
   setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -733,34 +790,9 @@ int main (int argc, char* argv[]) {
   auto wall_start = std::chrono::high_resolution_clock::now();
 
   for(itr=0; itr<NITER; itr++){
-    for (int s = 0; s<num_streams;s++){
-#ifdef USE_ASYNC
-      cudaMemPrefetchAsync(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), device,streams[s]);
-#else
-      cudaMemPrefetchAsync(trk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), device,0);
+#ifdef include_data
+	prefetch_device(trk, hit, streams, stream_chunk, stream_remainder, device);
 #endif
-      
-#ifdef USE_ASYNC
-      cudaMemPrefetchAsync(hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), device,streams[s]);
-#else
-      cudaMemPrefetchAsync(hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), device,0);
-#endif
-    }  
-    if(stream_remainder != 0){
-#ifdef USE_ASYNC
-      cudaMemPrefetchAsync(trk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), device,streams[num_streams]);
-#else
-      cudaMemPrefetchAsync(trk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), device,0);
-#endif
-      
-#ifdef USE_ASYNC
-      cudaMemPrefetchAsync(hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), device,streams[num_streams]);
-#else
-      cudaMemPrefetchAsync(hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), device,0);
-#endif
-    }
-
-	//cudaDeviceSynchronize(); 
     for (int s = 0; s<num_streams;++s){
       //printf("stream = %d, grid (%d, %d, %d), block(%d, %d, %d), stream_chunk = %d\n",s, grid.x, grid.y, grid.z, block.x, block.y, block.z, stream_chunk);
 #ifdef USE_ASYNC
@@ -776,33 +808,19 @@ int main (int argc, char* argv[]) {
   	  GPUsequenceR<<<grid,block,0,0>>>(trk+(num_streams*stream_chunk),hit+(num_streams*stream_chunk*nlayer),outtrk+(num_streams*stream_chunk),num_streams);
 #endif
     }
-    for (int s = 0; s<num_streams;s++){
-#ifdef USE_ASYNC
-      cudaMemPrefetchAsync(outtrk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), cudaCpuDeviceId,streams[s]);
-#else
-      cudaMemPrefetchAsync(outtrk+(s*stream_chunk),stream_chunk*sizeof(MPTRK), cudaCpuDeviceId,0);
+#ifdef include_data
+	prefetch_host(outtrk, streams, stream_chunk, stream_remainder);
 #endif
-    }
-    if(stream_remainder != 0){
-#ifdef USE_ASYNC
-      cudaMemPrefetchAsync(outtrk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), cudaCpuDeviceId,streams[num_streams]);
-#else
-      cudaMemPrefetchAsync(outtrk+(num_streams*stream_chunk),stream_remainder*sizeof(MPTRK), cudaCpuDeviceId,0);
-#endif
-    }
-	//[DEBUG on Feb. 15, 2021] Enable below synchronization if the body of the outermost itr loop is the main computation
-	//to measure and the itr loop is used for averaging purpose.
-	//If the itr loop is the main computation to measure, we can minimize unnecessary synchronization overhead for the whole itr loop
-	//by deferring the device synchronzation to after the itr loop.
-	//cudaDeviceSynchronize(); 
-
   } //end itr loop
   
-  //[DEBUG on Sept. 20, 2022] synchronization is needed to retrieve results under UVM.
-  //[DEBUG on Feb. 15, 2021] If the itr loop is the main computation to measure, we can minimize unnecessary synchronization overhead 
-  //for the whole itr loop by putting the device synchronization here, instead of the above one.
   cudaDeviceSynchronize(); 
   auto wall_stop = std::chrono::high_resolution_clock::now();
+#ifndef include_data
+	prefetch_host(outtrk, streams, stream_chunk, stream_remainder);
+#ifdef USE_ASYNC
+    cudaDeviceSynchronize(); 
+#endif
+#endif
 
   for (int s = 0; s<stream_range;s++){
     cudaStreamDestroy(streams[s]);

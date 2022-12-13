@@ -629,7 +629,6 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
       }
   }
 }
-//[DEBUG on Jan. 19, 2021] Temporarily disabled due to too much shared data problem.
 __global__ void GPUsequenceR(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
   //const int ie_range = (int)(nevts%num_streams);
   //if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
@@ -656,12 +655,63 @@ __global__ void GPUsequenceR(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int st
   }
 }
 
+void memcpy_host2dev(MPTRK* trk_dev, MPTRK* trk, MPHIT* hit_dev, MPHIT* hit, cudaStream_t* streams, int stream_chunk, int stream_remainder) {
+    for (int s = 0; s<num_streams;s++){
+#ifdef USE_ASYNC
+      cudaMemcpyAsync(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[s]);
+#else
+      cudaMemcpy(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice);
+#endif
+      
+#ifdef USE_ASYNC
+      cudaMemcpyAsync(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[s]);
+#else
+      cudaMemcpy(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice);
+#endif
+    }  
+    if(stream_remainder != 0){
+#ifdef USE_ASYNC
+      cudaMemcpyAsync(trk_dev+(num_streams*stream_chunk), trk+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[num_streams]);
+#else
+      cudaMemcpy(trk_dev+(num_streams*stream_chunk), trk+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyHostToDevice);
+#endif
+      
+#ifdef USE_ASYNC
+      cudaMemcpyAsync(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[num_streams]);
+#else
+      cudaMemcpy(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice);
+#endif
+    }
+}
+
+void memcpy_dev2host(MPTRK* outtrk, MPTRK* outtrk_dev, cudaStream_t* streams, int stream_chunk, int stream_remainder) {
+    for (int s = 0; s<num_streams;s++){
+#ifdef USE_ASYNC
+      cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
+#else
+      cudaMemcpy(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost);
+#endif
+    }
+    if(stream_remainder != 0){
+#ifdef USE_ASYNC
+      cudaMemcpyAsync(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[num_streams]);
+#else
+      cudaMemcpy(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost);
+#endif
+    }
+}
+
 int main (int argc, char* argv[]) {
 
 #ifdef USE_ASYNC
   printf("RUNNING CUDA Async Version!!\n");
 #else
   printf("RUNNING CUDA Sync Version!!\n");
+#endif
+#ifdef include_data
+  printf("Measure Both Memory Transfer Times and Compute Times!\n");
+#else
+  printf("Measure Compute Times Only!\n");
 #endif
   printf("Streams: %d, blocks: %d, threads(x,y): (%d,%d)\n",num_streams,blockspergrid,threadsperblockx,threadsperblocky);
   int itr;
@@ -725,6 +775,12 @@ int main (int argc, char* argv[]) {
     //cudaStreamCreateWithFlags(&streams[s],cudaStreamNonBlocking);
     cudaStreamCreate(&streams[s]);
   }
+#ifndef include_data
+	memcpy_host2dev(trk_dev, trk, hit_dev, hit, streams, stream_chunk, stream_remainder);
+#ifdef USE_ASYNC
+	cudaDeviceSynchronize(); 
+#endif
+#endif
 
   gettimeofday(&timecheck, NULL);
   setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -738,34 +794,10 @@ int main (int argc, char* argv[]) {
   auto wall_start = std::chrono::high_resolution_clock::now();
 
   for(itr=0; itr<NITER; itr++){
-    for (int s = 0; s<num_streams;s++){
-#ifdef USE_ASYNC
-      cudaMemcpyAsync(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[s]);
-#else
-      cudaMemcpy(trk_dev+(s*stream_chunk), trk+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyHostToDevice);
+#ifdef include_data
+	memcpy_host2dev(trk_dev, trk, hit_dev, hit, streams, stream_chunk, stream_remainder);
 #endif
-      
-#ifdef USE_ASYNC
-      cudaMemcpyAsync(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[s]);
-#else
-      cudaMemcpy(hit_dev+(s*stream_chunk*nlayer),hit+(s*stream_chunk*nlayer),nlayer*stream_chunk*sizeof(MPHIT), cudaMemcpyHostToDevice);
-#endif
-    }  
-    if(stream_remainder != 0){
-#ifdef USE_ASYNC
-      cudaMemcpyAsync(trk_dev+(num_streams*stream_chunk), trk+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyHostToDevice, streams[num_streams]);
-#else
-      cudaMemcpy(trk_dev+(num_streams*stream_chunk), trk+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyHostToDevice);
-#endif
-      
-#ifdef USE_ASYNC
-      cudaMemcpyAsync(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice, streams[num_streams]);
-#else
-      cudaMemcpy(hit_dev+(num_streams*stream_chunk*nlayer),hit+(num_streams*stream_chunk*nlayer),nlayer*stream_remainder*sizeof(MPHIT), cudaMemcpyHostToDevice);
-#endif
-    }
 
-	//cudaDeviceSynchronize(); 
     for (int s = 0; s<num_streams;++s){
       //printf("stream = %d, grid (%d, %d, %d), block(%d, %d, %d), stream_chunk = %d\n",s, grid.x, grid.y, grid.z, block.x, block.y, block.z, stream_chunk);
 #ifdef USE_ASYNC
@@ -781,36 +813,21 @@ int main (int argc, char* argv[]) {
   	  GPUsequenceR<<<grid,block,0,0>>>(trk_dev+(num_streams*stream_chunk),hit_dev+(num_streams*stream_chunk*nlayer),outtrk_dev+(num_streams*stream_chunk),num_streams);
 #endif
     }
-    for (int s = 0; s<num_streams;s++){
-#ifdef USE_ASYNC
-      cudaMemcpyAsync(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[s]);
-#else
-      cudaMemcpy(outtrk+(s*stream_chunk), outtrk_dev+(s*stream_chunk), stream_chunk*sizeof(MPTRK), cudaMemcpyDeviceToHost);
+#ifdef include_data
+	memcpy_dev2host(outtrk, outtrk_dev, streams, stream_chunk, stream_remainder);
 #endif
-    }
-    if(stream_remainder != 0){
-#ifdef USE_ASYNC
-      cudaMemcpyAsync(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost, streams[num_streams]);
-#else
-      cudaMemcpy(outtrk+(num_streams*stream_chunk), outtrk_dev+(num_streams*stream_chunk), stream_remainder*sizeof(MPTRK), cudaMemcpyDeviceToHost);
-#endif
-    }
-#ifdef USE_ASYNC
-	//[DEBUG on Feb. 15, 2021] Enable below synchronization if the body of the outermost itr loop is the main computation
-	//to measure and the itr loop is used for averaging purpose.
-	//If the itr loop is the main computation to measure, we can minimize unnecessary synchronization overhead for the whole itr loop
-	//by deferring the device synchronzation to after the itr loop.
-	//cudaDeviceSynchronize(); 
-#endif
-
   } //end itr loop
   
 #ifdef USE_ASYNC
-	//[DEBUG on Feb. 15, 2021] If the itr loop is the main computation to measure, we can minimize unnecessary synchronization overhead 
-	//for the whole itr loop by putting the device synchronization here, instead of the above one.
 	cudaDeviceSynchronize(); 
 #endif
   auto wall_stop = std::chrono::high_resolution_clock::now();
+#ifndef include_data
+	memcpy_dev2host(outtrk, outtrk_dev, streams, stream_chunk, stream_remainder);
+#ifdef USE_ASYNC
+	cudaDeviceSynchronize(); 
+#endif
+#endif
 
   for (int s = 0; s<stream_range;s++){
     cudaStreamDestroy(streams[s]);

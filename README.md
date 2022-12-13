@@ -102,10 +102,19 @@ Version 1 uses unified memory. Version 2 and 3 use explicit memory transfers.
 Version 3 has the same computation and communiation patterns as OpenACC async version (v3).
 
 ```shell
-$ make COMPILER=nvcc MODE=cuda
+$ make COMPILER=nvcc MODE=cuda #default behaviors: asynchronous execution; measure both memory transfer times and compute times
+$ make COMPILER=nvcc MODE=cuda USE_ASYNC=1 #for asynchronous execution (default)
+$ make COMPILER=nvcc MODE=cuda USE_ASYNC=0 #for synchronous execution
+$ make COMPILER=nvcc MODE=cuda INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
+$ make COMPILER=nvcc MODE=cuda INCLUDE_DATA=0 #measure compute times only
 $ make COMPILER=nvcc MODE=cudav2
-$ make COMPILER=nvcc MODE=cudav3 USE_ASYNC=1 #for asynchronous execution
+$ make COMPILER=nvcc MODE=cudav3 #default behaviors: asynchronous execution; measure both memory transfer times and compute times
+$ make COMPILER=nvcc MODE=cudav3 USE_ASYNC=1 #for asynchronous execution (default)
 $ make COMPILER=nvcc MODE=cudav3 USE_ASYNC=0 #for synchronous execution
+$ make COMPILER=nvcc MODE=cudav3 INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
+$ make COMPILER=nvcc MODE=cudav3 INCLUDE_DATA=0 #measure compute times only
+$ make COMPILER=nvcc MODE=cudauvm INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
+$ make COMPILER=nvcc MODE=cudauvm INCLUDE_DATA=0 #measure compute times only
 ```
 
 ## Eigen

@@ -490,7 +490,7 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
-  __syncthreads(); 
+  //__syncthreads(); 
   trkErr = &newErr;
 }
 
@@ -549,9 +549,9 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     //errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
     //errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
-  __syncthreads(); 
+  //__syncthreads(); 
   MultHelixPropEndcap(errorProp, inErr, temp);
-  __syncthreads(); 
+  //__syncthreads(); 
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }
 
