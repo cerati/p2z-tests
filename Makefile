@@ -9,9 +9,9 @@
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
 #                   ibm, nvcpp, dpcpp                    #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
-#               omp4, cudav2, cudav3, cudauvm, cudahyb,  #
-#               pstl, accc, acccv3, omp4c, omp4cv3,      #
-#               accccpu, acccv3cpu                       #
+#               omp4, cudav2, cudav3, cudav4, cudauvm,   #
+#               cudahyb, pstl, accc, acccv3, omp4c,      #
+#               omp4cv3, accccpu, acccv3cpu              #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -490,41 +490,39 @@ endif
 #################
 #  CUDA Setting #
 #################
+COMPILE_CUDA = 0
 ifeq ($(MODE),cuda)
 #CSRCS = propagate-toz-test_CUDA.cu
 # CUDA_v1 use USM but has the same computation patterns and communication patterns as CUDA_v3
 CSRCS = propagate-toz-test_CUDA_v1.cu
-ifeq ($(COMPILER),nvcc)
-CXX=nvcc
-CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr
-CLIBS1 += -L${CUDALIBDIR} -lcudart
-endif
+COMPILE_CUDA = 1
 endif
 
 ifeq ($(MODE),cudav2)
 CSRCS = propagate-toz-test_CUDA_v2.cu
-ifeq ($(COMPILER),nvcc)
-CXX=nvcc
-CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
-CLIBS1 += -L${CUDALIBDIR} -lcudart
-endif
+COMPILE_CUDA = 1
 endif
 
 ifeq ($(MODE),cudav3)
 CSRCS = propagate-toz-test_CUDA_v3.cu
-ifeq ($(COMPILER),nvcc)
-CXX=nvcc
-CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64
-CLIBS1 += -L${CUDALIBDIR} -lcudart 
+COMPILE_CUDA = 1
 endif
+
+ifeq ($(MODE),cudav4)
+CSRCS = propagate-toz-test_CUDA_v4.cu
+COMPILE_CUDA = 1
 endif
 
 ifeq ($(MODE),cudauvm)
 #CSRCS = propagate-toz-test_cuda_uvm.cu
 CSRCS = propagate-toz-test_cuda_uvm_v2.cu
+COMPILE_CUDA = 1
+endif
+
+ifeq ($(COMPILE_CUDA),1)
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=$(CUDA_ARCH) -O3 --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr
+CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
 endif
 ifeq ($(COMPILER),nvcpp)
@@ -607,6 +605,9 @@ endif
 TARGET = ./bin
 
 ADD_SUFFIX = 0
+ifeq ($(MODE),cudav4)
+ADD_SUFFIX = 1
+endif
 ifeq ($(MODE),cudav3)
 ADD_SUFFIX = 1
 endif
@@ -660,7 +661,7 @@ $(TARGET)/$(BENCHMARK): precmd src/$(CSRCS)
 precmd:
 	@if [ "$(CSRCS)" = "NotSupported" ]; then echo "==> [ERROR] The compiler $(COMPILER) is not supported for the mode = $(MODE)"; fi
 	@if [ "$(COMPILER)" = "openarc" ]; then rm -rf ./cetus_output $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx $(TARGET)/propagate_openarc_*; fi
-	@if [ "$(COMPILER)" = "openarc" ]; then O2GBuild.script $(MODE); fi
+	@if [ "$(COMPILER)" = "openarc" ]; then O2GBuild.script $(MODE) $(STREAMS) $(NITER); fi
 
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o

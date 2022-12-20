@@ -113,6 +113,8 @@ $ make COMPILER=nvcc MODE=cudav3 USE_ASYNC=1 #for asynchronous execution (defaul
 $ make COMPILER=nvcc MODE=cudav3 USE_ASYNC=0 #for synchronous execution
 $ make COMPILER=nvcc MODE=cudav3 INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
 $ make COMPILER=nvcc MODE=cudav3 INCLUDE_DATA=0 #measure compute times only
+$ make COMPILER=nvcc MODE=cudav4 INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
+$ make COMPILER=nvcc MODE=cudav4 INCLUDE_DATA=0 #measure compute times only
 $ make COMPILER=nvcc MODE=cudauvm INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
 $ make COMPILER=nvcc MODE=cudauvm INCLUDE_DATA=0 #measure compute times only
 ```

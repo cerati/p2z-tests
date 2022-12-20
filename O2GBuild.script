@@ -25,15 +25,22 @@ defaultOMP4InputFile1="propagate-toz-test_OpenMP4_sync.c"
 defaultOMP4InputFile2="propagate-toz-test_OpenMP4_async.c"
 #defaultOmpAccInter=2
 
-if [ $# -eq 2 ]; then
+if [ $# -eq 3 ]; then
 	inputMode="$1"
 	numStreams=$2
+	niters=$3
+elif [ $# -eq 2 ]; then
+	inputMode="$1"
+	numStreams=$2
+	niters=10
 elif [ $# -eq 1 ]; then
 	inputMode="$1"
 	numStreams=10
+	niters=10
 else
 	inputMode="acccv3"
 	numStreams=10
+	niters=10
 fi
 
 if [ "$inputMode" == "accc" ]; then
@@ -76,6 +83,7 @@ openarclib="${openarc}/lib"
 #fi
 
 if [ "$numStreams" != "" ]; then
+	if [ "$numStreams" != "0" ]; then
     mv "openarcConf.txt" "openarcConf.txt_tmp"
     cat "openarcConf.txt_tmp" | sed "s|__numStreams__|${numStreams}|g" > "openarcConf.txt"
     rm "openarcConf.txt_tmp"

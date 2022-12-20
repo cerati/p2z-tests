@@ -44,14 +44,29 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef threadsperblockx
 #define threadsperblockx bsize
 #endif
-//#define threadsperblocky 1024/threadsperblockx
-//#define threadsperblocky 512/threadsperblockx
-#define threadsperblocky bsize/threadsperblockx
+#define threadsperblocky 1
 #ifndef blockspergrid
 #define blockspergrid nevts*nb/num_streams
 #endif
 
 #define HOSTDEV __host__ __device__
+
+#define loadData(dst, src, tid, itrsize) \
+  for(int ip=0; ip<itrsize; ++ip) {      \
+    dst[ip] = src[ip*bsize + tid];       \
+  }                               
+
+#define saveData(dst, src, tid, itrsize) \
+  for(int ip=0; ip<itrsize; ++ip) {      \
+    dst[ip*bsize + tid] = src[ip];       \
+  }                               
+
+#define iparX     0
+#define iparY     1
+#define iparZ     2
+#define iparIpt   3
+#define iparPhi   4
+#define iparTheta 5
 
 HOSTDEV size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -127,6 +142,52 @@ struct MPHIT {
   MP3x3SF cov;
 };
 
+struct MP1I_ {
+  int data[1];
+};
+
+struct MP22I_ {
+  int data[22];
+};
+
+struct MP3F_ {
+  float data[3];
+};
+
+struct MP6F_ {
+  float data[6];
+};
+
+struct MP3x3_ {
+  float data[9];
+};
+struct MP3x6_ {
+  float data[18];
+};
+
+struct MP3x3SF_ {
+  float data[6];
+};
+
+struct MP6x6SF_ {
+  float data[21];
+};
+
+struct MP6x6F_ {
+  float data[36];
+};
+
+struct MPTRK_ {
+  MP6F_    par;
+  MP6x6SF_ cov;
+  MP1I_    q;
+//  MP22I_   hitidx;
+};
+
+struct MPHIT_ {
+  MP3F_    pos;
+  MP3x3SF_ cov;
+};
 
 
 float randn(float mu, float sigma) {
@@ -299,363 +360,339 @@ HOSTDEV float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, e
 
 
 #define N bsize
-__forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
-  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
-  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
-  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
-  if( threadIdx.x == 0 ) {
-    a = A->data; //ASSUME_ALIGNED(a, 64);
-    b = B->data; //ASSUME_ALIGNED(b, 64);
-    c = C->data;       //ASSUME_ALIGNED(c, 64);
-  }
-  __syncthreads();
-  for(int n=threadIdx.x;n<N;n+=blockDim.x)
+__forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F_* A, const MP6x6SF_* B, MP6x6F_* C) {
+  const float *a = A->data; //ASSUME_ALIGNED(a, 64);
+  const float *b = B->data; //ASSUME_ALIGNED(b, 64);
+  float *c = C->data;       //ASSUME_ALIGNED(c, 64);
   {
-    c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
-    c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
-    c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
-    c[ 3*N+n] = b[ 6*N+n] + a[ 2*N+n]*b[ 8*N+n] + a[ 3*N+n]*b[ 9*N+n] + a[ 4*N+n]*b[13*N+n] + a[ 5*N+n]*b[18*N+n];
-    c[ 4*N+n] = b[10*N+n] + a[ 2*N+n]*b[12*N+n] + a[ 3*N+n]*b[13*N+n] + a[ 4*N+n]*b[14*N+n] + a[ 5*N+n]*b[19*N+n];
-    c[ 5*N+n] = b[15*N+n] + a[ 2*N+n]*b[17*N+n] + a[ 3*N+n]*b[18*N+n] + a[ 4*N+n]*b[19*N+n] + a[ 5*N+n]*b[20*N+n];
-    c[ 6*N+n] = b[ 1*N+n] + a[ 8*N+n]*b[ 3*N+n] + a[ 9*N+n]*b[ 6*N+n] + a[10*N+n]*b[10*N+n] + a[11*N+n]*b[15*N+n];
-    c[ 7*N+n] = b[ 2*N+n] + a[ 8*N+n]*b[ 4*N+n] + a[ 9*N+n]*b[ 7*N+n] + a[10*N+n]*b[11*N+n] + a[11*N+n]*b[16*N+n];
-    c[ 8*N+n] = b[ 4*N+n] + a[ 8*N+n]*b[ 5*N+n] + a[ 9*N+n]*b[ 8*N+n] + a[10*N+n]*b[12*N+n] + a[11*N+n]*b[17*N+n];
-    c[ 9*N+n] = b[ 7*N+n] + a[ 8*N+n]*b[ 8*N+n] + a[ 9*N+n]*b[ 9*N+n] + a[10*N+n]*b[13*N+n] + a[11*N+n]*b[18*N+n];
-    c[10*N+n] = b[11*N+n] + a[ 8*N+n]*b[12*N+n] + a[ 9*N+n]*b[13*N+n] + a[10*N+n]*b[14*N+n] + a[11*N+n]*b[19*N+n];
-    c[11*N+n] = b[16*N+n] + a[ 8*N+n]*b[17*N+n] + a[ 9*N+n]*b[18*N+n] + a[10*N+n]*b[19*N+n] + a[11*N+n]*b[20*N+n];
-    c[12*N+n] = 0;
-    c[13*N+n] = 0;
-    c[14*N+n] = 0;
-    c[15*N+n] = 0;
-    c[16*N+n] = 0;
-    c[17*N+n] = 0;
-    c[18*N+n] = b[ 6*N+n];
-    c[19*N+n] = b[ 7*N+n];
-    c[20*N+n] = b[ 8*N+n];
-    c[21*N+n] = b[ 9*N+n];
-    c[22*N+n] = b[13*N+n];
-    c[23*N+n] = b[18*N+n];
-    c[24*N+n] = a[26*N+n]*b[ 3*N+n] + a[27*N+n]*b[ 6*N+n] + b[10*N+n] + a[29*N+n]*b[15*N+n];
-    c[25*N+n] = a[26*N+n]*b[ 4*N+n] + a[27*N+n]*b[ 7*N+n] + b[11*N+n] + a[29*N+n]*b[16*N+n];
-    c[26*N+n] = a[26*N+n]*b[ 5*N+n] + a[27*N+n]*b[ 8*N+n] + b[12*N+n] + a[29*N+n]*b[17*N+n];
-    c[27*N+n] = a[26*N+n]*b[ 8*N+n] + a[27*N+n]*b[ 9*N+n] + b[13*N+n] + a[29*N+n]*b[18*N+n];
-    c[28*N+n] = a[26*N+n]*b[12*N+n] + a[27*N+n]*b[13*N+n] + b[14*N+n] + a[29*N+n]*b[19*N+n];
-    c[29*N+n] = a[26*N+n]*b[17*N+n] + a[27*N+n]*b[18*N+n] + b[19*N+n] + a[29*N+n]*b[20*N+n];
-    c[30*N+n] = b[15*N+n];
-    c[31*N+n] = b[16*N+n];
-    c[32*N+n] = b[17*N+n];
-    c[33*N+n] = b[18*N+n];
-    c[34*N+n] = b[19*N+n];
-    c[35*N+n] = b[20*N+n];
+    c[ 0] = b[ 0] + a[ 2]*b[ 3] + a[ 3]*b[ 6] + a[ 4]*b[10] + a[ 5]*b[15];
+    c[ 1] = b[ 1] + a[ 2]*b[ 4] + a[ 3]*b[ 7] + a[ 4]*b[11] + a[ 5]*b[16];
+    c[ 2] = b[ 3] + a[ 2]*b[ 5] + a[ 3]*b[ 8] + a[ 4]*b[12] + a[ 5]*b[17];
+    c[ 3] = b[ 6] + a[ 2]*b[ 8] + a[ 3]*b[ 9] + a[ 4]*b[13] + a[ 5]*b[18];
+    c[ 4] = b[10] + a[ 2]*b[12] + a[ 3]*b[13] + a[ 4]*b[14] + a[ 5]*b[19];
+    c[ 5] = b[15] + a[ 2]*b[17] + a[ 3]*b[18] + a[ 4]*b[19] + a[ 5]*b[20];
+    c[ 6] = b[ 1] + a[ 8]*b[ 3] + a[ 9]*b[ 6] + a[10]*b[10] + a[11]*b[15];
+    c[ 7] = b[ 2] + a[ 8]*b[ 4] + a[ 9]*b[ 7] + a[10]*b[11] + a[11]*b[16];
+    c[ 8] = b[ 4] + a[ 8]*b[ 5] + a[ 9]*b[ 8] + a[10]*b[12] + a[11]*b[17];
+    c[ 9] = b[ 7] + a[ 8]*b[ 8] + a[ 9]*b[ 9] + a[10]*b[13] + a[11]*b[18];
+    c[10] = b[11] + a[ 8]*b[12] + a[ 9]*b[13] + a[10]*b[14] + a[11]*b[19];
+    c[11] = b[16] + a[ 8]*b[17] + a[ 9]*b[18] + a[10]*b[19] + a[11]*b[20];
+    c[12] = 0;
+    c[13] = 0;
+    c[14] = 0;
+    c[15] = 0;
+    c[16] = 0;
+    c[17] = 0;
+    c[18] = b[ 6];
+    c[19] = b[ 7];
+    c[20] = b[ 8];
+    c[21] = b[ 9];
+    c[22] = b[13];
+    c[23] = b[18];
+    c[24] = a[26]*b[ 3] + a[27]*b[ 6] + b[10] + a[29]*b[15];
+    c[25] = a[26]*b[ 4] + a[27]*b[ 7] + b[11] + a[29]*b[16];
+    c[26] = a[26]*b[ 5] + a[27]*b[ 8] + b[12] + a[29]*b[17];
+    c[27] = a[26]*b[ 8] + a[27]*b[ 9] + b[13] + a[29]*b[18];
+    c[28] = a[26]*b[12] + a[27]*b[13] + b[14] + a[29]*b[19];
+    c[29] = a[26]*b[17] + a[27]*b[18] + b[19] + a[29]*b[20];
+    c[30] = b[15];
+    c[31] = b[16];
+    c[32] = b[17];
+    c[33] = b[18];
+    c[34] = b[19];
+    c[35] = b[20];
   }
-  __syncthreads();
 }
 
-__forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
-  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
-  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
-  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
-  if( threadIdx.x == 0 ) {
-    a = A->data; //ASSUME_ALIGNED(a, 64);
-    b = B->data; //ASSUME_ALIGNED(b, 64);
-    c = C->data;       //ASSUME_ALIGNED(c, 64);
-  }
-  __syncthreads();
-  for(int n=threadIdx.x;n<N;n+=blockDim.x)
+__forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F_* A, MP6x6F_* B, MP6x6SF_* C) {
+  const float *a = A->data; //ASSUME_ALIGNED(a, 64);
+  const float *b = B->data; //ASSUME_ALIGNED(b, 64);
+  float *c = C->data;       //ASSUME_ALIGNED(c, 64);
   {
-    c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
-    c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
-    c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
-    c[ 3*N+n] = b[12*N+n] + b[14*N+n]*a[ 2*N+n] + b[15*N+n]*a[ 3*N+n] + b[16*N+n]*a[ 4*N+n] + b[17*N+n]*a[ 5*N+n];
-    c[ 4*N+n] = b[13*N+n] + b[14*N+n]*a[ 8*N+n] + b[15*N+n]*a[ 9*N+n] + b[16*N+n]*a[10*N+n] + b[17*N+n]*a[11*N+n];
-    c[ 5*N+n] = 0;
-    c[ 6*N+n] = b[18*N+n] + b[20*N+n]*a[ 2*N+n] + b[21*N+n]*a[ 3*N+n] + b[22*N+n]*a[ 4*N+n] + b[23*N+n]*a[ 5*N+n];
-    c[ 7*N+n] = b[19*N+n] + b[20*N+n]*a[ 8*N+n] + b[21*N+n]*a[ 9*N+n] + b[22*N+n]*a[10*N+n] + b[23*N+n]*a[11*N+n];
-    c[ 8*N+n] = 0;
-    c[ 9*N+n] = b[21*N+n];
-    c[10*N+n] = b[24*N+n] + b[26*N+n]*a[ 2*N+n] + b[27*N+n]*a[ 3*N+n] + b[28*N+n]*a[ 4*N+n] + b[29*N+n]*a[ 5*N+n];
-    c[11*N+n] = b[25*N+n] + b[26*N+n]*a[ 8*N+n] + b[27*N+n]*a[ 9*N+n] + b[28*N+n]*a[10*N+n] + b[29*N+n]*a[11*N+n];
-    c[12*N+n] = 0;
-    c[13*N+n] = b[27*N+n];
-    c[14*N+n] = b[26*N+n]*a[26*N+n] + b[27*N+n]*a[27*N+n] + b[28*N+n] + b[29*N+n]*a[29*N+n];
-    c[15*N+n] = b[30*N+n] + b[32*N+n]*a[ 2*N+n] + b[33*N+n]*a[ 3*N+n] + b[34*N+n]*a[ 4*N+n] + b[35*N+n]*a[ 5*N+n];
-    c[16*N+n] = b[31*N+n] + b[32*N+n]*a[ 8*N+n] + b[33*N+n]*a[ 9*N+n] + b[34*N+n]*a[10*N+n] + b[35*N+n]*a[11*N+n];
-    c[17*N+n] = 0;
-    c[18*N+n] = b[33*N+n];
-    c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
-    c[20*N+n] = b[35*N+n];
+    c[ 0] = b[ 0] + b[ 2]*a[ 2] + b[ 3]*a[ 3] + b[ 4]*a[ 4] + b[ 5]*a[ 5];
+    c[ 1] = b[ 6] + b[ 8]*a[ 2] + b[ 9]*a[ 3] + b[10]*a[ 4] + b[11]*a[ 5];
+    c[ 2] = b[ 7] + b[ 8]*a[ 8] + b[ 9]*a[ 9] + b[10]*a[10] + b[11]*a[11];
+    c[ 3] = b[12] + b[14]*a[ 2] + b[15]*a[ 3] + b[16]*a[ 4] + b[17]*a[ 5];
+    c[ 4] = b[13] + b[14]*a[ 8] + b[15]*a[ 9] + b[16]*a[10] + b[17]*a[11];
+    c[ 5] = 0;
+    c[ 6] = b[18] + b[20]*a[ 2] + b[21]*a[ 3] + b[22]*a[ 4] + b[23]*a[ 5];
+    c[ 7] = b[19] + b[20]*a[ 8] + b[21]*a[ 9] + b[22]*a[10] + b[23]*a[11];
+    c[ 8] = 0;
+    c[ 9] = b[21];
+    c[10] = b[24] + b[26]*a[ 2] + b[27]*a[ 3] + b[28]*a[ 4] + b[29]*a[ 5];
+    c[11] = b[25] + b[26]*a[ 8] + b[27]*a[ 9] + b[28]*a[10] + b[29]*a[11];
+    c[12] = 0;
+    c[13] = b[27];
+    c[14] = b[26]*a[26] + b[27]*a[27] + b[28] + b[29]*a[29];
+    c[15] = b[30] + b[32]*a[ 2] + b[33]*a[ 3] + b[34]*a[ 4] + b[35]*a[ 5];
+    c[16] = b[31] + b[32]*a[ 8] + b[33]*a[ 9] + b[34]*a[10] + b[35]*a[11];
+    c[17] = 0;
+    c[18] = b[33];
+    c[19] = b[32]*a[26] + b[33]*a[27] + b[34] + b[35]*a[29];
+    c[20] = b[35];
   }
-  __syncthreads();
 }
 
-__forceinline__ __device__ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
+__forceinline__ __device__ void KalmanGainInv(const MP6x6SF_* A, const MP3x3SF_* B, MP3x3_* C) {
   // k = P Ht(HPHt + R)^-1
   // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
   // This calculates the inverse of HpHt +R
-  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
-  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
-  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
-  if( threadIdx.x == 0 ) {
-    a = (*A).data; //ASSUME_ALIGNED(a, 64);
-    b = (*B).data; //ASSUME_ALIGNED(b, 64);
-    c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  }
-  __syncthreads();
-  for(int n=threadIdx.x;n<N;n+=blockDim.x)
+  const float *a = A->data; //ASSUME_ALIGNED(a, 64);
+  const float *b = B->data; //ASSUME_ALIGNED(b, 64);
+  float *c = C->data;       //ASSUME_ALIGNED(c, 64);
   {
     double det =
-      ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
-      ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
-      ((a[2*N+n]+b[2*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n]))));
+      ((a[0]+b[0])*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])))) -
+      ((a[1]+b[1])*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])))) +
+      ((a[2]+b[2])*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3]))));
     double invdet = 1.0/det;
 
-    c[ 0*N+n] =  invdet*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
-    c[ 1*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
-    c[ 2*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
-    c[ 3*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])));
-    c[ 4*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[2*N+n]+b[2*N+n])));
-    c[ 5*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
-    c[ 6*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n])));
-    c[ 7*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
-    c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
+    c[ 0] =  invdet*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])));
+    c[ 1] =  -1*invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[7]+b[4])));
+    c[ 2] =  invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[7]+b[4])));
+    c[ 3] =  -1*invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])));
+    c[ 4] =  invdet*(((a[ 0]+b[ 0]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[2]+b[2])));
+    c[ 5] =  -1*invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+    c[ 6] =  invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3])));
+    c[ 7] =  -1*invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+    c[ 8] =  invdet*(((a[ 0]+b[ 0]) *(a[6]+b[3])) - ((a[1]+b[1]) *(a[1]+b[1])));
   }
-  __syncthreads(); 
 }
 
-__forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
+__forceinline__ __device__ void KalmanGain(const MP6x6SF_* A, const MP3x3_* B, MP3x6_* C) {
   // k = P Ht(HPHt + R)^-1
   // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
   // This calculates the kalman gain 
-  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
-  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
-  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
-  if( threadIdx.x == 0 ) {
-    a = (*A).data; //ASSUME_ALIGNED(a, 64);
-    b = (*B).data; //ASSUME_ALIGNED(b, 64);
-    c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  }
-  __syncthreads();
-  for(int n=threadIdx.x;n<N;n+=blockDim.x)
+  const float *a = A->data; //ASSUME_ALIGNED(a, 64);
+  const float *b = B->data; //ASSUME_ALIGNED(b, 64);
+  float *c = C->data;       //ASSUME_ALIGNED(c, 64);
   {
-    c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
-    c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
-    c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
-    c[ 3*N+n] = a[1*N+n]*b[0*N+n] + a[6*N+n]*b[3*N+n] + a[7*N+n]*b[6*N+n];
-    c[ 4*N+n] = a[1*N+n]*b[1*N+n] + a[6*N+n]*b[4*N+n] + a[7*N+n]*b[7*N+n];
-    c[ 5*N+n] = a[1*N+n]*b[2*N+n] + a[6*N+n]*b[5*N+n] + a[7*N+n]*b[8*N+n];
-    c[ 6*N+n] = a[2*N+n]*b[0*N+n] + a[7*N+n]*b[3*N+n] + a[11*N+n]*b[6*N+n];
-    c[ 7*N+n] = a[2*N+n]*b[1*N+n] + a[7*N+n]*b[4*N+n] + a[11*N+n]*b[7*N+n];
-    c[ 8*N+n] = a[2*N+n]*b[2*N+n] + a[7*N+n]*b[5*N+n] + a[11*N+n]*b[8*N+n];
-    c[ 9*N+n] = a[3*N+n]*b[0*N+n] + a[8*N+n]*b[3*N+n] + a[12*N+n]*b[6*N+n];
-    c[ 10*N+n] = a[3*N+n]*b[1*N+n] + a[8*N+n]*b[4*N+n] + a[12*N+n]*b[7*N+n];
-    c[ 11*N+n] = a[3*N+n]*b[2*N+n] + a[8*N+n]*b[5*N+n] + a[12*N+n]*b[8*N+n];
-    c[ 12*N+n] = a[4*N+n]*b[0*N+n] + a[9*N+n]*b[3*N+n] + a[13*N+n]*b[6*N+n];
-    c[ 13*N+n] = a[4*N+n]*b[1*N+n] + a[9*N+n]*b[4*N+n] + a[13*N+n]*b[7*N+n];
-    c[ 14*N+n] = a[4*N+n]*b[2*N+n] + a[9*N+n]*b[5*N+n] + a[13*N+n]*b[8*N+n];
-    c[ 15*N+n] = a[5*N+n]*b[0*N+n] + a[10*N+n]*b[3*N+n] + a[14*N+n]*b[6*N+n];
-    c[ 16*N+n] = a[5*N+n]*b[1*N+n] + a[10*N+n]*b[4*N+n] + a[14*N+n]*b[7*N+n];
-    c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
+    c[ 0] = a[0]*b[0] + a[1]*b[3] + a[2]*b[6];
+    c[ 1] = a[0]*b[1] + a[1]*b[4] + a[2]*b[7];
+    c[ 2] = a[0]*b[2] + a[1]*b[5] + a[2]*b[8];
+    c[ 3] = a[1]*b[0] + a[6]*b[3] + a[7]*b[6];
+    c[ 4] = a[1]*b[1] + a[6]*b[4] + a[7]*b[7];
+    c[ 5] = a[1]*b[2] + a[6]*b[5] + a[7]*b[8];
+    c[ 6] = a[2]*b[0] + a[7]*b[3] + a[11]*b[6];
+    c[ 7] = a[2]*b[1] + a[7]*b[4] + a[11]*b[7];
+    c[ 8] = a[2]*b[2] + a[7]*b[5] + a[11]*b[8];
+    c[ 9] = a[3]*b[0] + a[8]*b[3] + a[12]*b[6];
+    c[ 10] = a[3]*b[1] + a[8]*b[4] + a[12]*b[7];
+    c[ 11] = a[3]*b[2] + a[8]*b[5] + a[12]*b[8];
+    c[ 12] = a[4]*b[0] + a[9]*b[3] + a[13]*b[6];
+    c[ 13] = a[4]*b[1] + a[9]*b[4] + a[13]*b[7];
+    c[ 14] = a[4]*b[2] + a[9]*b[5] + a[13]*b[8];
+    c[ 15] = a[5]*b[0] + a[10]*b[3] + a[14]*b[6];
+    c[ 16] = a[5]*b[1] + a[10]*b[4] + a[14]*b[7];
+    c[ 17] = a[5]*b[2] + a[10]*b[5] + a[14]*b[8];
   }
-   __syncthreads(); 
 }
 
-__forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
-  __shared__ MP3x3 inverse_temp;
-  __shared__ MP3x6 kGain;
-  __shared__ MP6x6SF newErr;
+__forceinline__ __device__ void KalmanUpdate(MP6x6SF_* trkErr, MP6F_* inPar, const MP3x3SF_* hitErr, const MP3F_* msP){
+  MP3x3_ inverse_temp;
+  MP3x6_ kGain;
+  MP6x6SF_ newErr;
   KalmanGainInv(trkErr,hitErr,&inverse_temp);
   KalmanGain(trkErr,&inverse_temp,&kGain);
 
-  for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
-    const float xin = x(inPar,it);
-    const float yin = y(inPar,it);
-    const float zin = z(inPar,it);
-    const float ptin = 1./ipt(inPar,it); // is this pt or ipt? 
-    const float phiin = phi(inPar,it);
-    const float thetain = theta(inPar,it);
-    const float xout = x(msP,it);
-    const float yout = y(msP,it);
-    const float zout = z(msP,it);
+  {
+    float *inParData = inPar->data;
+    float *trkErrData = trkErr->data;
+    const float xin = inParData[iparX];
+    const float yin = inParData[iparY];
+    const float zin = inParData[iparZ];
+    const float ptin = 1.0f/inParData[iparIpt]; // is this pt or ipt? 
+    const float phiin = inParData[iparPhi];
+    const float thetain = inParData[iparTheta];
+    const float xout = msP->data[iparX];
+    const float yout = msP->data[iparY];
+    //const float zout = msP->data[iparZ];
   
-    float xnew = xin + (kGain.data[0*bsize+it]*(xout-xin)) +(kGain.data[1*bsize+it]*(yout-yin));
-    float ynew = yin + (kGain.data[3*bsize+it]*(xout-xin)) +(kGain.data[4*bsize+it]*(yout-yin));
-    float znew = zin + (kGain.data[6*bsize+it]*(xout-xin)) +(kGain.data[7*bsize+it]*(yout-yin));
-    float ptnew = ptin + (kGain.data[9*bsize+it]*(xout-xin)) +(kGain.data[10*bsize+it]*(yout-yin));
-    float phinew = phiin + (kGain.data[12*bsize+it]*(xout-xin)) +(kGain.data[13*bsize+it]*(yout-yin));
-    float thetanew = thetain + (kGain.data[15*bsize+it]*(xout-xin)) +(kGain.data[16*bsize+it]*(yout-yin));
+    float xnew = xin + (kGain.data[0]*(xout-xin)) +(kGain.data[1]*(yout-yin));
+    float ynew = yin + (kGain.data[3]*(xout-xin)) +(kGain.data[4]*(yout-yin));
+    float znew = zin + (kGain.data[6]*(xout-xin)) +(kGain.data[7]*(yout-yin));
+    float ptnew = ptin + (kGain.data[9]*(xout-xin)) +(kGain.data[10]*(yout-yin));
+    float phinew = phiin + (kGain.data[12]*(xout-xin)) +(kGain.data[13]*(yout-yin));
+    float thetanew = thetain + (kGain.data[15]*(xout-xin)) +(kGain.data[16]*(yout-yin));
   
-    newErr.data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[2*bsize+it]);
-    newErr.data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[7*bsize+it]);
-    newErr.data[2*bsize+it] = trkErr->data[2*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr.data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr.data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain.data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[2*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[0] = trkErrData[0] - (kGain.data[0]*trkErrData[0]+kGain.data[1]*trkErrData[1]+kGain.data[2]*trkErrData[2]);
+    newErr.data[1] = trkErrData[1] - (kGain.data[0]*trkErrData[1]+kGain.data[1]*trkErrData[6]+kGain.data[2]*trkErrData[7]);
+    newErr.data[2] = trkErrData[2] - (kGain.data[0]*trkErrData[2]+kGain.data[1]*trkErrData[7]+kGain.data[2]*trkErrData[11]);
+    newErr.data[3] = trkErrData[3] - (kGain.data[0]*trkErrData[3]+kGain.data[1]*trkErrData[8]+kGain.data[2]*trkErrData[12]);
+    newErr.data[4] = trkErrData[4] - (kGain.data[0]*trkErrData[4]+kGain.data[1]*trkErrData[9]+kGain.data[2]*trkErrData[13]);
+    newErr.data[5] = trkErrData[5] - (kGain.data[0]*trkErrData[5]+kGain.data[1]*trkErrData[10]+kGain.data[2]*trkErrData[14]);
   
-    newErr.data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[7*bsize+it]);
-    newErr.data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr.data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr.data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain.data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[5*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[6] = trkErrData[6] - (kGain.data[3]*trkErrData[1]+kGain.data[4]*trkErrData[6]+kGain.data[5]*trkErrData[7]);
+    newErr.data[7] = trkErrData[7] - (kGain.data[3]*trkErrData[2]+kGain.data[4]*trkErrData[7]+kGain.data[5]*trkErrData[11]);
+    newErr.data[8] = trkErrData[8] - (kGain.data[3]*trkErrData[3]+kGain.data[4]*trkErrData[8]+kGain.data[5]*trkErrData[12]);
+    newErr.data[9] = trkErrData[9] - (kGain.data[3]*trkErrData[4]+kGain.data[4]*trkErrData[9]+kGain.data[5]*trkErrData[13]);
+    newErr.data[10] = trkErrData[10] - (kGain.data[3]*trkErrData[5]+kGain.data[4]*trkErrData[10]+kGain.data[5]*trkErrData[14]);
   
-    newErr.data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr.data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr.data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain.data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[8*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[11] = trkErrData[11] - (kGain.data[6]*trkErrData[2]+kGain.data[7]*trkErrData[7]+kGain.data[8]*trkErrData[11]);
+    newErr.data[12] = trkErrData[12] - (kGain.data[6]*trkErrData[3]+kGain.data[7]*trkErrData[8]+kGain.data[8]*trkErrData[12]);
+    newErr.data[13] = trkErrData[13] - (kGain.data[6]*trkErrData[4]+kGain.data[7]*trkErrData[9]+kGain.data[8]*trkErrData[13]);
+    newErr.data[14] = trkErrData[14] - (kGain.data[6]*trkErrData[5]+kGain.data[7]*trkErrData[10]+kGain.data[8]*trkErrData[14]);
   
-    newErr.data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr.data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain.data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[11*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[15] = trkErrData[15] - (kGain.data[9]*trkErrData[3]+kGain.data[10]*trkErrData[8]+kGain.data[11]*trkErrData[12]);
+    newErr.data[16] = trkErrData[16] - (kGain.data[9]*trkErrData[4]+kGain.data[10]*trkErrData[9]+kGain.data[11]*trkErrData[13]);
+    newErr.data[17] = trkErrData[17] - (kGain.data[9]*trkErrData[5]+kGain.data[10]*trkErrData[10]+kGain.data[11]*trkErrData[14]);
   
-    newErr.data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain.data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain.data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain.data[14*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr.data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain.data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[14*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[18] = trkErrData[18] - (kGain.data[12]*trkErrData[4]+kGain.data[13]*trkErrData[9]+kGain.data[14]*trkErrData[13]);
+    newErr.data[19] = trkErrData[19] - (kGain.data[12]*trkErrData[5]+kGain.data[13]*trkErrData[10]+kGain.data[14]*trkErrData[14]);
   
-    newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain.data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain.data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain.data[17*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[20] = trkErrData[20] - (kGain.data[15]*trkErrData[5]+kGain.data[16]*trkErrData[10]+kGain.data[17]*trkErrData[14]);
   
-    setx(inPar,it,xnew );
-    sety(inPar,it,ynew );
-    setz(inPar,it,znew);
-    setipt(inPar,it, ptnew);
-    setphi(inPar,it, phinew);
-    settheta(inPar,it, thetanew);
-  }
-  __syncthreads(); 
-  for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
+    inParData[iparX] = xnew;
+    inParData[iparY] = ynew;
+    inParData[iparZ] = znew;
+    inParData[iparIpt] = ptnew;
+    inParData[iparPhi] = phinew;
+    inParData[iparTheta] = thetanew;
     #pragma unroll
     for (int i = 0; i < 21; i++){
-      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr.data[ i*bsize+it]; 
-    }   
+      trkErrData[ i] = trkErrData[ i] - newErr.data[ i];
+    }
   }
 }
 
 __device__ __constant__ float kfact = 100/3.8;
-__device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg,const MP3F* msP, 
-			  MP6x6SF* outErr, MP6F* outPar, struct MP6x6F* errorProp, struct MP6x6F* temp) {
-        //struct MP6x6F* errorProp, temp; 
-  for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
-    const float zout = z(msP,it);
-    const float k = q(inChg,it)*kfact;//*100/3.8;
-    const float deltaZ = zout - z(inPar,it);
-    const float pt = 1./ipt(inPar,it);
-    const float cosP = cosf(phi(inPar,it));
-    const float sinP = sinf(phi(inPar,it));
-    const float cosT = cosf(theta(inPar,it));
-    const float sinT = sinf(theta(inPar,it));
+__device__ __forceinline__ void propagateToZ(const MP6x6SF_* inErr, const MP6F_* inPar, const MP1I_* inChg,const MP3F_* msP, 
+			  MP6x6SF_* outErr, MP6F_* outPar) {
+    struct MP6x6F_ errorProp, temp; 
+  //for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
+  {
+    const float *inParData = inPar->data;
+    float *outParData = outPar->data;
+    const float zout = msP->data[iparZ];
+    const float k = inChg->data[0]*kfact;//*100/3.8;
+    const float deltaZ = zout - inParData[iparZ];
+    const float ipt_ = inParData[iparIpt];
+    const float pt = 1.0f/ipt_;
+    const float phi_ = inParData[iparPhi];
+    const float cosP = cosf(phi_);
+    const float sinP = sinf(phi_);
+    const float theta_ = inParData[iparTheta];
+    const float cosT = cosf(theta_);
+    const float sinT = sinf(theta_);
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float icosT = 1.0/cosT;
+    const float icosT = 1.0f/cosT;
     const float icosTk = icosT/k;
-    const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
-    //const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
+    const float alpha = deltaZ*sinT*ipt_*icosTk;
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
-    setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
-    sety(outPar,it, y(inPar,it) + k*(pyin*sina + pxin*(1.-cosa)) );
-    setz(outPar,it,zout);
-    setipt(outPar,it, ipt(inPar,it));
-    setphi(outPar,it, phi(inPar,it)+alpha );
-    settheta(outPar,it, theta(inPar,it) );
+    outParData[iparX] = inParData[iparX] + k*(pxin*sina - pyin*(1.0f-cosa));
+    outParData[iparY] = inParData[iparY] + k*(pxin*sina + pyin*(1.0f-cosa));
+    outParData[iparZ] = zout;
+    outParData[iparIpt] = ipt_;
+    outParData[iparPhi] = phi_+alpha;
+    outParData[iparTheta] = theta_;
     
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
-    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
-    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
-    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
-    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
-    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT*(icosTk);
-    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
-    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ*(icosT*icosTk);
-    //errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    //errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    //errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    //errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-    //errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    //errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-    //errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    //errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-    //errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
-    //errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
-    //errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+    //for (size_t i=0;i<6;++i) errorProp.data[PosInMtrx(i,i,6) + it] = 1.f;
+    errorProp.data[PosInMtrx(0,0,6)] = 1.0f;
+    errorProp.data[PosInMtrx(1,1,6)] = 1.0f;
+    errorProp.data[PosInMtrx(2,2,6)] = 1.0f;
+    errorProp.data[PosInMtrx(3,3,6)] = 1.0f;
+    errorProp.data[PosInMtrx(4,4,6)] = 1.0f;
+    errorProp.data[PosInMtrx(5,5,6)] = 1.0f;
+    errorProp.data[PosInMtrx(0,2,6)] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
+    errorProp.data[PosInMtrx(0,3,6)] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp.data[PosInMtrx(0,4,6)] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
+    errorProp.data[PosInMtrx(0,5,6)] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
+    errorProp.data[PosInMtrx(1,2,6)] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
+    errorProp.data[PosInMtrx(1,3,6)] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp.data[PosInMtrx(1,4,6)] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp.data[PosInMtrx(1,5,6)] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
+    errorProp.data[PosInMtrx(4,2,6)] = -ipt_*sinT*(icosTk);
+    errorProp.data[PosInMtrx(4,3,6)] = sinT*deltaZ*(icosTk);
+    errorProp.data[PosInMtrx(4,5,6)] = ipt_*deltaZ*(icosT*icosTk);
   }
-  __syncthreads(); 
-  MultHelixPropEndcap(errorProp, inErr, temp);
-  MultHelixPropTranspEndcap(errorProp, temp, outErr);
+  MultHelixPropEndcap(&errorProp, inErr, &temp);
+  MultHelixPropTranspEndcap(&errorProp, &temp, outErr);
 }
-
-
 
 __device__ __constant__ int ie_range = (int) nevts/num_streams; 
 __device__ __constant__ int ie_rangeR = (int) nevts%num_streams; 
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
-   //__shared__ int ie_range;
-   //ie_range = (int)(nevts/num_streams);
-  //if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
-  //else{ie_range = (int)(nevts/num_streams);}
-      __shared__ struct MP6x6F errorProp, temp;
-      const MPTRK* __shared__ btracks;
-      MPTRK* __shared__ obtracks;
-      const MPHIT* __shared__ bhits;
-//      __shared__ unsigned ie;
-//      __shared__ unsigned ib;
-      __shared__ int ie;
-      __shared__ int ib;
-      int ti;
-      int lnb = nb;
-  for (ti = blockIdx.x; ti<ie_range*nb; ti+=gridDim.x){
-      ie = ti/lnb;
-      ib = ti%lnb;
-      __syncthreads();
-      if(threadIdx.x == 0) {
-/*
-          if((ti == 29999) || (ti == 10000)) {
-              printf("ie_range*nb = %d, ti = %d, nb = %d, ie = ti/nb = %d, ib = modulo(ti,nb) = %d\n", ie_range*nb, ti, nb, ie, ib);
-          }
-*/
-          btracks = bTk(trk,ie,ib);
-          obtracks = bTk(outtrk,ie,ib);
-      }
-      //__syncthreads();
+  for (int ti = blockIdx.x; ti<ie_range*nb; ti+=gridDim.x){
+      struct MPTRK_ obtracks;
+      struct MPTRK_ btracks;
+      float *dstPtr = btracks.par.data;
+      float *srcPtr = trk[ti].par.data;
+      loadData(dstPtr,srcPtr,threadIdx.x,6);
+      dstPtr = btracks.cov.data;
+      srcPtr = trk[ti].cov.data;
+      loadData(dstPtr,srcPtr,threadIdx.x,21);
+      int *dstPtrI = btracks.q.data;
+      int *srcPtrI = trk[ti].q.data;
+      loadData(dstPtrI,srcPtrI,threadIdx.x,1);
+
+#pragma unroll
       for (int layer=0;layer<nlayer;++layer){	
-        if(threadIdx.x == 0) {
-            bhits = bHit(hit,ie,ib,layer);
-        }
-        __syncthreads();
+        struct MPHIT_ bhits;
+        float *dstPtr2 = bhits.pos.data;
+        float *srcPtr2 = hit[layer+ti*nlayer].pos.data;
+        loadData(dstPtr2,srcPtr2,threadIdx.x,3);
+        dstPtr2 = bhits.cov.data;
+        srcPtr2 = hit[layer+ti*nlayer].cov.data;
+        loadData(dstPtr2,srcPtr2,threadIdx.x,6);
      
-        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
-                     &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
- //       __syncthreads();
-        KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+        propagateToZ(&(btracks.cov), &(btracks.par), &(btracks.q), &(bhits.pos), 
+                     &(obtracks.cov), &(obtracks.par));
+        KalmanUpdate(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos));
       }
+      dstPtr = outtrk[ti].par.data;
+      srcPtr = obtracks.par.data;
+      saveData(dstPtr,srcPtr,threadIdx.x,6);
+      dstPtr = outtrk[ti].cov.data;
+      srcPtr = obtracks.cov.data;
+      saveData(dstPtr,srcPtr,threadIdx.x,21);
+      dstPtrI = outtrk[ti].q.data;
+      srcPtrI = obtracks.q.data;
+      saveData(dstPtrI,srcPtrI,threadIdx.x,1);
   }
 }
+
 __global__ void GPUsequenceR(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
-  //const int ie_range = (int)(nevts%num_streams);
-  //if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
-  //else{ie_range = (int)(nevts/num_streams);}
-      __shared__ struct MP6x6F errorProp, temp;
-      const MPTRK* __shared__ btracks;
-      MPTRK* __shared__ obtracks;
-      const MPHIT* __shared__ bhits;
-      size_t ie;
-      size_t ib;
-  for (size_t ti = blockIdx.x; ti<ie_rangeR*nb; ti+=gridDim.x){
-      ie = ti/nb;
-      ib = ti%nb;
-      __syncthreads();
-      btracks = bTk(trk,ie,ib);
-      obtracks = bTk(outtrk,ie,ib);
+  for (int ti = blockIdx.x; ti<ie_rangeR*nb; ti+=gridDim.x){
+      struct MPTRK_ obtracks;
+      struct MPTRK_ btracks;
+      float *dstPtr = btracks.par.data;
+      float *srcPtr = trk[ti].par.data;
+      loadData(dstPtr,srcPtr,threadIdx.x,6);
+      dstPtr = btracks.cov.data;
+      srcPtr = trk[ti].cov.data;
+      loadData(dstPtr,srcPtr,threadIdx.x,21);
+      int *dstPtrI = btracks.q.data;
+      int *srcPtrI = trk[ti].q.data;
+      loadData(dstPtrI,srcPtrI,threadIdx.x,1);
+
+#pragma unroll
       for (int layer=0;layer<nlayer;++layer){	
-        bhits = bHit(hit,ie,ib,layer);
-        __syncthreads();
-        propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
-                     &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
-        KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+        struct MPHIT_ bhits;
+        float *dstPtr2 = bhits.pos.data;
+        float *srcPtr2 = hit[layer+ti*nlayer].pos.data;
+        loadData(dstPtr2,srcPtr2,threadIdx.x,3);
+        dstPtr2 = bhits.cov.data;
+        srcPtr2 = hit[layer+ti*nlayer].cov.data;
+        loadData(dstPtr2,srcPtr2,threadIdx.x,6);
+     
+        propagateToZ(&(btracks.cov), &(btracks.par), &(btracks.q), &(bhits.pos), 
+                     &(obtracks.cov), &(obtracks.par));
+        KalmanUpdate(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos));
       }
+      dstPtr = outtrk[ti].par.data;
+      srcPtr = obtracks.par.data;
+      saveData(dstPtr,srcPtr,threadIdx.x,6);
+      dstPtr = outtrk[ti].cov.data;
+      srcPtr = obtracks.cov.data;
+      saveData(dstPtr,srcPtr,threadIdx.x,21);
+      dstPtrI = outtrk[ti].q.data;
+      srcPtrI = obtracks.q.data;
+      saveData(dstPtrI,srcPtrI,threadIdx.x,1);
   }
 }
 
@@ -853,9 +890,9 @@ int main (int argc, char* argv[]) {
 
 
 
-   float avgx = 0, avgy = 0, avgz = 0;
-   float avgpt = 0, avgphi = 0, avgtheta = 0;
-   float avgdx = 0, avgdy = 0, avgdz = 0;
+   double avgx = 0, avgy = 0, avgz = 0;
+   double avgpt = 0, avgphi = 0, avgtheta = 0;
+   double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
        float x_ = x(outtrk,ie,it);
@@ -896,18 +933,18 @@ int main (int argc, char* argv[]) {
    fp_y = fopen("input_y.txt", "w");
    fp_z = fopen("input_z.txt", "w");
 #endif
-   avgpt = avgpt/float(nevts*ntrks);
-   avgphi = avgphi/float(nevts*ntrks);
-   avgtheta = avgtheta/float(nevts*ntrks);
-   avgx = avgx/float(nevts*ntrks);
-   avgy = avgy/float(nevts*ntrks);
-   avgz = avgz/float(nevts*ntrks);
-   avgdx = avgdx/float(nevts*ntrks);
-   avgdy = avgdy/float(nevts*ntrks);
-   avgdz = avgdz/float(nevts*ntrks);
+   avgpt = avgpt/double(nevts*ntrks);
+   avgphi = avgphi/double(nevts*ntrks);
+   avgtheta = avgtheta/double(nevts*ntrks);
+   avgx = avgx/double(nevts*ntrks);
+   avgy = avgy/double(nevts*ntrks);
+   avgz = avgz/double(nevts*ntrks);
+   avgdx = avgdx/double(nevts*ntrks);
+   avgdy = avgdy/double(nevts*ntrks);
+   avgdz = avgdz/double(nevts*ntrks);
 
-   float stdx = 0, stdy = 0, stdz = 0;
-   float stddx = 0, stddy = 0, stddz = 0;
+   double stdx = 0, stdy = 0, stdz = 0;
+   double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
        float x_ = x(outtrk,ie,it);
@@ -938,12 +975,12 @@ int main (int argc, char* argv[]) {
    fclose(fp_z);
 #endif
 
-   stdx = sqrtf(stdx/float(nevts*ntrks));
-   stdy = sqrtf(stdy/float(nevts*ntrks));
-   stdz = sqrtf(stdz/float(nevts*ntrks));
-   stddx = sqrtf(stddx/float(nevts*ntrks));
-   stddy = sqrtf(stddy/float(nevts*ntrks));
-   stddz = sqrtf(stddz/float(nevts*ntrks));
+   stdx = sqrtf(stdx/double(nevts*ntrks));
+   stdy = sqrtf(stdy/double(nevts*ntrks));
+   stdz = sqrtf(stdz/double(nevts*ntrks));
+   stddx = sqrtf(stddx/double(nevts*ntrks));
+   stddy = sqrtf(stddy/double(nevts*ntrks));
+   stddz = sqrtf(stddz/double(nevts*ntrks));
 
    printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
    printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
