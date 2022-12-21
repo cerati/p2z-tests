@@ -52,11 +52,13 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define HOSTDEV __host__ __device__
 
 #define loadData(dst, src, tid, itrsize) \
+  _Pragma("unroll")                      \
   for(int ip=0; ip<itrsize; ++ip) {      \
     dst[ip] = src[ip*bsize + tid];       \
   }                               
 
 #define saveData(dst, src, tid, itrsize) \
+  _Pragma("unroll")                      \
   for(int ip=0; ip<itrsize; ++ip) {      \
     dst[ip*bsize + tid] = src[ip];       \
   }                               
@@ -448,13 +450,13 @@ __forceinline__ __device__ void KalmanGainInv(const MP6x6SF_* A, const MP3x3SF_*
     double invdet = 1.0/det;
 
     c[ 0] =  invdet*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])));
-    c[ 1] =  -1*invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[7]+b[4])));
+    c[ 1] =  -invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[7]+b[4])));
     c[ 2] =  invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[7]+b[4])));
-    c[ 3] =  -1*invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])));
+    c[ 3] =  -invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])));
     c[ 4] =  invdet*(((a[ 0]+b[ 0]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[2]+b[2])));
-    c[ 5] =  -1*invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+    c[ 5] =  -invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
     c[ 6] =  invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3])));
-    c[ 7] =  -1*invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+    c[ 7] =  -invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
     c[ 8] =  invdet*(((a[ 0]+b[ 0]) *(a[6]+b[3])) - ((a[1]+b[1]) *(a[1]+b[1])));
   }
 }
@@ -582,7 +584,7 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF_* inErr, const MP6F_*
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
     outParData[iparX] = inParData[iparX] + k*(pxin*sina - pyin*(1.0f-cosa));
-    outParData[iparY] = inParData[iparY] + k*(pxin*sina + pyin*(1.0f-cosa));
+    outParData[iparY] = inParData[iparY] + k*(pyin*sina + pxin*(1.0f-cosa));
     outParData[iparZ] = zout;
     outParData[iparIpt] = ipt_;
     outParData[iparPhi] = phi_+alpha;
@@ -598,6 +600,8 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF_* inErr, const MP6F_*
     errorProp.data[PosInMtrx(3,3,6)] = 1.0f;
     errorProp.data[PosInMtrx(4,4,6)] = 1.0f;
     errorProp.data[PosInMtrx(5,5,6)] = 1.0f;
+    //[Dec. 21, 2022] Added to have the same pattern as the cudauvm version.
+    errorProp.data[PosInMtrx(0,1,6)] = 0.0f;
     errorProp.data[PosInMtrx(0,2,6)] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
     errorProp.data[PosInMtrx(0,3,6)] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
     errorProp.data[PosInMtrx(0,4,6)] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
@@ -895,34 +899,34 @@ int main (int argc, char* argv[]) {
    double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
+       float xl = x(outtrk,ie,it);
+       float yl = y(outtrk,ie,it);
+       float zl = z(outtrk,ie,it);
        float pt_ = 1./ipt(outtrk,ie,it);
        float phi_ = phi(outtrk,ie,it);
        float theta_ = theta(outtrk,ie,it);
 #ifdef DUMP_OUTPUT
-       fprintf(fp_x, "ie=%d, it=%d, %f\n",ie, it, x_);
-       fprintf(fp_y, "%f\n", y_);
-       fprintf(fp_z, "%f\n", z_);
+       fprintf(fp_x, "ie=%lu, it=%lu, %f\n", ie, it, xl);
+       fprintf(fp_y, "%f\n", yl);
+       fprintf(fp_z, "%f\n", zl);
 #endif
-       //if(x_ ==0 || y_==0||z_==0){
-       //printf("x: %f,y: %f,z: %f, ie: %d, it: %f\n",x_,y_,z_,ie,it);
+       //if(xl ==0 || yl==0||zl==0){
+       //printf("x: %f,y: %f,z: %f, ie: %d, it: %f\n",xl,yl,zl,ie,it);
        //continue;
        //}
        avgpt += pt_;
        avgphi += phi_;
        avgtheta += theta_;
-       avgx += x_;
-       avgy += y_;
-       avgz += z_;
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
-       //if(x_ ==0 || y_==0 || z_==0){continue;}
-       avgdx += (x_-hx_)/x_;
-       avgdy += (y_-hy_)/y_;
-       avgdz += (z_-hz_)/z_;
+       avgx += xl;
+       avgy += yl;
+       avgz += zl;
+       float hxl = x(hit,ie,it);
+       float hyl = y(hit,ie,it);
+       float hzl = z(hit,ie,it);
+       //if(xl ==0 || yl==0 || zl==0){continue;}
+       avgdx += (xl-hxl)/xl;
+       avgdy += (yl-hyl)/yl;
+       avgdz += (zl-hzl)/zl;
      }
    }
 #ifdef DUMP_OUTPUT
@@ -947,25 +951,25 @@ int main (int argc, char* argv[]) {
    double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       stdx += (x_-avgx)*(x_-avgx);
-       stdy += (y_-avgy)*(y_-avgy);
-       stdz += (z_-avgz)*(z_-avgz);
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
-       stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
-       stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
-       stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
+       float xl = x(outtrk,ie,it);
+       float yl = y(outtrk,ie,it);
+       float zl = z(outtrk,ie,it);
+       stdx += (xl-avgx)*(xl-avgx);
+       stdy += (yl-avgy)*(yl-avgy);
+       stdz += (zl-avgz)*(zl-avgz);
+       float hxl = x(hit,ie,it);
+       float hyl = y(hit,ie,it);
+       float hzl = z(hit,ie,it);
+       stddx += ((xl-hxl)/xl-avgdx)*((xl-hxl)/xl-avgdx);
+       stddy += ((yl-hyl)/yl-avgdy)*((yl-hyl)/yl-avgdy);
+       stddz += ((zl-hzl)/zl-avgdz)*((zl-hzl)/zl-avgdz);
 #ifdef DUMP_OUTPUT
-       x_ = x(trk,ie,it);
-       y_ = y(trk,ie,it);
-       z_ = z(trk,ie,it);
-       fprintf(fp_x, "%f\n", x_);
-       fprintf(fp_y, "%f\n", y_);
-       fprintf(fp_z, "%f\n", z_);
+       xl = x(trk,ie,it);
+       yl = y(trk,ie,it);
+       zl = z(trk,ie,it);
+       fprintf(fp_x, "%f\n", xl);
+       fprintf(fp_y, "%f\n", yl);
+       fprintf(fp_z, "%f\n", zl);
 #endif
      }
    }
