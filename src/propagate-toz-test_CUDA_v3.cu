@@ -298,15 +298,12 @@ HOSTDEV float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, e
 
 #define N bsize
 __forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C) {
-  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
-  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
-  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
-  if( threadIdx.x == 0 ) {
-    a = A->data; //ASSUME_ALIGNED(a, 64);
-    b = B->data; //ASSUME_ALIGNED(b, 64);
-    c = C->data;       //ASSUME_ALIGNED(c, 64);
-  }
-  __syncthreads();
+  const float* a; //ASSUME_ALIGNED(a, 64);
+  const float* b; //ASSUME_ALIGNED(b, 64);
+  float* c;       //ASSUME_ALIGNED(c, 64);
+  a = A->data; //ASSUME_ALIGNED(a, 64);
+  b = B->data; //ASSUME_ALIGNED(b, 64);
+  c = C->data;       //ASSUME_ALIGNED(c, 64);
   for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
@@ -346,19 +343,15 @@ __forceinline__ __device__ void MultHelixPropEndcap(const MP6x6F* A, const MP6x6
     c[34*N+n] = b[19*N+n];
     c[35*N+n] = b[20*N+n];
   }
-  __syncthreads();
 }
 
 __forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, MP6x6SF* C) {
-  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
-  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
-  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
-  if( threadIdx.x == 0 ) {
-    a = A->data; //ASSUME_ALIGNED(a, 64);
-    b = B->data; //ASSUME_ALIGNED(b, 64);
-    c = C->data;       //ASSUME_ALIGNED(c, 64);
-  }
-  __syncthreads();
+  const float* a; //ASSUME_ALIGNED(a, 64);
+  const float* b; //ASSUME_ALIGNED(b, 64);
+  float* c;       //ASSUME_ALIGNED(c, 64);
+  a = A->data; //ASSUME_ALIGNED(a, 64);
+  b = B->data; //ASSUME_ALIGNED(b, 64);
+  c = C->data;       //ASSUME_ALIGNED(c, 64);
   for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
@@ -383,22 +376,18 @@ __forceinline__ __device__ void MultHelixPropTranspEndcap(MP6x6F* A, MP6x6F* B, 
     c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
     c[20*N+n] = b[35*N+n];
   }
-  __syncthreads();
 }
 
 __forceinline__ __device__ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C) {
   // k = P Ht(HPHt + R)^-1
   // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
   // This calculates the inverse of HpHt +R
-  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
-  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
-  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
-  if( threadIdx.x == 0 ) {
-    a = (*A).data; //ASSUME_ALIGNED(a, 64);
-    b = (*B).data; //ASSUME_ALIGNED(b, 64);
-    c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  }
-  __syncthreads();
+  const float* a; //ASSUME_ALIGNED(a, 64);
+  const float* b; //ASSUME_ALIGNED(b, 64);
+  float* c;       //ASSUME_ALIGNED(c, 64);
+  a = (*A).data; //ASSUME_ALIGNED(a, 64);
+  b = (*B).data; //ASSUME_ALIGNED(b, 64);
+  c = (*C).data;       //ASSUME_ALIGNED(c, 64);
   for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
     double det =
@@ -417,22 +406,18 @@ __forceinline__ __device__ void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B
     c[ 7*N+n] =  -invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
     c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
   }
-  __syncthreads(); 
 }
 
 __forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C) {
   // k = P Ht(HPHt + R)^-1
   // HpHt -> cov of x,y,z. take upper 3x3 matrix of P
   // This calculates the kalman gain 
-  const float* __shared__ a; //ASSUME_ALIGNED(a, 64);
-  const float* __shared__ b; //ASSUME_ALIGNED(b, 64);
-  float* __shared__ c;       //ASSUME_ALIGNED(c, 64);
-  if( threadIdx.x == 0 ) {
-    a = (*A).data; //ASSUME_ALIGNED(a, 64);
-    b = (*B).data; //ASSUME_ALIGNED(b, 64);
-    c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  }
-  __syncthreads();
+  const float* a; //ASSUME_ALIGNED(a, 64);
+  const float* b; //ASSUME_ALIGNED(b, 64);
+  float* c;       //ASSUME_ALIGNED(c, 64);
+  a = (*A).data; //ASSUME_ALIGNED(a, 64);
+  b = (*B).data; //ASSUME_ALIGNED(b, 64);
+  c = (*C).data;       //ASSUME_ALIGNED(c, 64);
   for(int n=threadIdx.x;n<N;n+=blockDim.x)
   {
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
@@ -454,7 +439,6 @@ __forceinline__ __device__ void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3
     c[ 16*N+n] = a[5*N+n]*b[1*N+n] + a[10*N+n]*b[4*N+n] + a[14*N+n]*b[7*N+n];
     c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
   }
-   __syncthreads(); 
 }
 
 __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
@@ -516,7 +500,6 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   }
-  __syncthreads(); 
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     #pragma unroll
     for (int i = 0; i < 21; i++){
@@ -581,7 +564,6 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     //errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
     //errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
   }
-  __syncthreads(); 
   MultHelixPropEndcap(errorProp, inErr, temp);
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }

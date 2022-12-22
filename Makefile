@@ -9,9 +9,9 @@
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
 #                   ibm, nvcpp, dpcpp                    #
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
-#               omp4, cudav2, cudav3, cudav4, cudauvm,   #
-#               cudahyb, pstl, accc, acccv3, omp4c,      #
-#               omp4cv3, accccpu, acccv3cpu              #
+#               omp4, cudav1, cudav2, cudav3, cudav4,    #
+#               cudauvm, cudahyb, pstl, accc, acccv3,    #
+#               omp4c, omp4cv3, accccpu, acccv3cpu       #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -493,7 +493,13 @@ endif
 COMPILE_CUDA = 0
 ifeq ($(MODE),cuda)
 #CSRCS = propagate-toz-test_CUDA.cu
-# CUDA_v1 use USM but has the same computation patterns and communication patterns as CUDA_v3
+# CUDA_v0 use USM but has the same computation patterns and communication patterns as CUDA_v3
+CSRCS = propagate-toz-test_CUDA_v0.cu
+COMPILE_CUDA = 1
+endif
+
+ifeq ($(MODE),cudav1)
+# CUDA_v1 use USM but has the same computation patterns and communication patterns as CUDA_v4
 CSRCS = propagate-toz-test_CUDA_v1.cu
 COMPILE_CUDA = 1
 endif
@@ -609,6 +615,12 @@ ifeq ($(MODE),cudav4)
 ADD_SUFFIX = 1
 endif
 ifeq ($(MODE),cudav3)
+ADD_SUFFIX = 1
+endif
+ifeq ($(MODE),cudav2)
+ADD_SUFFIX = 1
+endif
+ifeq ($(MODE),cudav1)
 ADD_SUFFIX = 1
 endif
 ifeq ($(MODE),cuda)

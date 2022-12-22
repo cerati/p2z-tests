@@ -561,7 +561,6 @@ __device__ __constant__ float kfact = 100/3.8;
 __device__ __forceinline__ void propagateToZ(const MP6x6SF_* inErr, const MP6F_* inPar, const MP1I_* inChg,const MP3F_* msP, 
 			  MP6x6SF_* outErr, MP6F_* outPar) {
     struct MP6x6F_ errorProp, temp; 
-  //for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
   {
     const float *inParData = inPar->data;
     float *outParData = outPar->data;
@@ -790,7 +789,7 @@ int main (int argc, char* argv[]) {
   //[DEBUG by Seyong on Dec. 28, 2020] add an explicit srand(1) call to generate fixed inputs for better debugging.
   srand(1);
 #endif
-  cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+//  cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
 //  cudaFuncSetCacheConfig(GPUsequence,cudaFuncCachePreferL1);
 //  cudaFuncSetCacheConfig(GPUsequenceR,cudaFuncCachePreferL1);
   MPTRK* trk = prepareTracks(inputtrk);
