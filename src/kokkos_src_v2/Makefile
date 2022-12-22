@@ -9,7 +9,7 @@ default: build
 	echo "Start Build"
 
 ifndef NITER
-NITER=5
+NITER=10
 endif
 ifndef NLAYER
 NLAYER=20

@@ -7,7 +7,7 @@ default: build
 	echo "Start Build"
 
 ifndef NITER
-NITER=5
+NITER=10
 endif
 ifndef NLAYER
 NLAYER=20
@@ -23,10 +23,14 @@ EXE_S = "_prepin_host"
 else
 EXE_S = ""
 endif
+INCLUDE_DATA ?= 1
+ifneq ($(INCLUDE_DATA),0)
+TUNE += -Dinclude_data=$(INCLUDE_DATA)
+endif
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dnum_streams=${num_streams} -Dprepin_hostmem=${prepin_hostmem}
+CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dnum_streams=${num_streams} -Dprepin_hostmem=${prepin_hostmem} ${TUNE}
 # KOKKOS_ARCH = "HSW,Kepler35"
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"

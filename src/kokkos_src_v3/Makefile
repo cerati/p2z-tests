@@ -9,15 +9,19 @@ default: build
 	echo "Start Build"
 
 ifndef NITER
-NITER=5
+NITER=10
 endif
 ifndef NLAYER
 NLAYER=20
 endif
+INCLUDE_DATA ?= 1
+ifneq ($(INCLUDE_DATA),0)
+TUNE += -Dinclude_data=$(INCLUDE_DATA)
+endif
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
+CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} ${TUNE}
 # KOKKOS_ARCH = "HSW,Kepler35"
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"
@@ -27,7 +31,7 @@ USE_GPU=1
 else
 # -9 needed on apollo
 CXX = g++
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
+CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} ${TUNE}
 #CXX = g++-9
 # CXX = icpc
 EXE = "../../bin/propagate_gcc_kokkos_v3"

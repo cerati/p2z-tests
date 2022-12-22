@@ -445,7 +445,7 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
     const float thetain = theta(inPar,it);
     const float xout = x(msP,it);
     const float yout = y(msP,it);
-    const float zout = z(msP,it);
+    //const float zout = z(msP,it);
   
     float xnew = xin + (kGain.data[0*bsize+it]*(xout-xin)) +(kGain.data[1*bsize+it]*(yout-yin));
     float ynew = yin + (kGain.data[3*bsize+it]*(xout-xin)) +(kGain.data[4*bsize+it]*(yout-yin));
@@ -514,7 +514,6 @@ __device__ __forceinline__ void propagateToZ(const MP6x6SF* inErr, const MP6F* i
     const float icosT = 1.0f/cosT;
     const float icosTk = icosT/k;
     const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
-    //const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
     setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.0f-cosa)) );
@@ -563,13 +562,18 @@ __device__ __constant__ int ie_range = (int) nevts/num_streams;
 __device__ __constant__ int ie_rangeR = (int) nevts%num_streams; 
 __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
   struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
+  const MPTRK* btracks;
+  MPTRK* obtracks;
+  const MPHIT* bhits;
+  size_t ie;
+  size_t ib;
   for (size_t ti = blockIdx.x; ti<ie_range*nb; ti+=gridDim.x){
-    size_t ie = ti/nb;
-    size_t ib = ti%nb;
-    const MPTRK* btracks = bTk(trk,ie,ib);
-    MPTRK* obtracks = bTk(outtrk,ie,ib);
+    ie = ti/nb;
+    ib = ti%nb;
+    btracks = bTk(trk,ie,ib);
+    obtracks = bTk(outtrk,ie,ib);
     for (int layer=0;layer<nlayer;++layer){	
-      const MPHIT* bhits = bHit(hit,ie,ib,layer);
+      bhits = bHit(hit,ie,ib,layer);
       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
                    &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
       KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
@@ -578,13 +582,18 @@ __global__ void GPUsequence(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int str
 }
 __global__ void GPUsequenceR(MPTRK* trk, MPHIT* hit, MPTRK* outtrk, const int stream){
   struct MP6x6F errorProp, temp; // shared memory here causes a race condition. Probably move to inside the p2z function? i forgot why I did it this way to begin with. maybe to make it shared?
+  const MPTRK* btracks;
+  MPTRK* obtracks;
+  const MPHIT* bhits;
+  size_t ie;
+  size_t ib;
   for (size_t ti = blockIdx.x; ti<ie_rangeR*nb; ti+=gridDim.x){
-    size_t ie = ti/nb;
-    size_t ib = ti%nb;
-    const MPTRK* btracks = bTk(trk,ie,ib);
-    MPTRK* obtracks = bTk(outtrk,ie,ib);
+    ie = ti/nb;
+    ib = ti%nb;
+    btracks = bTk(trk,ie,ib);
+    obtracks = bTk(outtrk,ie,ib);
     for (int layer=0;layer<nlayer;++layer){	
-      const MPHIT* bhits = bHit(hit,ie,ib,layer);
+      bhits = bHit(hit,ie,ib,layer);
       propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, 
                    &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp);
       KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);

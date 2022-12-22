@@ -463,7 +463,7 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks,
     const float zout = inHits.pos(batch, Z_IND, it); 
     const float k = inTrks.q(batch, it)*100/3.8; 
     const float deltaZ = zout - inTrks.par(batch, Z_IND, it); 
-    const float pt = 1./inTrks.par(batch, IPT_IND,it); 
+    const float pt = 1.0f/inTrks.par(batch, IPT_IND,it); 
     const float cosP = cosf( inTrks.par(batch, PHI_IND, it) ); 
     const float sinP = sinf( inTrks.par(batch, PHI_IND, it) ); 
     const float cosT = cosf( inTrks.par(batch, THETA_IND, it) ); 
@@ -475,8 +475,8 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks,
     const float cosa = cosf(alpha); // this can be approximated;
 
     // array of state
-    outTrks.par(batch,X_IND,it)     = inTrks.par(batch, X_IND, it) + k*(pxin*sina - pyin*(1.-cosa));
-    outTrks.par(batch,Y_IND,it)     = inTrks.par(batch, Y_IND, it) + k*(pyin*sina + pxin*(1.-cosa));
+    outTrks.par(batch,X_IND,it)     = inTrks.par(batch, X_IND, it) + k*(pxin*sina - pyin*(1.0f-cosa));
+    outTrks.par(batch,Y_IND,it)     = inTrks.par(batch, Y_IND, it) + k*(pyin*sina + pxin*(1.0f-cosa));
     outTrks.par(batch,Z_IND,it)     = zout;
     outTrks.par(batch,IPT_IND,it)   = inTrks.par(batch, IPT_IND, it);
     outTrks.par(batch,PHI_IND,it)   = inTrks.par(batch, PHI_IND, it)+alpha;
@@ -485,15 +485,15 @@ void propagateToZ(const CBTRK &inTrks, const CBHIT &inHits, CBTRK &outTrks,
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp(batch,i,i,it) = 1.;
+    for (size_t i=0;i<6;++i) errorProp(batch,i,i,it) = 1.0f;
     //there are two cause we're doing symmetry
     errorProp(batch,2,0,it) = errorProp(batch,0,2,it) = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-    errorProp(batch,3,0,it) = errorProp(batch,0,3,it) = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*inTrks.par(batch,IPT_IND,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(inTrks.par(batch,IPT_IND,it)*inTrks.par(batch,IPT_IND,it));
-    errorProp(batch,4,0,it) = errorProp(batch,0,4,it) = (k/inTrks.par(batch,IPT_IND,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp(batch,5,0,it) = errorProp(batch,0,5,it) = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
+    errorProp(batch,3,0,it) = errorProp(batch,0,3,it) = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)/(cosT*inTrks.par(batch,IPT_IND,it))-k*(cosP*sina-sinP*(1.0f-cCosPsina))/(inTrks.par(batch,IPT_IND,it)*inTrks.par(batch,IPT_IND,it));
+    errorProp(batch,4,0,it) = errorProp(batch,0,4,it) = (k/inTrks.par(batch,IPT_IND,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
+    errorProp(batch,5,0,it) = errorProp(batch,0,5,it) = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)/(cosT*cosT);
     errorProp(batch,2,1,it) = errorProp(batch,1,2,it) = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-    errorProp(batch,3,1,it) = errorProp(batch,1,3,it) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inTrks.par(batch,IPT_IND,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(inTrks.par(batch,IPT_IND,it)*inTrks.par(batch,IPT_IND,it));
-    errorProp(batch,4,1,it) = errorProp(batch,1,4,it) = (k/inTrks.par(batch,IPT_IND,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp(batch,3,1,it) = errorProp(batch,1,3,it) = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*inTrks.par(batch,IPT_IND,it))-k*(sinP*sina+cosP*(1.0f-cCosPsina))/(inTrks.par(batch,IPT_IND,it)*inTrks.par(batch,IPT_IND,it));
+    errorProp(batch,4,1,it) = errorProp(batch,1,4,it) = (k/inTrks.par(batch,IPT_IND,it))*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
     errorProp(batch,5,1,it) = errorProp(batch,1,5,it) = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
     errorProp(batch,2,4,it) = errorProp(batch,4,2,it) = -inTrks.par(batch,IPT_IND,it)*sinT/(cosT*k);
     errorProp(batch,3,4,it) = errorProp(batch,4,3,it) = sinT*deltaZ/(cosT*k);
@@ -625,9 +625,9 @@ void update(const CBTRK &trk, const CBHIT &hit) {
         for ( int it = 0; it < bsize; ++it ) {
           H_trk_cov(batch,i,j,it) = trk.cov(batch,i,j,it);
           if(i == j)
-            Ht(batch,j,i,it) = 1.0;
+            Ht(batch,j,i,it) = 1.0f;
           else
-            Ht(batch,j,i,it) = 0.0;
+            Ht(batch,j,i,it) = 0.0f;
         }
       }
     }
@@ -656,7 +656,7 @@ void update(const CBTRK &trk, const CBHIT &hit) {
       det[it] = mat(batch,0,0,it)*(mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it))
               - mat(batch,0,1,it)*(mat(batch,1,0,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,0,it))
               + mat(batch,0,2,it)*(mat(batch,1,0,it)*mat(batch,2,1,it)-mat(batch,1,1,it)*mat(batch,2,0,it));
-      det[it] = 1.0/det[it];
+      det[it] = 1.0f/det[it];
 
       temp_33(batch,0,0,it) =      det[it] * (mat(batch,1,1,it)*mat(batch,2,2,it)-mat(batch,1,2,it)*mat(batch,2,1,it));
       temp_33(batch,0,1,it) = -1 * det[it] * (mat(batch,0,1,it)*mat(batch,2,2,it)-mat(batch,0,2,it)*mat(batch,2,1,it));
@@ -719,8 +719,8 @@ void update(const CBTRK &trk, const CBHIT &hit) {
 
 void averageOutputs(MPTRK* &outtrk, MPHIT* &hit) {
 
-  float avgx = 0, avgy = 0, avgz = 0;
-  float avgdx = 0, avgdy = 0, avgdz = 0;
+  double avgx = 0, avgy = 0, avgz = 0;
+  double avgdx = 0, avgdy = 0, avgdz = 0;
   for (size_t ie=0;ie<nevts;++ie) { // loop over events
     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
       for (size_t it=0;it<bsize;++it) {
@@ -739,15 +739,15 @@ void averageOutputs(MPTRK* &outtrk, MPHIT* &hit) {
       }
     }
   }
-  avgx = avgx/float(nevts*ntrks);
-  avgy = avgy/float(nevts*ntrks);
-  avgz = avgz/float(nevts*ntrks);
-  avgdx = avgdx/float(nevts*ntrks);
-  avgdy = avgdy/float(nevts*ntrks);
-  avgdz = avgdz/float(nevts*ntrks);
+  avgx = avgx/double(nevts*ntrks);
+  avgy = avgy/double(nevts*ntrks);
+  avgz = avgz/double(nevts*ntrks);
+  avgdx = avgdx/double(nevts*ntrks);
+  avgdy = avgdy/double(nevts*ntrks);
+  avgdz = avgdz/double(nevts*ntrks);
 
-  float stdx = 0, stdy = 0, stdz = 0;
-  float stddx = 0, stddy = 0, stddz = 0;
+  double stdx = 0, stdy = 0, stdz = 0;
+  double stddx = 0, stddy = 0, stddz = 0;
   for (size_t ie=0;ie<nevts;++ie) { // loop over events
     for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
       for (size_t it=0;it<bsize;++it) {
@@ -767,12 +767,12 @@ void averageOutputs(MPTRK* &outtrk, MPHIT* &hit) {
     }
   }
 
-  stdx = sqrtf(stdx/float(nevts*ntrks));
-  stdy = sqrtf(stdy/float(nevts*ntrks));
-  stdz = sqrtf(stdz/float(nevts*ntrks));
-  stddx = sqrtf(stddx/float(nevts*ntrks));
-  stddy = sqrtf(stddy/float(nevts*ntrks));
-  stddz = sqrtf(stddz/float(nevts*ntrks));
+  stdx = sqrtf(stdx/double(nevts*ntrks));
+  stdy = sqrtf(stdy/double(nevts*ntrks));
+  stdz = sqrtf(stdz/double(nevts*ntrks));
+  stddx = sqrtf(stddx/double(nevts*ntrks));
+  stddy = sqrtf(stddy/double(nevts*ntrks));
+  stddz = sqrtf(stddz/double(nevts*ntrks));
 
   printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
   printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
