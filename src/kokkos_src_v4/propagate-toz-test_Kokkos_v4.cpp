@@ -741,7 +741,7 @@ int main (int argc, char* argv[]) {
    size_t mp3x6_view_bytes   = mp3x6_view_type::shmem_size();
    size_t mp6x6SF_view_bytes = mp6x6SF_view_type::shmem_size();
 
-   auto total_shared_bytes =mp6x6F_bytes+mp3x3_view_bytes+mp3x6_view_bytes+mp6x6SF_view_bytes ;
+   auto total_shared_bytes =mp6x6F_bytes+mp6x6F_bytes+mp3x3_view_bytes+mp3x6_view_bytes+mp6x6SF_view_bytes ;
 
    int shared_view_level = 0;
 

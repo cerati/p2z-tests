@@ -47,6 +47,24 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define num_streams 1
 #endif
 
+#define loadData(dst, src, tid, itrsize) \
+  _Pragma("unroll")                      \
+  for(int ip=0; ip<itrsize; ++ip) {      \
+    dst[ip] = src[ip*bsize + tid];       \
+  }                               
+
+#define saveData(dst, src, tid, itrsize) \
+  _Pragma("unroll")                      \
+  for(int ip=0; ip<itrsize; ++ip) {      \
+    dst[ip*bsize + tid] = src[ip];       \
+  }                               
+
+#define iparX     0
+#define iparY     1
+#define iparZ     2
+#define iparIpt   3
+#define iparPhi   4
+#define iparTheta 5
 
 KOKKOS_FUNCTION size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -120,6 +138,53 @@ struct MPTRK {
 struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
+};
+
+struct MP1I_ {
+  int data[1];
+};
+
+struct MP22I_ {
+  int data[22];
+};
+
+struct MP3F_ {
+  float data[3];
+};
+
+struct MP6F_ {
+  float data[6];
+};
+
+struct MP3x3_ {
+  float data[9];
+};
+struct MP3x6_ {
+  float data[18];
+};
+
+struct MP3x3SF_ {
+  float data[6];
+};
+
+struct MP6x6SF_ {
+  float data[21];
+};
+
+struct MP6x6F_ {
+  float data[36];
+};
+
+struct MPTRK_ {
+  MP6F_    par;
+  MP6x6SF_ cov;
+  MP1I_    q;
+//  MP22I_   hitidx;
+};
+
+struct MPHIT_ {
+  MP3F_    pos;
+  MP3x3SF_ cov;
 };
 
 float randn(float mu, float sigma) {
@@ -319,195 +384,200 @@ Kokkos::View<MPHIT*>::HostMirror prepareHits(AHIT inputhit, Kokkos::View<MPHIT*>
 
 #define N bsize
 template<typename member_type>
-KOKKOS_FUNCTION void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, const member_type& teamMember) {
+KOKKOS_FUNCTION void MultHelixPropEndcap(const MP6x6F_* A, const MP6x6SF_* B, MP6x6F_* C, const member_type& teamMember) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
   Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&] (const size_t n)
   {
-    c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
-    c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
-    c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
-    c[ 3*N+n] = b[ 6*N+n] + a[ 2*N+n]*b[ 8*N+n] + a[ 3*N+n]*b[ 9*N+n] + a[ 4*N+n]*b[13*N+n] + a[ 5*N+n]*b[18*N+n];
-    c[ 4*N+n] = b[10*N+n] + a[ 2*N+n]*b[12*N+n] + a[ 3*N+n]*b[13*N+n] + a[ 4*N+n]*b[14*N+n] + a[ 5*N+n]*b[19*N+n];
-    c[ 5*N+n] = b[15*N+n] + a[ 2*N+n]*b[17*N+n] + a[ 3*N+n]*b[18*N+n] + a[ 4*N+n]*b[19*N+n] + a[ 5*N+n]*b[20*N+n];
-    c[ 6*N+n] = b[ 1*N+n] + a[ 8*N+n]*b[ 3*N+n] + a[ 9*N+n]*b[ 6*N+n] + a[10*N+n]*b[10*N+n] + a[11*N+n]*b[15*N+n];
-    c[ 7*N+n] = b[ 2*N+n] + a[ 8*N+n]*b[ 4*N+n] + a[ 9*N+n]*b[ 7*N+n] + a[10*N+n]*b[11*N+n] + a[11*N+n]*b[16*N+n];
-    c[ 8*N+n] = b[ 4*N+n] + a[ 8*N+n]*b[ 5*N+n] + a[ 9*N+n]*b[ 8*N+n] + a[10*N+n]*b[12*N+n] + a[11*N+n]*b[17*N+n];
-    c[ 9*N+n] = b[ 7*N+n] + a[ 8*N+n]*b[ 8*N+n] + a[ 9*N+n]*b[ 9*N+n] + a[10*N+n]*b[13*N+n] + a[11*N+n]*b[18*N+n];
-    c[10*N+n] = b[11*N+n] + a[ 8*N+n]*b[12*N+n] + a[ 9*N+n]*b[13*N+n] + a[10*N+n]*b[14*N+n] + a[11*N+n]*b[19*N+n];
-    c[11*N+n] = b[16*N+n] + a[ 8*N+n]*b[17*N+n] + a[ 9*N+n]*b[18*N+n] + a[10*N+n]*b[19*N+n] + a[11*N+n]*b[20*N+n];
-    c[12*N+n] = 0;
-    c[13*N+n] = 0;
-    c[14*N+n] = 0;
-    c[15*N+n] = 0;
-    c[16*N+n] = 0;
-    c[17*N+n] = 0;
-    c[18*N+n] = b[ 6*N+n];
-    c[19*N+n] = b[ 7*N+n];
-    c[20*N+n] = b[ 8*N+n];
-    c[21*N+n] = b[ 9*N+n];
-    c[22*N+n] = b[13*N+n];
-    c[23*N+n] = b[18*N+n];
-    c[24*N+n] = a[26*N+n]*b[ 3*N+n] + a[27*N+n]*b[ 6*N+n] + b[10*N+n] + a[29*N+n]*b[15*N+n];
-    c[25*N+n] = a[26*N+n]*b[ 4*N+n] + a[27*N+n]*b[ 7*N+n] + b[11*N+n] + a[29*N+n]*b[16*N+n];
-    c[26*N+n] = a[26*N+n]*b[ 5*N+n] + a[27*N+n]*b[ 8*N+n] + b[12*N+n] + a[29*N+n]*b[17*N+n];
-    c[27*N+n] = a[26*N+n]*b[ 8*N+n] + a[27*N+n]*b[ 9*N+n] + b[13*N+n] + a[29*N+n]*b[18*N+n];
-    c[28*N+n] = a[26*N+n]*b[12*N+n] + a[27*N+n]*b[13*N+n] + b[14*N+n] + a[29*N+n]*b[19*N+n];
-    c[29*N+n] = a[26*N+n]*b[17*N+n] + a[27*N+n]*b[18*N+n] + b[19*N+n] + a[29*N+n]*b[20*N+n];
-    c[30*N+n] = b[15*N+n];
-    c[31*N+n] = b[16*N+n];
-    c[32*N+n] = b[17*N+n];
-    c[33*N+n] = b[18*N+n];
-    c[34*N+n] = b[19*N+n];
-    c[35*N+n] = b[20*N+n];
+    c[ 0] = b[ 0] + a[ 2]*b[ 3] + a[ 3]*b[ 6] + a[ 4]*b[10] + a[ 5]*b[15];
+    c[ 1] = b[ 1] + a[ 2]*b[ 4] + a[ 3]*b[ 7] + a[ 4]*b[11] + a[ 5]*b[16];
+    c[ 2] = b[ 3] + a[ 2]*b[ 5] + a[ 3]*b[ 8] + a[ 4]*b[12] + a[ 5]*b[17];
+    c[ 3] = b[ 6] + a[ 2]*b[ 8] + a[ 3]*b[ 9] + a[ 4]*b[13] + a[ 5]*b[18];
+    c[ 4] = b[10] + a[ 2]*b[12] + a[ 3]*b[13] + a[ 4]*b[14] + a[ 5]*b[19];
+    c[ 5] = b[15] + a[ 2]*b[17] + a[ 3]*b[18] + a[ 4]*b[19] + a[ 5]*b[20];
+    c[ 6] = b[ 1] + a[ 8]*b[ 3] + a[ 9]*b[ 6] + a[10]*b[10] + a[11]*b[15];
+    c[ 7] = b[ 2] + a[ 8]*b[ 4] + a[ 9]*b[ 7] + a[10]*b[11] + a[11]*b[16];
+    c[ 8] = b[ 4] + a[ 8]*b[ 5] + a[ 9]*b[ 8] + a[10]*b[12] + a[11]*b[17];
+    c[ 9] = b[ 7] + a[ 8]*b[ 8] + a[ 9]*b[ 9] + a[10]*b[13] + a[11]*b[18];
+    c[10] = b[11] + a[ 8]*b[12] + a[ 9]*b[13] + a[10]*b[14] + a[11]*b[19];
+    c[11] = b[16] + a[ 8]*b[17] + a[ 9]*b[18] + a[10]*b[19] + a[11]*b[20];
+    c[12] = 0;
+    c[13] = 0;
+    c[14] = 0;
+    c[15] = 0;
+    c[16] = 0;
+    c[17] = 0;
+    c[18] = b[ 6];
+    c[19] = b[ 7];
+    c[20] = b[ 8];
+    c[21] = b[ 9];
+    c[22] = b[13];
+    c[23] = b[18];
+    c[24] = a[26]*b[ 3] + a[27]*b[ 6] + b[10] + a[29]*b[15];
+    c[25] = a[26]*b[ 4] + a[27]*b[ 7] + b[11] + a[29]*b[16];
+    c[26] = a[26]*b[ 5] + a[27]*b[ 8] + b[12] + a[29]*b[17];
+    c[27] = a[26]*b[ 8] + a[27]*b[ 9] + b[13] + a[29]*b[18];
+    c[28] = a[26]*b[12] + a[27]*b[13] + b[14] + a[29]*b[19];
+    c[29] = a[26]*b[17] + a[27]*b[18] + b[19] + a[29]*b[20];
+    c[30] = b[15];
+    c[31] = b[16];
+    c[32] = b[17];
+    c[33] = b[18];
+    c[34] = b[19];
+    c[35] = b[20];
   });
 }
 
 template<typename member_type>
-KOKKOS_FUNCTION void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, const member_type &teamMember) {
+KOKKOS_FUNCTION void MultHelixPropTranspEndcap(const MP6x6F_* A, const MP6x6F_* B, MP6x6SF_* C, const member_type &teamMember) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
   Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&] (const size_t n)
   {
-    c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
-    c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
-    c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
-    c[ 3*N+n] = b[12*N+n] + b[14*N+n]*a[ 2*N+n] + b[15*N+n]*a[ 3*N+n] + b[16*N+n]*a[ 4*N+n] + b[17*N+n]*a[ 5*N+n];
-    c[ 4*N+n] = b[13*N+n] + b[14*N+n]*a[ 8*N+n] + b[15*N+n]*a[ 9*N+n] + b[16*N+n]*a[10*N+n] + b[17*N+n]*a[11*N+n];
-    c[ 5*N+n] = 0;
-    c[ 6*N+n] = b[18*N+n] + b[20*N+n]*a[ 2*N+n] + b[21*N+n]*a[ 3*N+n] + b[22*N+n]*a[ 4*N+n] + b[23*N+n]*a[ 5*N+n];
-    c[ 7*N+n] = b[19*N+n] + b[20*N+n]*a[ 8*N+n] + b[21*N+n]*a[ 9*N+n] + b[22*N+n]*a[10*N+n] + b[23*N+n]*a[11*N+n];
-    c[ 8*N+n] = 0;
-    c[ 9*N+n] = b[21*N+n];
-    c[10*N+n] = b[24*N+n] + b[26*N+n]*a[ 2*N+n] + b[27*N+n]*a[ 3*N+n] + b[28*N+n]*a[ 4*N+n] + b[29*N+n]*a[ 5*N+n];
-    c[11*N+n] = b[25*N+n] + b[26*N+n]*a[ 8*N+n] + b[27*N+n]*a[ 9*N+n] + b[28*N+n]*a[10*N+n] + b[29*N+n]*a[11*N+n];
-    c[12*N+n] = 0;
-    c[13*N+n] = b[27*N+n];
-    c[14*N+n] = b[26*N+n]*a[26*N+n] + b[27*N+n]*a[27*N+n] + b[28*N+n] + b[29*N+n]*a[29*N+n];
-    c[15*N+n] = b[30*N+n] + b[32*N+n]*a[ 2*N+n] + b[33*N+n]*a[ 3*N+n] + b[34*N+n]*a[ 4*N+n] + b[35*N+n]*a[ 5*N+n];
-    c[16*N+n] = b[31*N+n] + b[32*N+n]*a[ 8*N+n] + b[33*N+n]*a[ 9*N+n] + b[34*N+n]*a[10*N+n] + b[35*N+n]*a[11*N+n];
-    c[17*N+n] = 0;
-    c[18*N+n] = b[33*N+n];
-    c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
-    c[20*N+n] = b[35*N+n];
+    c[ 0] = b[ 0] + b[ 2]*a[ 2] + b[ 3]*a[ 3] + b[ 4]*a[ 4] + b[ 5]*a[ 5];
+    c[ 1] = b[ 6] + b[ 8]*a[ 2] + b[ 9]*a[ 3] + b[10]*a[ 4] + b[11]*a[ 5];
+    c[ 2] = b[ 7] + b[ 8]*a[ 8] + b[ 9]*a[ 9] + b[10]*a[10] + b[11]*a[11];
+    c[ 3] = b[12] + b[14]*a[ 2] + b[15]*a[ 3] + b[16]*a[ 4] + b[17]*a[ 5];
+    c[ 4] = b[13] + b[14]*a[ 8] + b[15]*a[ 9] + b[16]*a[10] + b[17]*a[11];
+    c[ 5] = 0;
+    c[ 6] = b[18] + b[20]*a[ 2] + b[21]*a[ 3] + b[22]*a[ 4] + b[23]*a[ 5];
+    c[ 7] = b[19] + b[20]*a[ 8] + b[21]*a[ 9] + b[22]*a[10] + b[23]*a[11];
+    c[ 8] = 0;
+    c[ 9] = b[21];
+    c[10] = b[24] + b[26]*a[ 2] + b[27]*a[ 3] + b[28]*a[ 4] + b[29]*a[ 5];
+    c[11] = b[25] + b[26]*a[ 8] + b[27]*a[ 9] + b[28]*a[10] + b[29]*a[11];
+    c[12] = 0;
+    c[13] = b[27];
+    c[14] = b[26]*a[26] + b[27]*a[27] + b[28] + b[29]*a[29];
+    c[15] = b[30] + b[32]*a[ 2] + b[33]*a[ 3] + b[34]*a[ 4] + b[35]*a[ 5];
+    c[16] = b[31] + b[32]*a[ 8] + b[33]*a[ 9] + b[34]*a[10] + b[35]*a[11];
+    c[17] = 0;
+    c[18] = b[33];
+    c[19] = b[32]*a[26] + b[33]*a[27] + b[34] + b[35]*a[29];
+    c[20] = b[35];
   });
 }
 
 template <typename member_type>
-KOKKOS_FUNCTION void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C, const member_type &teamMember) {
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+KOKKOS_FUNCTION void KalmanGainInv(const MP6x6SF_* A, const MP3x3SF_* B, MP3x3_* C, const member_type &teamMember) {
+  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
+  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
+  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
   Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember,bsize), [&] (const size_t n)
   {
     double det =
-      ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
-      ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
-      ((a[2*N+n]+b[2*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n]))));
+      ((a[0]+b[0])*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])))) -
+      ((a[1]+b[1])*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])))) +
+      ((a[2]+b[2])*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3]))));
     double invdet = 1.0/det;
 
-    c[ 0*N+n] =  invdet*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
-    c[ 1*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
-    c[ 2*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
-    c[ 3*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])));
-    c[ 4*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[2*N+n]+b[2*N+n])));
-    c[ 5*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
-    c[ 6*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n])));
-    c[ 7*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
-    c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
+    c[ 0] =  invdet*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])));
+    c[ 1] =  -1*invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[7]+b[4])));
+    c[ 2] =  invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[7]+b[4])));
+    c[ 3] =  -1*invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])));
+    c[ 4] =  invdet*(((a[ 0]+b[ 0]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[2]+b[2])));
+    c[ 5] =  -1*invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+    c[ 6] =  invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3])));
+    c[ 7] =  -1*invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+    c[ 8] =  invdet*(((a[ 0]+b[ 0]) *(a[6]+b[3])) - ((a[1]+b[1]) *(a[1]+b[1])));
   });
 }
 template <typename member_type>
-KOKKOS_FUNCTION void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C, const member_type &teamMember) {
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
+KOKKOS_FUNCTION void KalmanGain(const MP6x6SF_* A, const MP3x3_* B, MP3x6_* C, const member_type &teamMember) {
+  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
+  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
+  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
   Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&](const size_t n)
   {
-    c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
-    c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
-    c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
-    c[ 3*N+n] = a[1*N+n]*b[0*N+n] + a[6*N+n]*b[3*N+n] + a[7*N+n]*b[6*N+n];
-    c[ 4*N+n] = a[1*N+n]*b[1*N+n] + a[6*N+n]*b[4*N+n] + a[7*N+n]*b[7*N+n];
-    c[ 5*N+n] = a[1*N+n]*b[2*N+n] + a[6*N+n]*b[5*N+n] + a[7*N+n]*b[8*N+n];
-    c[ 6*N+n] = a[2*N+n]*b[0*N+n] + a[7*N+n]*b[3*N+n] + a[11*N+n]*b[6*N+n];
-    c[ 7*N+n] = a[2*N+n]*b[1*N+n] + a[7*N+n]*b[4*N+n] + a[11*N+n]*b[7*N+n];
-    c[ 8*N+n] = a[2*N+n]*b[2*N+n] + a[7*N+n]*b[5*N+n] + a[11*N+n]*b[8*N+n];
-    c[ 9*N+n] = a[3*N+n]*b[0*N+n] + a[8*N+n]*b[3*N+n] + a[12*N+n]*b[6*N+n];
-    c[ 10*N+n] = a[3*N+n]*b[1*N+n] + a[8*N+n]*b[4*N+n] + a[12*N+n]*b[7*N+n];
-    c[ 11*N+n] = a[3*N+n]*b[2*N+n] + a[8*N+n]*b[5*N+n] + a[12*N+n]*b[8*N+n];
-    c[ 12*N+n] = a[4*N+n]*b[0*N+n] + a[9*N+n]*b[3*N+n] + a[13*N+n]*b[6*N+n];
-    c[ 13*N+n] = a[4*N+n]*b[1*N+n] + a[9*N+n]*b[4*N+n] + a[13*N+n]*b[7*N+n];
-    c[ 14*N+n] = a[4*N+n]*b[2*N+n] + a[9*N+n]*b[5*N+n] + a[13*N+n]*b[8*N+n];
-    c[ 15*N+n] = a[5*N+n]*b[0*N+n] + a[10*N+n]*b[3*N+n] + a[14*N+n]*b[6*N+n];
-    c[ 16*N+n] = a[5*N+n]*b[1*N+n] + a[10*N+n]*b[4*N+n] + a[14*N+n]*b[7*N+n];
-    c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
+    c[ 0] = a[0]*b[0] + a[1]*b[3] + a[2]*b[6];
+    c[ 1] = a[0]*b[1] + a[1]*b[4] + a[2]*b[7];
+    c[ 2] = a[0]*b[2] + a[1]*b[5] + a[2]*b[8];
+    c[ 3] = a[1]*b[0] + a[6]*b[3] + a[7]*b[6];
+    c[ 4] = a[1]*b[1] + a[6]*b[4] + a[7]*b[7];
+    c[ 5] = a[1]*b[2] + a[6]*b[5] + a[7]*b[8];
+    c[ 6] = a[2]*b[0] + a[7]*b[3] + a[11]*b[6];
+    c[ 7] = a[2]*b[1] + a[7]*b[4] + a[11]*b[7];
+    c[ 8] = a[2]*b[2] + a[7]*b[5] + a[11]*b[8];
+    c[ 9] = a[3]*b[0] + a[8]*b[3] + a[12]*b[6];
+    c[ 10] = a[3]*b[1] + a[8]*b[4] + a[12]*b[7];
+    c[ 11] = a[3]*b[2] + a[8]*b[5] + a[12]*b[8];
+    c[ 12] = a[4]*b[0] + a[9]*b[3] + a[13]*b[6];
+    c[ 13] = a[4]*b[1] + a[9]*b[4] + a[13]*b[7];
+    c[ 14] = a[4]*b[2] + a[9]*b[5] + a[13]*b[8];
+    c[ 15] = a[5]*b[0] + a[10]*b[3] + a[14]*b[6];
+    c[ 16] = a[5]*b[1] + a[10]*b[4] + a[14]*b[7];
+    c[ 17] = a[5]*b[2] + a[10]*b[5] + a[14]*b[8];
   });
 }
 
 template <typename member_type>
-KOKKOS_FUNCTION void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP3x3* inverse_temp, MP3x6* kGain, MP6x6SF* newErr, const member_type& teamMember){
-  KalmanGainInv(trkErr,hitErr,inverse_temp, teamMember);
-  KalmanGain(trkErr,inverse_temp,kGain, teamMember);
+KOKKOS_FUNCTION void KalmanUpdate(MP6x6SF_* trkErr, MP6F_* inPar, const MP3x3SF_* hitErr, const MP3F_* msP, const member_type& teamMember){
+  MP3x3_ inverse_temp;
+  MP3x6_ kGain;
+  MP6x6SF_ newErr;
+  KalmanGainInv(trkErr,hitErr,&inverse_temp, teamMember);
+  KalmanGain(trkErr,&inverse_temp,&kGain, teamMember);
 
   Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) {
-    const float xin = x(inPar,it);
-    const float yin = y(inPar,it);
-    const float zin = z(inPar,it);
-    const float ptin = 1.0f/ipt(inPar,it);
-    const float phiin = phi(inPar,it);
-    const float thetain = theta(inPar,it);
-    const float xout = x(msP,it);
-    const float yout = y(msP,it);
-    const float zout = z(msP,it);
+    float *inParData = inPar->data;
+    float *trkErrData = trkErr->data;
+    const float xin = inParData[iparX];
+    const float yin = inParData[iparY];
+    const float zin = inParData[iparZ];
+    const float ptin = 1.0f/inParData[iparIpt];
+    const float phiin = inParData[iparPhi];
+    const float thetain = inParData[iparTheta];
+    const float xout = msP->data[iparX];
+    const float yout = msP->data[iparY];
+    //const float zout = msP->data[iparZ];
   
-    float xnew = xin + (kGain->data[0*bsize+it]*(xout-xin)) +(kGain->data[1*bsize+it]*(yout-yin));
-    float ynew = yin + (kGain->data[3*bsize+it]*(xout-xin)) +(kGain->data[4*bsize+it]*(yout-yin));
-    float znew = zin + (kGain->data[6*bsize+it]*(xout-xin)) +(kGain->data[7*bsize+it]*(yout-yin));
-    float ptnew = ptin + (kGain->data[9*bsize+it]*(xout-xin)) +(kGain->data[10*bsize+it]*(yout-yin));
-    float phinew = phiin + (kGain->data[12*bsize+it]*(xout-xin)) +(kGain->data[13*bsize+it]*(yout-yin));
-    float thetanew = thetain + (kGain->data[15*bsize+it]*(xout-xin)) +(kGain->data[16*bsize+it]*(yout-yin));
+    float xnew = xin + (kGain.data[0]*(xout-xin)) +(kGain.data[1]*(yout-yin));
+    float ynew = yin + (kGain.data[3]*(xout-xin)) +(kGain.data[4]*(yout-yin));
+    float znew = zin + (kGain.data[6]*(xout-xin)) +(kGain.data[7]*(yout-yin));
+    float ptnew = ptin + (kGain.data[9]*(xout-xin)) +(kGain.data[10]*(yout-yin));
+    float phinew = phiin + (kGain.data[12]*(xout-xin)) +(kGain.data[13]*(yout-yin));
+    float thetanew = thetain + (kGain.data[15]*(xout-xin)) +(kGain.data[16]*(yout-yin));
 
-    newErr->data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[2*bsize+it]);
-    newErr->data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[7*bsize+it]);
-    newErr->data[2*bsize+it] = trkErr->data[2*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr->data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr->data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[0] = trkErrData[0] - (kGain.data[0]*trkErrData[0]+kGain.data[1]*trkErrData[1]+kGain.data[2]*trkErrData[2]);
+    newErr.data[1] = trkErrData[1] - (kGain.data[0]*trkErrData[1]+kGain.data[1]*trkErrData[6]+kGain.data[2]*trkErrData[7]);
+    newErr.data[2] = trkErrData[2] - (kGain.data[0]*trkErrData[2]+kGain.data[1]*trkErrData[7]+kGain.data[2]*trkErrData[11]);
+    newErr.data[3] = trkErrData[3] - (kGain.data[0]*trkErrData[3]+kGain.data[1]*trkErrData[8]+kGain.data[2]*trkErrData[12]);
+    newErr.data[4] = trkErrData[4] - (kGain.data[0]*trkErrData[4]+kGain.data[1]*trkErrData[9]+kGain.data[2]*trkErrData[13]);
+    newErr.data[5] = trkErrData[5] - (kGain.data[0]*trkErrData[5]+kGain.data[1]*trkErrData[10]+kGain.data[2]*trkErrData[14]);
   
-    newErr->data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[7*bsize+it]);
-    newErr->data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr->data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr->data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[6] = trkErrData[6] - (kGain.data[3]*trkErrData[1]+kGain.data[4]*trkErrData[6]+kGain.data[5]*trkErrData[7]);
+    newErr.data[7] = trkErrData[7] - (kGain.data[3]*trkErrData[2]+kGain.data[4]*trkErrData[7]+kGain.data[5]*trkErrData[11]);
+    newErr.data[8] = trkErrData[8] - (kGain.data[3]*trkErrData[3]+kGain.data[4]*trkErrData[8]+kGain.data[5]*trkErrData[12]);
+    newErr.data[9] = trkErrData[9] - (kGain.data[3]*trkErrData[4]+kGain.data[4]*trkErrData[9]+kGain.data[5]*trkErrData[13]);
+    newErr.data[10] = trkErrData[10] - (kGain.data[3]*trkErrData[5]+kGain.data[4]*trkErrData[10]+kGain.data[5]*trkErrData[14]);
   
-    newErr->data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr->data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr->data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[11] = trkErrData[11] - (kGain.data[6]*trkErrData[2]+kGain.data[7]*trkErrData[7]+kGain.data[8]*trkErrData[11]);
+    newErr.data[12] = trkErrData[12] - (kGain.data[6]*trkErrData[3]+kGain.data[7]*trkErrData[8]+kGain.data[8]*trkErrData[12]);
+    newErr.data[13] = trkErrData[13] - (kGain.data[6]*trkErrdata[4]+kGain.data[7]*trkErrData[9]+kGain.data[8]*trkErrData[13]);
+    newErr.data[14] = trkErrData[14] - (kGain.data[6]*trkErrData[5]+kGain.data[7]*trkErrData[10]+kGain.data[8]*trkErrData[14]);
   
-    newErr->data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr->data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[15] = trkErrData[15] - (kGain.data[9]*trkErrData[3]+kGain.data[10]*trkErrData[8]+kGain.data[11]*trkErrData[12]);
+    newErr.data[16] = trkErrData[16] - (kGain.data[9]*trkErrData[4]+kGain.data[10]*trkErrData[9]+kGain.data[11]*trkErrData[13]);
+    newErr.data[17] = trkErrData[17] - (kGain.data[9]*trkErrData[5]+kGain.data[10]*trkErrData[10]+kGain.data[11]*trkErrData[14]);
   
-    newErr->data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[18] = trkErrData[18] - (kGain.data[12]*trkErrData[4]+kGain.data[13]*trkErrData[9]+kGain.data[14]*trkErrData[13]);
+    newErr.data[19] = trkErrDta[12]*trkErrData[5]+kGain.data[13]*trkErrData[10]+kGain.data[14]*trkErrData[14]);
   
-    newErr->data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain->data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[17*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[20] = trkErrData[20] - (kGain.data[15]*trkErrData[5]+kGain.data[16]*trkErrData[10]+kGain.data[17]*trkErrData[14]);
 
-    setx(inPar,it,xnew );
-    sety(inPar,it,ynew );
-    setz(inPar,it,znew);
-    setipt(inPar,it, ptnew);
-    setphi(inPar,it, phinew);
-    settheta(inPar,it, thetanew);
+    inParData[iparX] = xnew;
+    inParData[iparY] = ynew;
+    inParData[iparZ] = znew;
+    inParData[iparIpt] = ptnew;
+    inParData[iparPhi] = phinew;
+    inParData[iparTheta] = thetanew;
   });
   Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) {
     #pragma unroll
     for (int i = 0; i < 21; i++){
-      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr->data[ i*bsize+it]; 
+      trkErrData[ i] = trkErrData[ i] - newErr.data[ i]; 
     }   
   });
 }
@@ -515,20 +585,26 @@ KOKKOS_FUNCTION void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* h
 constexpr float kfact = 100/3.8;
 
 template <typename member_type>
-KOKKOS_FUNCTION void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
-		  const MP1I* inChg, const MP3F* msP,
-	                MP6x6SF* outErr, MP6F* outPar,
- 		struct MP6x6F* errorProp, struct MP6x6F* temp, const member_type &teamMember) {
+KOKKOS_FUNCTION void propagateToZ(const MP6x6SF_* inErr, const MP6F_* inPar,
+		  const MP1I_* inChg, const MP3F_* msP,
+	                MP6x6SF_* outErr, MP6F_* outPar,
+ 		const member_type &teamMember) {
   //
+  struct MP6x6F_ errorProp, temp;
   Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&](const size_t it) {
-    const float zout = z(msP,it);
-    const float k = q(inChg,it)*kfact;//100/3.8;
-    const float deltaZ = zout - z(inPar,it);
-    const float pt = 1.0f/ipt(inPar,it);
-    const float cosP = cosf(phi(inPar,it));
-    const float sinP = sinf(phi(inPar,it));
-    const float cosT = cosf(theta(inPar,it));
-    const float sinT = sinf(theta(inPar,it));
+    const float *inParData = inPar->data;
+    float *outParData = outPar->data;
+    const float zout = msP->data[iparZ];
+    const float k = inChg->data[0]*kfact;//100/3.8;
+    const float deltaZ = zout - inParData[iparZ];
+    const float ipt_ = inParData[iparIpt];
+    const float pt = 1.0f/ipt_;
+    const float phi_ = inParData[iparPhi];
+    const float cosP = cosf(phi_);
+    const float sinP = sinf(phi_);
+    const float theta_ = inParData[iparTheta];
+    const float cosT = cosf(theta_);
+    const float sinT = sinf(theta_);
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
     const float icosT = 1.0f/cosT;
@@ -536,45 +612,40 @@ KOKKOS_FUNCTION void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
     const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
-    setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.0f-cosa)) );
-    sety(outPar,it, y(inPar,it) + k*(pyin*sina + pxin*(1.0f-cosa)) );
-    setz(outPar,it,zout);
-    setipt(outPar,it, ipt(inPar,it));
-    setphi(outPar,it, phi(inPar,it)+alpha );
-    settheta(outPar,it, theta(inPar,it) );
+    outParData[iparX] = inParData[iparX] + k*(pxin*sina - pyin*(1.0f-cosa));
+    outParData[iparY] = inParData[iparY] + k*(pyin*sina + pxin*(1.0f-cosa));
+    outParData[iparZ] = zout;
+    outParData[iparIpt] = ipt_;
+    outParData[iparPhi] = phi_ + alpha;
+    outParData[iparTheta] = theta_
     
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.0f;
+    //for (size_t i=0;i<6;++i) errorProp.data[PosInMtrx(i,i,6) + it] = 1.0f;
+    errorProp.data[PosInMtrx(0,0,6)] = 1.0f;
+    errorProp.data[PosInMtrx(1,1,6)] = 1.0f;
+    errorProp.data[PosInMtrx(2,2,6)] = 1.0f;
+    errorProp.data[PosInMtrx(3,3,6)] = 1.0f;
+    errorProp.data[PosInMtrx(4,4,6)] = 1.0f;
+    errorProp.data[PosInMtrx(5,5,6)] = 1.0f;
     //[Dec. 21, 2022] Added to have the same pattern as the cudauvm version.
-    errorProp->data[bsize*PosInMtrx(0,1,6) + it] = 0.0f;
-    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
-    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
-    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
-    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
-    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
-    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT*(icosTk);
-    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
-    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ*(icosT*icosTk);
-//    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-//    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)/(cosT*ipt(inPar,it))-k*(cosP*sina-sinP*(1.0f-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-//    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
-//    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)/(cosT*cosT);
-//    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-//    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt(inPar,it))-k*(sinP*sina+cosP*(1.0f-cCosPsina))/(ipt(inPar,it)*ipt(inPar,it));
-//    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt(inPar,it))*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-//    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-//    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT/(cosT*k);
-//    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
-//    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ/(cosT*cosT*k);
+    errorProp.data[PosInMtrx(0,1,6)] = 0.0f;
+    errorProp.data[PosInMtrx(0,2,6)] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
+    errorProp.data[PosInMtrx(0,3,6)] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp.data[PosInMtrx(0,4,6)] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
+    errorProp.data[PosInMtrx(0,5,6)] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
+    errorProp.data[PosInMtrx(1,2,6)] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
+    errorProp.data[PosInMtrx(1,3,6)] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp.data[PosInMtrx(1,4,6)] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp.data[PosInMtrx(1,5,6)] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
+    errorProp.data[PosInMtrx(4,2,6)] = -ipt_*sinT*(icosTk);
+    errorProp.data[PosInMtrx(4,3,6)] = sinT*deltaZ*(icosTk);
+    errorProp.data[PosInMtrx(4,5,6)] = ipt_*deltaZ*(icosT*icosTk);
   });
   //
-  MultHelixPropEndcap(errorProp, inErr, temp, teamMember);
-  MultHelixPropTranspEndcap(errorProp, temp, outErr, teamMember);
+  MultHelixPropEndcap(&errorProp, inErr, &temp, teamMember);
+  MultHelixPropTranspEndcap(&errorProp, &temp, outErr, teamMember);
 }
 
 int main (int argc, char* argv[]) {
@@ -665,20 +736,6 @@ int main (int argc, char* argv[]) {
    typedef Kokkos::TeamPolicy<>               team_policy;
    typedef Kokkos::TeamPolicy<>::member_type  member_type;
 
-   using mp6x6F_view_type  = Kokkos::View< MP6x6F,Kokkos::DefaultExecutionSpace::scratch_memory_space,Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
-   using mp3x3_view_type   = Kokkos::View< MP3x3,Kokkos::DefaultExecutionSpace::scratch_memory_space,Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
-   using mp3x6_view_type   = Kokkos::View< MP3x6,Kokkos::DefaultExecutionSpace::scratch_memory_space,Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
-   using mp6x6SF_view_type = Kokkos::View< MP6x6SF,Kokkos::DefaultExecutionSpace::scratch_memory_space,Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
-
-   size_t mp6x6F_bytes       = mp6x6F_view_type::shmem_size();
-   size_t mp3x3_view_bytes   = mp3x3_view_type::shmem_size();
-   size_t mp3x6_view_bytes   = mp3x6_view_type::shmem_size();
-   size_t mp6x6SF_view_bytes = mp6x6SF_view_type::shmem_size();
-
-   auto total_shared_bytes =mp6x6F_bytes+mp6x6F_bytes+mp3x3_view_bytes+mp3x6_view_bytes+mp6x6SF_view_bytes ;
-
-   int shared_view_level = 0;
-
    int team_policy_range = nevts*nb;  // number of teams
    int team_size = threadsperblockx;  // team size
    int vector_size = elementsperthread;  // thread size
@@ -697,22 +754,33 @@ int main (int argc, char* argv[]) {
      Kokkos::deep_copy(hit, h_hit);
 #endif
      {
-     Kokkos::parallel_for("Kernel", team_policy(team_policy_range,team_size,vector_size).set_scratch_size( 0, Kokkos::PerTeam( total_shared_bytes )),
+     Kokkos::parallel_for("Kernel", team_policy(team_policy_range,team_size,vector_size),
                                     KOKKOS_LAMBDA( const member_type &teamMember){
-        int ie = teamMember.league_rank()/nb;
-        int ib = teamMember.league_rank()% nb;
+         int ti = teamMember.league_rank();
+         struct MPTRK_ obtracks;
+         struct MPTRK_ btracks;
+         float *dstPtr = btracks.par.data;
+         float *srcPtr = trk[ti].par.data;
+         loadData(dstPtr,srcPtr,threadIdx.x,6);
+         dstPtr = btracks.cov.data;
+         srcPtr = trk[ti].cov.data;
+         loadData(dstPtr,srcPtr,threadIdx.x,21); 
+         int *dstPtrI = btracks.q.data; 
+         int *srcPtrI = trk[ti].q.data;
+         loadData(dstPtrI,srcPtrI,threadIdx.x,1);
 
-		mp6x6F_view_type errorProp( teamMember.team_scratch(shared_view_level) );
-        mp6x6F_view_type temp ( teamMember.team_scratch(shared_view_level));
-        mp3x3_view_type   inverse_temp ( teamMember.team_scratch(shared_view_level));
-        mp3x6_view_type   kGain ( teamMember.team_scratch(shared_view_level));
-        mp6x6SF_view_type  newErr( teamMember.team_scratch(shared_view_level));
-         const MPTRK* btracks = bTk(trk, ie, ib);
-         MPTRK* obtracks = bTk(outtrk, ie, ib);
+#pragma unroll
          for(size_t layer=0; layer<nlayer; ++layer) {
-            const MPHIT* bhits = bHit(hit, ie, ib,layer);
-            propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, (errorProp.data()), (temp.data()), teamMember); // vectorized function
-            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, (inverse_temp.data()), (kGain.data()), (newErr.data()), teamMember);
+            struct MPHIT_ bhits;
+            float *dstPtr2 = bhits.pos.data;
+            float *srcPtr2 = hit[layer+ti*nlayer].pos.data;
+            loadData(dstPtr2,srcPtr2,threadIdx.x,3);
+            dstPtr2 = bhits.cov.data;
+            srcPtr2 = hit[layer+ti*nlayer].cov.data;
+            loadData(dstPtr2,srcPtr2,threadIdx.x,6);
+
+            propagateToZ(&(btracks.cov), &(btracks.par), &(btracks.q), &(bhits.pos), &(obtracks.cov), &(obtracks.par), teamMember); // vectorized function
+            KalmanUpdate(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos), teamMember);
          }
      }); 
    }  

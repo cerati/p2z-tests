@@ -19,7 +19,7 @@ Also, use `-j` since build the kokkos library takes time.
 
 Makefile options:
 * KOKKOS_PATH - where the above src is downloaded (default: ${KOKKOS_ROOT})
-* KOKKOS_DEVICES - type of parallelism: `Cuda` for GPU
+* KOKKOS_DEVICES - type of parallelism: `OpenMP` for CPU; `OpenMP,Cuda` or `Cuda` for GPU
                    (default: Cuda)
 * KOKKOS_ARCH - type of hardware: `SKX` means skylake add Volta70 for V100
                 (default: Volta70)
@@ -27,9 +27,6 @@ Makefile options:
 * CXX - compiler 
   * use the nvcc wrapper for cuda and your preference for CPU (g++ 9 recommended)
     (default: ${KOKKOS_PATH}/bin/nvcc_wrapper)
-* NITER - the number of iterations (default: 5)
-* NLAYER - the number of layers (default: 20)
-* num_streams - the number of streams (default: 10)
-* prepin_hostmem - set to 1 to prepin host memory (default)
-                   set to 0 to disable host memory prepinning
+* NITER - the number of iterations (default: 10)
+* NLAYER - the number of layers (default: 20) 
 * INCLUDE_DATA - decide whether to include the memory transfer times or not for profiling (default: 1)
