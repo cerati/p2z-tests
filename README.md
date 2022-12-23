@@ -160,12 +160,16 @@ Here is the brief information on each version:
 
 `src/kokkos_src_v4`: has the same user data layouts and compute patterns 
                   as `src/kokkos_src_v3, but use multiple asynchronous device 
-                  instances (multiple CUDA streams); the best performing version.
+                  instances (multiple CUDA streams)
 
 `src/kokkos_src_v5`: target CUDA GPU without unified memory; has the same 
                   user data layouts and memory transfer patterns as the manual
                   CUDA_v4 version (`propagate-toz-test_CUDA_v4.cu`) but using 
                   a single device instance.
+
+`src/kokkos_src_v6`: has the same user data layouts and compute patterns 
+                  as `src/kokkos_src_v5, but use multiple asynchronous device 
+                  instances (multiple CUDA streams); the best performing version.
 
 Here we have basic instructions.
 
