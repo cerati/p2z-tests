@@ -15,7 +15,6 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 
 //#define DUMP_OUTPUT
 #define FIXED_RSEED
-//#define ADD_SYNC
 
 #ifndef bsize
 #define bsize 32
@@ -468,7 +467,7 @@ void KalmanUpdate(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3
     const float xin = x1(inPar,it);
     const float yin = _y1(inPar,it);
     const float zin = z1(inPar,it);
-    const float ptin = 1./ipt1(inPar,it);
+    const float ptin = 1.0f/ipt1(inPar,it);
     const float phiin = phi1(inPar,it);
     const float thetain = theta1(inPar,it);
     const float xout = x_pos1(msP,it);
@@ -516,13 +515,13 @@ void KalmanUpdate(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3
     setphi1(inPar,it, phinew);
     settheta1(inPar,it, thetanew);
   }
-#ifdef _OPENARC_
-#ifdef ADD_SYNC
-  #pragma acc barrier
-#endif
-#endif
-  //[DEBUG on Dec.8, 2020] below does not have any effect since trkErr is a local variable.
-  //trkErr = newErr;
+  #pragma acc loop vector
+  for (size_t it=0;it<bsize;++it) {
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr->data[ i*bsize+it];
+    }   
+  }
 }
 
 
@@ -539,21 +538,21 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
     const float zout = z_pos1(msP,it);
     const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z1(inPar,it);
-    const float pt = 1./ipt1(inPar,it);
+    const float pt = 1.0f/ipt1(inPar,it);
     const float cosP = cosf(phi1(inPar,it));
     const float sinP = sinf(phi1(inPar,it));
     const float cosT = cosf(theta1(inPar,it));
     const float sinT = sinf(theta1(inPar,it));
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float icosT = 1.0/cosT;
+    const float icosT = 1.0f/cosT;
     const float icosTk = icosT/k;
     const float alpha = deltaZ*sinT*ipt1(inPar,it)*icosTk;
     //const float alpha = deltaZ*sinT*ipt1(inPar,it)/(cosT*k);
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
-    setx1(outPar,it, x1(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
-    sety1(outPar,it, _y1(inPar,it) + k*(pyin*sina + pxin*(1.-cosa)) );
+    setx1(outPar,it, x1(inPar,it) + k*(pxin*sina - pyin*(1.0f-cosa)) );
+    sety1(outPar,it, _y1(inPar,it) + k*(pyin*sina + pxin*(1.0f-cosa)) );
     setz1(outPar,it,zout);
     setipt1(outPar,it, ipt1(inPar,it));
     setphi1(outPar,it, phi1(inPar,it)+alpha );
@@ -562,29 +561,26 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
 
-    for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
+    //for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.0f;
+    errorProp->data[bsize*PosInMtrx(0,0,6) + it] = 1.0f;
+    errorProp->data[bsize*PosInMtrx(1,1,6) + it] = 1.0f;
+    errorProp->data[bsize*PosInMtrx(2,2,6) + it] = 1.0f;
+    errorProp->data[bsize*PosInMtrx(3,3,6) + it] = 1.0f;
+    errorProp->data[bsize*PosInMtrx(4,4,6) + it] = 1.0f;
+    errorProp->data[bsize*PosInMtrx(5,5,6) + it] = 1.0f;
+    //[Dec. 21, 2022] Added to have the same pattern as the cudauvm version.
+    errorProp->data[bsize*PosInMtrx(0,1,6) + it] = 0.0f;
     errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
-    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
+    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
+    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
     errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
-    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
     errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
     errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt1(inPar,it)*sinT*(icosTk);
     errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
     errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt1(inPar,it)*deltaZ*(icosT*icosTk);
-//    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)/cosT;
-//    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*ipt1(inPar,it))-k*(cosP*sina-sinP*(1.-cCosPsina))/(ipt1(inPar,it)*ipt1(inPar,it));
-//    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k/ipt1(inPar,it))*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-//    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)/(cosT*cosT);
-//    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)/cosT;
-//    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*ipt1(inPar,it))-k*(sinP*sina+cosP*(1.-cCosPsina))/(ipt1(inPar,it)*ipt1(inPar,it));
-//    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k/ipt1(inPar,it))*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-//    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)/(cosT*cosT);
-//    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt1(inPar,it)*sinT/(cosT*k);
-//    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ/(cosT*k);
-//    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt1(inPar,it)*deltaZ/(cosT*cosT*k);
   }
   //
   MultHelixPropEndcap(errorProp, inErr, temp);
@@ -592,6 +588,12 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
 }
 
 int main (int argc, char* argv[]) {
+
+#if include_data == 1
+  printf("Measure Both Memory Transfer Times and Compute Times!\n");
+#else
+  printf("Measure Compute Times Only!\n");
+#endif
 
    int itr;
    struct ATRK inputtrk = {
@@ -637,14 +639,16 @@ int main (int argc, char* argv[]) {
 
 #pragma acc enter data create(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
 
+#if include_data == 0
+     #pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb*nlayer]) 
+#endif
+
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
    setup_time = ((double)(setup_stop - setup_start))*0.001;
 
    printf("done preparing!\n");
    
-  
-
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
@@ -654,7 +658,9 @@ int main (int argc, char* argv[]) {
    start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
    for(itr=0; itr<NITER; itr++) {
+#if include_data == 1
      #pragma acc update device(trk[0:nevts*nb], hit[0:nevts*nb*nlayer]) 
+#endif
      {
      #pragma acc parallel loop gang vector_length(bsize) collapse(2) present(trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb]) 
      for (size_t ie=0;ie<nevts;++ie) { // loop over events
@@ -678,11 +684,16 @@ int main (int argc, char* argv[]) {
        }
      }
    }  
+#if include_data == 1
    #pragma acc update host(outtrk[0:nevts*nb]) 
+#endif
    } //end of itr loop
 
    gettimeofday(&timecheck, NULL);
    end2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+#if include_data == 0
+   #pragma acc update host(outtrk[0:nevts*nb]) 
+#endif
 
    double wall_time = ((double)(end2 - start2))*0.001;
    printf("setup time time=%f (s)\n", setup_time);
@@ -697,9 +708,9 @@ int main (int argc, char* argv[]) {
    fp_z = fopen("output_z.txt", "w");
 #endif
 
-   float avgx = 0, avgy = 0, avgz = 0;
-   float avgpt = 0, avgphi = 0, avgtheta = 0;
-   float avgdx = 0, avgdy = 0, avgdz = 0;
+   double avgx = 0, avgy = 0, avgz = 0;
+   double avgpt = 0, avgphi = 0, avgtheta = 0;
+   double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
        float x_ = x3(outtrk,ie,it);
@@ -735,18 +746,18 @@ int main (int argc, char* argv[]) {
    fp_y = fopen("input_y.txt", "w");
    fp_z = fopen("input_z.txt", "w");
 #endif
-   avgpt = avgpt/((float)nevts*ntrks);
-   avgphi = avgphi/((float)nevts*ntrks);
-   avgtheta = avgtheta/((float)nevts*ntrks);
-   avgx = avgx/((float)nevts*ntrks);
-   avgy = avgy/((float)nevts*ntrks);
-   avgz = avgz/((float)nevts*ntrks);
-   avgdx = avgdx/((float)nevts*ntrks);
-   avgdy = avgdy/((float)nevts*ntrks);
-   avgdz = avgdz/((float)nevts*ntrks);
+   avgpt = avgpt/((double)nevts*ntrks);
+   avgphi = avgphi/((double)nevts*ntrks);
+   avgtheta = avgtheta/((double)nevts*ntrks);
+   avgx = avgx/((double)nevts*ntrks);
+   avgy = avgy/((double)nevts*ntrks);
+   avgz = avgz/((double)nevts*ntrks);
+   avgdx = avgdx/((double)nevts*ntrks);
+   avgdy = avgdy/((double)nevts*ntrks);
+   avgdz = avgdz/((double)nevts*ntrks);
 
-   float stdx = 0, stdy = 0, stdz = 0;
-   float stddx = 0, stddy = 0, stddz = 0;
+   double stdx = 0, stdy = 0, stdz = 0;
+   double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
        float x_ = x3(outtrk,ie,it);
@@ -777,12 +788,12 @@ int main (int argc, char* argv[]) {
    fclose(fp_z);
 #endif
 
-   stdx = sqrtf(stdx/((float)nevts*ntrks));
-   stdy = sqrtf(stdy/((float)nevts*ntrks));
-   stdz = sqrtf(stdz/((float)nevts*ntrks));
-   stddx = sqrtf(stddx/((float)nevts*ntrks));
-   stddy = sqrtf(stddy/((float)nevts*ntrks));
-   stddz = sqrtf(stddz/((float)nevts*ntrks));
+   stdx = sqrtf(stdx/((double)nevts*ntrks));
+   stdy = sqrtf(stdy/((double)nevts*ntrks));
+   stdz = sqrtf(stdz/((double)nevts*ntrks));
+   stddx = sqrtf(stddx/((double)nevts*ntrks));
+   stddy = sqrtf(stddy/((double)nevts*ntrks));
+   stddz = sqrtf(stddz/((double)nevts*ntrks));
 
    printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
    printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));

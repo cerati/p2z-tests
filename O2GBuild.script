@@ -17,49 +17,83 @@
 ###############################
 defaultACCInputFile1="propagate-toz-test_OpenACC_sync.c"
 defaultACCInputFile2="propagate-toz-test_OpenACC_async.c"
+defaultACCInputFile3="propagate-toz-test_OpenACC_async_v4.c"
 #defaultOmpAccInter=0
 ###############################
 # Default options for OpenMP4 #
 ###############################
 defaultOMP4InputFile1="propagate-toz-test_OpenMP4_sync.c"
 defaultOMP4InputFile2="propagate-toz-test_OpenMP4_async.c"
+defaultOMP4InputFile3="propagate-toz-test_OpenMP4_async_v4.c"
 #defaultOmpAccInter=2
 
-if [ $# -eq 3 ]; then
+if [ $# -eq 4 ]; then
 	inputMode="$1"
 	numStreams=$2
 	niters=$3
+	include_data=$4
+elif [ $# -eq 3 ]; then
+	inputMode="$1"
+	numStreams=$2
+	niters=$3
+	include_data=1
 elif [ $# -eq 2 ]; then
 	inputMode="$1"
 	numStreams=$2
 	niters=10
+	include_data=1
 elif [ $# -eq 1 ]; then
 	inputMode="$1"
 	numStreams=10
 	niters=10
+	include_data=1
 else
 	inputMode="acccv3"
 	numStreams=10
 	niters=10
+	include_data=1
 fi
 
+if [ "$numStreams" = "0" ]; then
+	numStreams=10
+fi
+
+forceSyncOpt=""
 if [ "$inputMode" == "accc" ]; then
 	inputFile="$defaultACCInputFile1"
 	ompaccInter=0
+	if [ "$include_data" == "0" ]; then
+		forceSyncOpt="-forceSyncKernelCall"
+	fi
 elif [ "$inputMode" == "acccv3" ]; then
 	inputFile="$defaultACCInputFile2"
+	ompaccInter=0
+elif [ "$inputMode" == "acccv4" ]; then
+	inputFile="$defaultACCInputFile3"
 	ompaccInter=0
 elif [ "$inputMode" == "accccpu" ]; then
     inputFile="$defaultACCInputFile1"
     ompaccInter=3
+	if [ "$include_data" == "0" ]; then
+		forceSyncOpt="-forceSyncKernelCall"
+	fi
 elif [ "$inputMode" == "acccv3cpu" ]; then
     inputFile="$defaultACCInputFile2"
+    ompaccInter=3
+elif [ "$inputMode" == "acccv4cpu" ]; then
+    inputFile="$defaultACCInputFile3"
     ompaccInter=3
 elif [ "$inputMode" == "omp4c" ]; then
 	inputFile="$defaultOMP4InputFile1"
 	ompaccInter=2
+	if [ "$include_data" == "0" ]; then
+		forceSyncOpt="-forceSyncKernelCall"
+	fi
 elif [ "$inputMode" == "omp4cv3" ]; then
 	inputFile="$defaultOMP4InputFile2"
+	ompaccInter=2
+elif [ "$inputMode" == "omp4cv4" ]; then
+	inputFile="$defaultOMP4InputFile3"
 	ompaccInter=2
 fi
 
@@ -83,12 +117,22 @@ openarclib="${openarc}/lib"
 #fi
 
 if [ "$numStreams" != "" ]; then
-	if [ "$numStreams" != "0" ]; then
     mv "openarcConf.txt" "openarcConf.txt_tmp"
     cat "openarcConf.txt_tmp" | sed "s|__numStreams__|${numStreams}|g" > "openarcConf.txt"
     rm "openarcConf.txt_tmp"
 fi
 
+if [ "$niters" != "" ]; then
+    mv "openarcConf.txt" "openarcConf.txt_tmp"
+    cat "openarcConf.txt_tmp" | sed "s|__NITER__|${niters}|g" > "openarcConf.txt"
+    rm "openarcConf.txt_tmp"
+fi
+
+if [ "$include_data" != "" ]; then
+    mv "openarcConf.txt" "openarcConf.txt_tmp"
+    cat "openarcConf.txt_tmp" | sed "s|__INCLUDE_DATA__|${include_data}|g" > "openarcConf.txt"
+    rm "openarcConf.txt_tmp"
+fi
 
 if [ ! -d ./bin ]; then
 	mkdir bin
@@ -100,7 +144,7 @@ if [ "$openarcrt" != "" ]; then
     rm "openarcConf.txt_tmp"
 fi
 
-java -classpath $openarclib/cetus.jar:$openarclib/antlr.jar openacc.exec.ACC2GPUDriver -verbosity=${verLevel} -ompaccInter=${ompaccInter} -gpuConfFile=openarcConf.txt ./src/$inputFile
+java -classpath $openarclib/cetus.jar:$openarclib/antlr.jar openacc.exec.ACC2GPUDriver -verbosity=${verLevel} -ompaccInter=${ompaccInter} -gpuConfFile=openarcConf.txt ${forceSyncOpt} ./src/$inputFile
 
 if [ "$inputMode" == "accc" ]; then
 	echo ""

@@ -25,16 +25,17 @@ Compile the OpenACC C sync version
 
 ```shell
 $ make COMPILER=pgi MODE=accc
-$ make COMPILER=openarc MODE=accc
+$ make COMPILER=openarc MODE=accc INCLUDE_DATA=0
 $ make COMPILER=gcc MODE=accc
 ```
 
-Compile the OpenACC C async version (v3)
+Compile the OpenACC C async version (v3 and v4)
 
 ```shell
 $ make COMPILER=pgi MODE=acccv3
-$ make COMPILER=openarc MODE=acccv3
+$ make COMPILER=openarc MODE=acccv3 INCLUDE_DATA=0
 $ make COMPILER=gcc MODE=acccv3
+$ make COMPILER=openarc MODE=acccv4 INCLUDE_DATA=0
 ```
 
 ## OpenACC C for CPU
@@ -47,12 +48,13 @@ $ make COMPILER=openarc MODE=accccpu
 $ make COMPILER=gcc MODE=accccpu
 ```
 
-Compile the OpenACC C async version (v3) for CPU
+Compile the OpenACC C async version (v3 and v4) for CPU
 
 ```shell
 $ make COMPILER=pgi MODE=acccv3cpu
 $ make COMPILER=openarc MODE=acccv3cpu
 $ make COMPILER=gcc MODE=acccv3cpu
+$ make COMPILER=openarc MODE=acccv4cpu
 ```
 
 ## OpenMP4 C++
@@ -71,7 +73,7 @@ $ make COMPILER=pgi MODE=omp4 #NVHPC V21.11 fails due to an unsupported feature 
 Compile the OpenMP4 C sync version
 
 ```shell
-$ make COMPILER=openarc MODE=omp4c
+$ make COMPILER=openarc MODE=omp4c INCLUDE_DATA=0
 $ make COMPILER=llvm MODE=omp4c
 $ make COMPILER=ibm MODE=omp4c
 $ make COMPILER=gcc MODE=omp4c
@@ -81,7 +83,7 @@ $ make COMPILER=pgi MODE=omp4c #NVHPC V21.11 fails due to an unsupported feature
 Compile the OpenMP4 C async version (v3)
 
 ```shell
-$ make COMPILER=openarc MODE=omp4cv3
+$ make COMPILER=openarc MODE=omp4cv3 INCLUDE_DATA=0
 $ make COMPILER=llvm MODE=omp4cv3
 $ make COMPILER=ibm MODE=omp4cv3
 $ make COMPILER=gcc MODE=omp4cv3

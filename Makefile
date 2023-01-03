@@ -11,7 +11,8 @@
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
 #               omp4, cudav1, cudav2, cudav3, cudav4,    #
 #               cudauvm, cudahyb, pstl, accc, acccv3,    #
-#               omp4c, omp4cv3, accccpu, acccv3cpu       #
+#               acccv4, omp4c, omp4cv3, accccpu,         #
+#               acccv3cpu, acccv4cpu                     #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -329,53 +330,26 @@ endif
 ##################
 #  ACC C Setting #
 ##################
-ifeq ($(MODE),accc)
-CSRCS = propagate-toz-test_OpenACC_sync.c
-ifeq ($(COMPILER),pgi)
-CXX=nvc
-CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-else ifeq ($(COMPILER),gcc)
-CXX=gcc
-CFLAGS1 += -O3 -I. -fopenacc -foffload="-lm -O3"
-CLIBS1 += -lm
-else ifeq ($(COMPILER),openarc)
-#OpenACC C V1: synchronous version
-CSRCS = ../cetus_output/propagate-toz-test_OpenACC_sync.cpp
-ifeq ($(OS),linux)
-# On Linux with CUDA GPU
-CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
-else
-# On Mac OS
-CFLAGS1 += -O3 -I. -I${openarc}/openarcrt -arch x86_64
-endif
-ifeq ($(OPENARC_ARCH),5)
-CXX=hipcc
-CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
-else ifeq ($(OPENARC_ARCH),6)
-CXX=g++
-CLIBS1 += -L${openarc}/openarcrt -lpthread -liris -ldl -lopenaccrt_iris -lomphelper
-else ifeq ($(OPENARC_ARCH),1)
-ifeq ($(OS),linux)
-# On Linux
-CXX=g++
-CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lOpenCL -lomphelper
-else
-# On Mac OS
-CXX=clang++
-CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
-endif
-else
-CXX=g++
-CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
-endif
-else
-CSRCS = "NotSupported"
-endif
-endif
+COMPILE_ACC_DEVICE=0
 
+ifeq ($(MODE),accc)
+#OpenACC C V1: synchronous version
+CSRCSBASE = propagate-toz-test_OpenACC_sync
+COMPILE_ACC_DEVICE=1
+endif
 ifeq ($(MODE),acccv3)
 #OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
-CSRCS = propagate-toz-test_OpenACC_async.c
+CSRCSBASE = propagate-toz-test_OpenACC_async
+COMPILE_ACC_DEVICE=1
+endif
+ifeq ($(MODE),acccv4)
+#OpenACC C V4: asynchronous version, which has the same computation/memory mapping as the CUDA V4.
+CSRCSBASE = propagate-toz-test_OpenACC_async_v4
+COMPILE_ACC_DEVICE=1
+endif
+
+ifeq ($(COMPILE_ACC_DEVICE),1)
+CSRCS = $(CSRCSBASE).c
 ifeq ($(COMPILER),pgi)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
@@ -384,7 +358,7 @@ CXX=gcc
 CFLAGS1 += -O3 -I. -fopenacc -foffload="-lm -O3"
 CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
-CSRCS = ../cetus_output/propagate-toz-test_OpenACC_async.cpp
+CSRCS = ../cetus_output/$(CSRCSBASE).cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
 CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
@@ -420,31 +394,25 @@ endif
 ##########################
 #  ACC C Setting for CPU #
 ##########################
+COMPILE_ACC_HOST=0
 ifeq ($(MODE),accccpu)
-CSRCS = propagate-toz-test_OpenACC_sync.c
-ifeq ($(COMPILER),pgi)
-CXX=nvc
-CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc=multicore -mcmodel=medium -Mlarge_arrays
-else ifeq ($(COMPILER),gcc)
-CXX=gcc
-CFLAGS1 += -O3 -I. -fopenacc -foffload=disable -foffload="-lm -O3"
-CLIBS1 += -lm
-else ifeq ($(COMPILER),openarc)
 #OpenACC C V1: synchronous version
-CSRCS = ../cetus_output/propagate-toz-test_OpenACC_sync.c
-CXX=gcc
-CFLAGS1 += -O3 -I. -fopenmp 
-CLIBS1 += -lm -lgomp
-else
-CSRCS = "NotSupported"
+CSRCSBASE = propagate-toz-test_OpenACC_sync
+COMPILE_ACC_HOST=1
 endif
+ifeq ($(MODE),acccv3cpu)
+#OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
+CSRCSBASE = propagate-toz-test_OpenACC_async
+COMPILE_ACC_HOST=1
+endif
+ifeq ($(MODE),acccv4cpu)
+#OpenACC C V4: asynchronous version, which has the same computation/memory mapping as the CUDA V4.
+CSRCSBASE = propagate-toz-test_OpenACC_async_v4
+COMPILE_ACC_HOST=1
 endif
 
-##########################
-#  ACC C Setting for CPU #
-##########################
-ifeq ($(MODE),acccv3cpu)
-CSRCS = propagate-toz-test_OpenACC_async.c
+ifeq ($(COMPILE_ACC_HOST),1)
+CSRCS = $(CSRCSBASE).c
 ifeq ($(COMPILER),pgi)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc=multicore -mcmodel=medium -Mlarge_arrays
@@ -453,8 +421,7 @@ CXX=gcc
 CFLAGS1 += -O3 -I. -fopenacc -foffload=disable -foffload="-lm -O3"
 CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
-#OpenACC C V3: asynchronous version, which has the same computation/memory mapping as the CUDA V3.
-CSRCS = ../cetus_output/propagate-toz-test_OpenACC_async.c
+CSRCS = ../cetus_output/$(CSRCSBASE).c
 CXX=gcc
 CFLAGS1 += -O3 -I. -fopenmp 
 CLIBS1 += -lm -lgomp
@@ -640,8 +607,10 @@ ifneq ($(MODE),omp4c)
 ifneq ($(MODE),omp4cv3)
 ifneq ($(MODE),accc)
 ifneq ($(MODE),acccv3)
+ifneq ($(MODE),acccv4)
 ifneq ($(MODE),accccpu)
 ifneq ($(MODE),acccv3cpu)
+ifneq ($(MODE),acccv4cpu)
 ifeq ($(MODE),cudahyb)
 CFLAGS1 += -std=c++20
 else
@@ -652,6 +621,8 @@ ifeq ($(COMPILER),ibm)
 CFLAGS1 += -std=c++11
 else
 CFLAGS1 += -std=c++17
+endif
+endif
 endif
 endif
 endif
@@ -673,7 +644,7 @@ $(TARGET)/$(BENCHMARK): precmd src/$(CSRCS)
 precmd:
 	@if [ "$(CSRCS)" = "NotSupported" ]; then echo "==> [ERROR] The compiler $(COMPILER) is not supported for the mode = $(MODE)"; fi
 	@if [ "$(COMPILER)" = "openarc" ]; then rm -rf ./cetus_output $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx $(TARGET)/propagate_openarc_*; fi
-	@if [ "$(COMPILER)" = "openarc" ]; then O2GBuild.script $(MODE) $(STREAMS) $(NITER); fi
+	@if [ "$(COMPILER)" = "openarc" ]; then O2GBuild.script $(MODE) $(STREAMS) $(NITER) $(INCLUDE_DATA); fi
 
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
