@@ -11,7 +11,7 @@
 # MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
 #               omp4, cudav1, cudav2, cudav3, cudav4,    #
 #               cudauvm, cudahyb, pstl, accc, acccv3,    #
-#               acccv4, omp4c, omp4cv3, accccpu,         #
+#               acccv4, omp4c, omp4cv3, omp4cv4, accccpu,#
 #               acccv3cpu, acccv4cpu                     #
 ##########################################################
 COMPILER ?= nvcc
@@ -164,76 +164,27 @@ CSRCS = "NotSupported"
 endif
 endif
 
-###################
-#  OMP4 C Setting #
-###################
-ifeq ($(MODE),omp4c)
-CSRCS = propagate-toz-test_OpenMP4_sync.c
-ifeq ($(COMPILER),gcc)
-CXX=gcc
-CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
-CLIBS1 += -lm -lgomp 
-else ifeq ($(COMPILER),llvm)
-CXX=clang
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=$(CUDA_ARCH)
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
-CLIBS1 += -lm
-else ifeq ($(COMPILER),ibm)
-CXX=xlc_r
-CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
-CLIBS1 += -lm
-else ifeq ($(COMPILER),pgi)
-CXX=nvc
-CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp=gpu -mcmodel=medium -Mlarge_arrays
-CLIBS1 += -lm
-else ifeq ($(COMPILER),openarc)
-CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_sync.cpp
-ifeq ($(OS),linux)
-# On Linux with CUDA GPU
-ifeq ($(DEBUG),1)
-CFLAGS1 += -g -I. -I${openarc}/openarcrt 
-else
-CFLAGS1 += -O3 -I. -I${openarc}/openarcrt 
-endif
-else
-# On Mac OS
-CFLAGS1 += -O3 -I. -I${openarc}/openarcrt -arch x86_64
-endif
-ifeq ($(OPENARC_ARCH),5)
-CXX=hipcc
-CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_hip -lomphelper
-else ifeq ($(OPENARC_ARCH),6)
-CXX=g++
-CLIBS1 += -L${openarc}/openarcrt -lpthread -liris -ldl -lopenaccrt_iris -lomphelper
-else ifeq ($(OPENARC_ARCH),1)
-ifeq ($(OS),linux)
-# On Linux
-CXX=g++
-CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lOpenCL -lomphelper
-else
-# On Mac OS
-CXX=clang++
-CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_opencl -lomphelper -framework OpenCL
-endif
-else
-CXX=g++
-ifeq ($(DEBUG),1)
-CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cudapf -lcuda -lomphelper
-else
-CLIBS1 += -L${openarc}/openarcrt -lopenaccrt_cuda -lcuda -lomphelper
-endif
-endif
-else
-CSRCS = "NotSupported"
-endif
-endif
 
 ###################
 #  OMP4 C Setting #
 ###################
+COMPILE_OMP4_DEVICE=0
+
+ifeq ($(MODE),omp4c)
+CSRCSBASE = propagate-toz-test_OpenMP4_sync
+COMPILE_OMP4_DEVICE=1
+endif
 ifeq ($(MODE),omp4cv3)
-CSRCS = propagate-toz-test_OpenMP4_async.c
+CSRCSBASE = propagate-toz-test_OpenMP4_async
+COMPILE_OMP4_DEVICE=1
+endif
+ifeq ($(MODE),omp4cv4)
+CSRCSBASE = propagate-toz-test_OpenMP4_async_v4
+COMPILE_OMP4_DEVICE=1
+endif
+
+ifeq ($(COMPILE_OMP4_DEVICE),1)
+CSRCS = $(CSRCSBASE).c
 ifeq ($(COMPILER),gcc)
 CXX=gcc
 CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
@@ -253,7 +204,7 @@ CXX=nvc
 CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp=gpu -mcmodel=medium -Mlarge_arrays
 CLIBS1 += -lm
 else ifeq ($(COMPILER),openarc)
-CSRCS = ../cetus_output/propagate-toz-test_OpenMP4_async.cpp
+CSRCS = ../cetus_output/$(CSRCSBASE).cpp
 ifeq ($(OS),linux)
 # On Linux with CUDA GPU
 ifeq ($(DEBUG),1)
@@ -605,6 +556,7 @@ endif
 
 ifneq ($(MODE),omp4c)
 ifneq ($(MODE),omp4cv3)
+ifneq ($(MODE),omp4cv4)
 ifneq ($(MODE),accc)
 ifneq ($(MODE),acccv3)
 ifneq ($(MODE),acccv4)
@@ -621,6 +573,7 @@ ifeq ($(COMPILER),ibm)
 CFLAGS1 += -std=c++11
 else
 CFLAGS1 += -std=c++17
+endif
 endif
 endif
 endif

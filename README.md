@@ -80,9 +80,10 @@ $ make COMPILER=gcc MODE=omp4c
 $ make COMPILER=pgi MODE=omp4c #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet). NVHPC V22.2 also fails.
 ```
 
-Compile the OpenMP4 C async version (v3)
+Compile the OpenMP4 C async version (v3 and v4)
 
 ```shell
+$ make COMPILER=openarc MODE=omp4cv4 INCLUDE_DATA=0
 $ make COMPILER=openarc MODE=omp4cv3 INCLUDE_DATA=0
 $ make COMPILER=llvm MODE=omp4cv3
 $ make COMPILER=ibm MODE=omp4cv3
@@ -142,7 +143,7 @@ $ make COMPILER=nvcc MODE=alpaka//not yet functional
 
 ## Kokkos
 Multiple Kokkos versions exist in the `src` directory: `src/kokkos_src_v1`, 
-..., `src/kokkos_src_v4`, each of which contains the p2z code along with 
+..., `src/kokkos_src_v6`, each of which contains the p2z code along with 
 a Makefile and README to help the user make use of the Kokkos library. 
 
 Here is the brief information on each version:
@@ -177,7 +178,7 @@ Here we have basic instructions.
 
 #### Getting started
 1. clone https://github.com/kokkos/kokkos to ${KOKKOS_ROOT}
-2. in the `src/kokkos_src_v4` direcory edit the Makefile setting to match your needs
+2. in the `src/kokkos_src_v6` direcory edit the Makefile setting to match your needs
 3. run `make` to build
 4. The executable can be found under `bin` with the others
 
