@@ -27,6 +27,6 @@ Makefile options:
 * CXX - compiler 
   * use the nvcc wrapper for cuda and your preference for CPU (g++ 9 recommended)
     (default: ${KOKKOS_PATH}/bin/nvcc_wrapper)
-* NITER - the number of iterations (default: 5)
+* NITER - the number of iterations (default: 10)
 * NLAYER - the number of layers (default: 20) 
 * INCLUDE_DATA - decide whether to include the memory transfer times or not for profiling (default: 1)
