@@ -300,12 +300,12 @@ struct MPHIT* prepareHits(struct AHIT inputhit) {
 #endif
 #pragma omp declare target
 void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct MP6x6F* C) {
-  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
-  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
-  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
  #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
+    const float* a = A->data; //ASSUME_ALIGNED(a, 64);
+    const float* b = B->data; //ASSUME_ALIGNED(b, 64);
+    float* c = C->data;       //ASSUME_ALIGNED(c, 64);
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -348,12 +348,12 @@ void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct
 
 #pragma omp declare target
 void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, struct MP6x6SF* C) {
-  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
-  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
-  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
  #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
+    const float* a = A->data; //ASSUME_ALIGNED(a, 64);
+    const float* b = B->data; //ASSUME_ALIGNED(b, 64);
+    float* c = C->data;       //ASSUME_ALIGNED(c, 64);
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
     c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
@@ -381,12 +381,12 @@ void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, s
 
 #pragma omp declare target
 void KalmanGainInv(const struct MP6x6SF* A, const struct MP3x3SF* B, struct MP3x3* C) {
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
  #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
+    const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
+    const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
+    float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
@@ -408,12 +408,12 @@ void KalmanGainInv(const struct MP6x6SF* A, const struct MP3x3SF* B, struct MP3x
 
 #pragma omp declare target
 void KalmanGain(const struct MP6x6SF* A, const struct MP3x3* B, struct MP3x6* C) {
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
  #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
+    const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
+    const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
+    float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
     c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
