@@ -26,7 +26,7 @@ CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} ${TUNE}
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
-EXE = "../../bin/propagate_nvcc_kokkos_v3"
+EXE = "../../bin/propagate_nvcc_kokkosv3"
 USE_GPU=1
 else
 # -9 needed on apollo
@@ -34,7 +34,7 @@ CXX = g++
 CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} ${TUNE}
 #CXX = g++-9
 # CXX = icpc
-EXE = "../../bin/propagate_gcc_kokkos_v3"
+EXE = "../../bin/propagate_gcc_kokkosv3"
 KOKKOS_ARCH = "SKX"
 #KOKKOS_ARCH = "POWER9"
 endif

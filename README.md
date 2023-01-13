@@ -178,9 +178,22 @@ Here we have basic instructions.
 
 #### Getting started
 1. clone https://github.com/kokkos/kokkos to ${KOKKOS_ROOT}
-2. in the `src/kokkos_src_v6` direcory edit the Makefile setting to match your needs
-3. run `make` to build
-4. The executable can be found under `bin` with the others
+2. compile option 1:
+	a. in the `src/kokkos_src_v6` direcory edit the Makefile setting to match your needs
+	b. run `make` to build
+	c. The executable can be found under `bin` with the others
+3. compile option 2:
+	compile using the Makefile in the current directory:
+
+```shell
+$ make COMPILER=nvcc MODE=kokkosv1 INCLUDE_DATA=0
+$ make COMPILER=nvcc MODE=kokkosv2 INCLUDE_DATA=0
+$ make COMPILER=nvcc MODE=kokkosv3 INCLUDE_DATA=0
+$ make COMPILER=nvcc MODE=kokkosv4 INCLUDE_DATA=0
+$ make COMPILER=nvcc MODE=kokkosv5 INCLUDE_DATA=0
+$ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=0
+$ make MODE=kokkosv6 clean
+```
 
 #### Makefile setting
 - KOKKOS_DEVICES = OpenMP or OpenMP,Cuda

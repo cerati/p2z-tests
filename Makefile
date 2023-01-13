@@ -12,7 +12,8 @@
 #               omp4, cudav1, cudav2, cudav3, cudav4,    #
 #               cudauvm, cudahyb, pstl, accc, acccv3,    #
 #               acccv4, omp4c, omp4cv3, omp4cv4, accccpu,#
-#               acccv3cpu, acccv4cpu                     #
+#               acccv3cpu, acccv4cpu, kokkosv1, kokkosv2,#
+#               kokkosv3, kokkosv4, kokkosv5, kokkosv6   #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -31,7 +32,7 @@ TUNETRK ?= 0
 TUNEEVT ?= 0
 STREAMS ?= 0
 NTHREADS ?= 0
-NITER ?= 10
+NITER ?= 0
 NLAYER ?= 0
 ifneq ($(TUNEB),0)
 TUNE += -Dbsize=$(TUNEB)
@@ -50,6 +51,12 @@ TUNE += -Dnthreads=$(NTHREADS)
 endif
 ifneq ($(NITER),0)
 TUNE += -DNITER=$(NITER)
+else
+ifeq ($(INCLUDE_DATA),0)
+TUNE += -DNITER=100
+else
+TUNE += -DNITER=10
+endif
 endif
 ifneq ($(NLAYER),0)
 TUNE += -Dnlayer=$(NLAYER)
@@ -71,6 +78,12 @@ endif
 ifneq ($(USE_ASYNC),0)
 TUNE += -DUSE_ASYNC
 endif
+
+##########KOKKOS Make Options########################
+# Assume that KOKKOS_ROOT is set to the Kokkos root directory
+KOKKOS_PATH ?= $(KOKKOS_ROOT)
+KOKKOS_DEVICES ?= Cuda
+PREPIN_HOSTMEM ?= 1
 
 ################
 #  OMP Setting #
@@ -521,7 +534,75 @@ CLIBS1 += -L${CUDALIBDIR} -lcudart -g
 endif
 endif
 
+###################
+#  Kokkos Setting #
+###################
+COMPILE_KOKKOS = 0
 
+ifeq ($(MODE),kokkosv1)
+CSRCSDIR = kokkos_src_v1
+CSRCS = $(CSRCSDIR)/ptoz_kokkos.cpp
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv2)
+CSRCSDIR = kokkos_src_v2
+CSRCS = $(CSRCSDIR)/ptoz_kokkos.cpp
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv3)
+CSRCSDIR = kokkos_src_v3
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v3.cpp
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv4)
+CSRCSDIR = kokkos_src_v4
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v4.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv5)
+CSRCSDIR = kokkos_src_v5
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v5.cpp
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv6)
+CSRCSDIR = kokkos_src_v6
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v6.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
+
+ifeq ($(COMPILE_KOKKOS),1)
+ifneq ($(NITER),0)
+KOKKOS_FLAGS += NITER=$(NITER)
+else
+ifeq ($(INCLUDE_DATA),0)
+KOKKOS_FLAGS += NITER=100
+else
+KOKKOS_FLAGS += NITER=10
+endif
+endif
+ifneq ($(NLAYER),0)
+KOKKOS_FLAGS += NLAYER=$(NLAYER)
+endif
+ifneq ($(INCLUDE_DATA),0)
+KOKKOS_FLAGS += INCLUDE_DATA=$(INCLUDE_DATA)
+endif
+endif
 
 ################################################
 # TARGET is where the output binary is stored. #
@@ -551,7 +632,9 @@ else
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)_sync"
 endif
 else
+ifeq ($(COMPILE_KOKKOS),0)
 BENCHMARK = "propagate_$(COMPILER)_$(MODE)"
+endif
 endif
 
 ifneq ($(MODE),omp4c)
@@ -586,10 +669,11 @@ endif
 endif
 endif
 
+
 $(TARGET)/$(BENCHMARK): precmd src/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi
-	$(CXX) $(CFLAGS1) src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK)
-	if [ -f $(TARGET)/*.ptx ]; then rm $(TARGET)/*.ptx; fi
+	if [ $(COMPILE_KOKKOS) -eq 0 ]; then $(CXX) $(CFLAGS1) src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK); fi
+	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd src/$(CSRCSDIR); make -j $(KOKKOS_FLAGS); cd ../../; fi
 	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.hip.cpp" ]; then cp ./cetus_output/openarc_kernel.hip.cpp ${TARGET}/; fi
@@ -601,6 +685,7 @@ precmd:
 
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
+	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd src/$(CSRCSDIR); make clean; cd ../../; fi
 
 cleanall: purge
 	rm -f $(TARGET)/* 
