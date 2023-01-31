@@ -35,7 +35,7 @@ CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dnum_streams=${num_streams}
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
-EXE = "../../bin/propagate_nvcc_kokkos_v6${EXE_S}"
+EXE = "../../bin/propagate_nvcc_kokkosv6${EXE_S}"
 USE_GPU=1
 endif
 

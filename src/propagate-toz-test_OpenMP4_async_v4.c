@@ -735,7 +735,8 @@ int main (int argc, char* argv[]) {
      	#pragma omp target update to(trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer]) nowait depend(out:trk[s*chunkSize*nb:1])
 #endif
 #ifdef _OPENARC_
-     	#pragma omp target teams distribute parallel for num_teams(localChunkSize*nb) num_threads(bsize) collapse(2) map(present,to: trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer], outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(in:trk[s*chunkSize*nb:1]) depend(out:outtrk[s*chunkSize*nb:1]) 
+		//[DEBUG on Jan. 12, 2023] Remove the num_teams clause to avoid a bug in OpenARC.
+     	#pragma omp target teams distribute parallel for num_threads(bsize) collapse(2) map(present,to: trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer], outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(in:trk[s*chunkSize*nb:1]) depend(out:outtrk[s*chunkSize*nb:1]) 
 #else
      	#pragma omp target teams distribute parallel for num_teams(localChunkSize*nb) num_threads(bsize) collapse(2) map(to: trk[s*chunkSize*nb:localChunkSize*nb], hit[s*chunkSize*nb*nlayer:localChunkSize*nb*nlayer], outtrk[s*chunkSize*nb:localChunkSize*nb]) nowait depend(in:trk[s*chunkSize*nb:1]) depend(out:outtrk[s*chunkSize*nb:1]) 
 #endif
