@@ -903,15 +903,15 @@ int main (int argc, char* argv[]) {
         			//KalmanUpdate(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos));
         			KalmanUpdate_v2(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos));
          		}
-      			dstPtr = outtrk[bIdx].par.data;
-      			srcPtr = obtracks.par.data;
-      			saveData(dstPtr,srcPtr,tIdx,6);
-      			dstPtr = outtrk[bIdx].cov.data;
-      			srcPtr = obtracks.cov.data;
-      			saveData(dstPtr,srcPtr,tIdx,21);
-      			dstPtrI = outtrk[bIdx].q.data;
-      			srcPtrI = obtracks.q.data;
-      			saveData(dstPtrI,srcPtrI,tIdx,1);
+      			float *dstPtr2 = outtrk[bIdx].par.data;
+      			float *srcPtr2 = obtracks.par.data;
+      			saveData(dstPtr2,srcPtr2,tIdx,6);
+      			dstPtr2 = outtrk[bIdx].cov.data;
+      			srcPtr2 = obtracks.cov.data;
+      			saveData(dstPtr2,srcPtr2,tIdx,21);
+      			int *dstPtrI2 = outtrk[bIdx].q.data;
+      			int *srcPtrI2 = obtracks.q.data;
+      			saveData(dstPtrI2,srcPtrI2,tIdx,1);
        		}
      	}
 #if include_data == 1
