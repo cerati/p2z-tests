@@ -25,9 +25,9 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3 -I/mnt/data1/dsr
 #ifndef nevts
 #define nevts 100
 #endif
-#define smear 0.1
-#include <Eigen/Dense>
-#include <Eigen/Core>
+#define smear 0.00001
+#include "Eigen/Dense"
+#include "Eigen/Core"
 
 #ifndef NITER
 #define NITER 5
@@ -109,6 +109,18 @@ struct MP6x6F {
   Matrix<float,6,6> data[bsize];
 };
 
+struct MP2x2SF {
+  Matrix2f data[bsize];
+};
+
+struct MP2x6 {
+  Matrix<float,2,6> data[bsize];
+};
+
+struct MP2F {
+  Vector2f data[bsize];
+};
+
 struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
@@ -151,7 +163,7 @@ const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-float q(const MP1I* bq, size_t it){
+int q(const MP1I* bq, size_t it){
   return (*bq).data[it](0);
 }
 //
@@ -246,37 +258,45 @@ MPTRK* prepareTracks(ATRK inputtrk) {
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
-	      //par
-	      for (size_t ip=0;ip<6;++ip) {
-	        result[ib + nb*ie].par.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputtrk.par[ip];
-	      }
-	      //cov
-	      for (size_t ip=0;ip<21;++ip) {
-	        result[ib + nb*ie].cov.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputtrk.cov[ip];
-	      }
-	      //q
-	      result[ib + nb*ie].q.data[it](0) = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+	//par
+	for (size_t ip=0;ip<6;++ip) {
+	  result[ib + nb*ie].par.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputtrk.par[ip];
+	}
+	//cov, scale by factor 100
+	for (size_t ip=0;ip<21;++ip) {
+	  result[ib + nb*ie].cov.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputtrk.cov[ip]*100;
+	}
+	//q
+	result[ib + nb*ie].q.data[it](0) = inputtrk.q;//can't really smear this or fit will be wrong
       }
     }
   }
   return result;
 }
 
-MPHIT* prepareHits(AHIT inputhit) {
+MPHIT* prepareHits(std::vector<AHIT>& inputhits) {
   MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));  //fixme, align?
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
+
+    size_t mylay = lay;
+    if (lay>=inputhits.size()) {
+      // int wraplay = inputhits.size()/lay;
+      exit(1);
+    }
+    AHIT& inputhit = inputhits[mylay];
+
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
         for (size_t it=0;it<bsize;++it) {
-        	//pos
-        	for (size_t ip=0;ip<3;++ip) {
-        	  result[lay+nlayer*(ib + nb*ie)].pos.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputhit.pos[ip];
-        	}
-        	//cov
-        	for (size_t ip=0;ip<6;++ip) {
-        	  result[lay+nlayer*(ib + nb*ie)].cov.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputhit.cov[ip];
-        	}
+	  //pos
+	  for (size_t ip=0;ip<3;++ip) {
+	    result[lay+nlayer*(ib + nb*ie)].pos.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputhit.pos[ip];
+	  }
+	  //cov
+	  for (size_t ip=0;ip<6;++ip) {
+	    result[lay+nlayer*(ib + nb*ie)].cov.data[it](ip/*bsize*/) = (1+smear*randn(0,1))*inputhit.cov[ip];
+	  }
         }
       }
     }
@@ -334,7 +354,125 @@ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3
 
 }
 
-const float kfact = 100/3.8;
+void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
+
+   // AddIntoUpperLeft2x2(psErr, msErr, resErr);
+   MP2x2SF resErr_loc;
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+     resErr_loc.data[it](0) = trkErr->data[it](0) + hitErr->data[it](0);
+     resErr_loc.data[it](1) = trkErr->data[it](1) + hitErr->data[it](1);
+     resErr_loc.data[it](2) = trkErr->data[it](2) + hitErr->data[it](2);
+   }
+
+   // Matriplex::InvertCramerSym(resErr);
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+     const double det = (double)resErr_loc.data[it](0) * resErr_loc.data[it](2) -
+                        (double)resErr_loc.data[it](1) * resErr_loc.data[it](1);
+     const float s   = 1.f / det;
+     const float tmp = s * resErr_loc.data[it](2);
+     resErr_loc.data[it](1) *= -s;
+     resErr_loc.data[it](2)  = s * resErr_loc.data[it](0);
+     resErr_loc.data[it](0)  = tmp;
+   }
+
+   // KalmanGain(psErr, resErr, K);
+   MP2x6 kGain;
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+      kGain.data[it]( 0) = trkErr->data[it]( 0)*resErr_loc.data[it]( 0) + trkErr->data[it]( 1)*resErr_loc.data[it]( 1);
+      kGain.data[it]( 1) = trkErr->data[it]( 0)*resErr_loc.data[it]( 1) + trkErr->data[it]( 1)*resErr_loc.data[it]( 2);
+      kGain.data[it]( 2) = trkErr->data[it]( 1)*resErr_loc.data[it]( 0) + trkErr->data[it]( 2)*resErr_loc.data[it]( 1);
+      kGain.data[it]( 3) = trkErr->data[it]( 1)*resErr_loc.data[it]( 1) + trkErr->data[it]( 2)*resErr_loc.data[it]( 2);
+      kGain.data[it]( 4) = trkErr->data[it]( 3)*resErr_loc.data[it]( 0) + trkErr->data[it]( 4)*resErr_loc.data[it]( 1);
+      kGain.data[it]( 5) = trkErr->data[it]( 3)*resErr_loc.data[it]( 1) + trkErr->data[it]( 4)*resErr_loc.data[it]( 2);
+      kGain.data[it]( 6) = trkErr->data[it]( 6)*resErr_loc.data[it]( 0) + trkErr->data[it]( 7)*resErr_loc.data[it]( 1);
+      kGain.data[it]( 7) = trkErr->data[it]( 6)*resErr_loc.data[it]( 1) + trkErr->data[it]( 7)*resErr_loc.data[it]( 2);
+      kGain.data[it]( 8) = trkErr->data[it](10)*resErr_loc.data[it]( 0) + trkErr->data[it](11)*resErr_loc.data[it]( 1);
+      kGain.data[it]( 9) = trkErr->data[it](10)*resErr_loc.data[it]( 1) + trkErr->data[it](11)*resErr_loc.data[it]( 2);
+      kGain.data[it](10) = trkErr->data[it](15)*resErr_loc.data[it]( 0) + trkErr->data[it](16)*resErr_loc.data[it]( 1);
+      kGain.data[it](11) = trkErr->data[it](15)*resErr_loc.data[it]( 1) + trkErr->data[it](16)*resErr_loc.data[it]( 2);
+   }
+
+   // SubtractFirst2(msPar, psPar, res);
+   // MultResidualsAdd(K, psPar, res, outPar);
+   MP2F res_loc;
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+     res_loc.data[it](0) =  x(msP,it) - x(inPar,it);
+     res_loc.data[it](1) =  y(msP,it) - y(inPar,it);
+
+     setx    (inPar, it, x    (inPar, it) + kGain.data[it]( 0) * res_loc.data[it]( 0) + kGain.data[it]( 1) * res_loc.data[it]( 1));
+     sety    (inPar, it, y    (inPar, it) + kGain.data[it]( 2) * res_loc.data[it]( 0) + kGain.data[it]( 3) * res_loc.data[it]( 1));
+     setz    (inPar, it, z    (inPar, it) + kGain.data[it]( 4) * res_loc.data[it]( 0) + kGain.data[it]( 5) * res_loc.data[it]( 1));
+     setipt  (inPar, it, ipt  (inPar, it) + kGain.data[it]( 6) * res_loc.data[it]( 0) + kGain.data[it]( 7) * res_loc.data[it]( 1));
+     setphi  (inPar, it, phi  (inPar, it) + kGain.data[it]( 8) * res_loc.data[it]( 0) + kGain.data[it]( 9) * res_loc.data[it]( 1));
+     settheta(inPar, it, theta(inPar, it) + kGain.data[it](10) * res_loc.data[it]( 0) + kGain.data[it](11) * res_loc.data[it]( 1));
+     //note: if ipt changes sign we should update the charge, or we should get rid of the charge altogether and just use the sign of ipt
+   }
+
+   // squashPhiMPlex(outPar,N_proc); // ensure phi is between |pi|
+   // missing
+   // KHC(K, psErr, outErr);
+   // outErr.Subtract(psErr, outErr);
+   MP6x6SF newErr;
+#pragma omp simd
+   for (size_t it=0;it<bsize;++it)
+   {
+      newErr.data[it]( 0) = kGain.data[it]( 0)*trkErr->data[it]( 0) + kGain.data[it]( 1)*trkErr->data[it]( 1);
+      newErr.data[it]( 1) = kGain.data[it]( 2)*trkErr->data[it]( 0) + kGain.data[it]( 3)*trkErr->data[it]( 1);
+      newErr.data[it]( 2) = kGain.data[it]( 2)*trkErr->data[it]( 1) + kGain.data[it]( 3)*trkErr->data[it]( 2);
+      newErr.data[it]( 3) = kGain.data[it]( 4)*trkErr->data[it]( 0) + kGain.data[it]( 5)*trkErr->data[it]( 1);
+      newErr.data[it]( 4) = kGain.data[it]( 4)*trkErr->data[it]( 1) + kGain.data[it]( 5)*trkErr->data[it]( 2);
+      newErr.data[it]( 5) = kGain.data[it]( 4)*trkErr->data[it]( 3) + kGain.data[it]( 5)*trkErr->data[it]( 4);
+      newErr.data[it]( 6) = kGain.data[it]( 6)*trkErr->data[it]( 0) + kGain.data[it]( 7)*trkErr->data[it]( 1);
+      newErr.data[it]( 7) = kGain.data[it]( 6)*trkErr->data[it]( 1) + kGain.data[it]( 7)*trkErr->data[it]( 2);
+      newErr.data[it]( 8) = kGain.data[it]( 6)*trkErr->data[it]( 3) + kGain.data[it]( 7)*trkErr->data[it]( 4);
+      newErr.data[it]( 9) = kGain.data[it]( 6)*trkErr->data[it]( 6) + kGain.data[it]( 7)*trkErr->data[it]( 7);
+      newErr.data[it](10) = kGain.data[it]( 8)*trkErr->data[it]( 0) + kGain.data[it]( 9)*trkErr->data[it]( 1);
+      newErr.data[it](11) = kGain.data[it]( 8)*trkErr->data[it]( 1) + kGain.data[it]( 9)*trkErr->data[it]( 2);
+      newErr.data[it](12) = kGain.data[it]( 8)*trkErr->data[it]( 3) + kGain.data[it]( 9)*trkErr->data[it]( 4);
+      newErr.data[it](13) = kGain.data[it]( 8)*trkErr->data[it]( 6) + kGain.data[it]( 9)*trkErr->data[it]( 7);
+      newErr.data[it](14) = kGain.data[it]( 8)*trkErr->data[it](10) + kGain.data[it]( 9)*trkErr->data[it](11);
+      newErr.data[it](15) = kGain.data[it](10)*trkErr->data[it]( 0) + kGain.data[it](11)*trkErr->data[it]( 1);
+      newErr.data[it](16) = kGain.data[it](10)*trkErr->data[it]( 1) + kGain.data[it](11)*trkErr->data[it]( 2);
+      newErr.data[it](17) = kGain.data[it](10)*trkErr->data[it]( 3) + kGain.data[it](11)*trkErr->data[it]( 4);
+      newErr.data[it](18) = kGain.data[it](10)*trkErr->data[it]( 6) + kGain.data[it](11)*trkErr->data[it]( 7);
+      newErr.data[it](19) = kGain.data[it](10)*trkErr->data[it](10) + kGain.data[it](11)*trkErr->data[it](11);
+      newErr.data[it](20) = kGain.data[it](10)*trkErr->data[it](15) + kGain.data[it](11)*trkErr->data[it](16);
+
+      newErr.data[it]( 0) = trkErr->data[it]( 0) - newErr.data[it]( 0);
+      newErr.data[it]( 1) = trkErr->data[it]( 1) - newErr.data[it]( 1);
+      newErr.data[it]( 2) = trkErr->data[it]( 2) - newErr.data[it]( 2);
+      newErr.data[it]( 3) = trkErr->data[it]( 3) - newErr.data[it]( 3);
+      newErr.data[it]( 4) = trkErr->data[it]( 4) - newErr.data[it]( 4);
+      newErr.data[it]( 5) = trkErr->data[it]( 5) - newErr.data[it]( 5);
+      newErr.data[it]( 6) = trkErr->data[it]( 6) - newErr.data[it]( 6);
+      newErr.data[it]( 7) = trkErr->data[it]( 7) - newErr.data[it]( 7);
+      newErr.data[it]( 8) = trkErr->data[it]( 8) - newErr.data[it]( 8);
+      newErr.data[it]( 9) = trkErr->data[it]( 9) - newErr.data[it]( 9);
+      newErr.data[it](10) = trkErr->data[it](10) - newErr.data[it](10);
+      newErr.data[it](11) = trkErr->data[it](11) - newErr.data[it](11);
+      newErr.data[it](12) = trkErr->data[it](12) - newErr.data[it](12);
+      newErr.data[it](13) = trkErr->data[it](13) - newErr.data[it](13);
+      newErr.data[it](14) = trkErr->data[it](14) - newErr.data[it](14);
+      newErr.data[it](15) = trkErr->data[it](15) - newErr.data[it](15);
+      newErr.data[it](16) = trkErr->data[it](16) - newErr.data[it](16);
+      newErr.data[it](17) = trkErr->data[it](17) - newErr.data[it](17);
+      newErr.data[it](18) = trkErr->data[it](18) - newErr.data[it](18);
+      newErr.data[it](19) = trkErr->data[it](19) - newErr.data[it](19);
+      newErr.data[it](20) = trkErr->data[it](20) - newErr.data[it](20);
+   }
+
+   (*trkErr) = newErr;
+}
+
+const float kfact= 100./(-0.299792458*3.8112);
 void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 		  const MP1I* inChg, const MP3F* msP,
 	                MP6x6SF* outErr, MP6F* outPar) {
@@ -402,24 +540,43 @@ int main (int argc, char* argv[]) {
    omp_set_num_threads(nthreads);
    Eigen::initParallel();
 
-   ATRK inputtrk = {
-     {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
-     {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
-      6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
-      0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348},
-     1
-   };
+#include "input_track_eigen.h"
+   std::vector<AHIT> inputhits{inputhit25,inputhit24,inputhit23,inputhit22,inputhit21,inputhit20,inputhit19,inputhit18,inputhit17,
+                               inputhit16,inputhit15,inputhit14,inputhit13,inputhit12,inputhit11,inputhit10,inputhit09,inputhit08,
+                               inputhit07,inputhit06,inputhit05,inputhit04,inputhit03,inputhit02,inputhit01,inputhit00};
 
-   AHIT inputhit = {
-     {-20.7824649810791, -12.24150276184082, 57.8067626953125},
-     {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
-   };
-
-   printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
+   printf("track in pos: x=%f, y=%f, z=%f, r=%f, pt=%f, phi=%f, theta=%f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2],
+	  sqrtf(inputtrk.par[0]*inputtrk.par[0] + inputtrk.par[1]*inputtrk.par[1]),
+	  1./inputtrk.par[3], inputtrk.par[4], inputtrk.par[5]);
+  
    printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
-   printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
+
+   for (size_t lay=0; lay<nlayer; lay++){
+     printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
+   }
+   // ATRK inputtrk;
+   // const float tmp1[6] = {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975};
+   // const float tmp2[21] = {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
+   // 			   6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
+   // 			   0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348};
+   // inputtrk.par = Matrix<float,6,1>(tmp1);
+   // inputtrk.cov = Matrix<float,21,1>(tmp2);
+   // inputtrk.q = 1;
+
+   // AHIT inputhit;
+   // const float tmp3[3] = {-20.7824649810791, -12.24150276184082, 57.8067626953125};
+   // const float tmp4[6] = {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945};
+   // inputhit.pos = Matrix<float,3,1>(tmp3);
+   // inputhit.cov = Matrix<float,6,1>(tmp4);
+
+   
+   // printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
+   // printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
+   // 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
+   // 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
+   // printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
    
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
@@ -434,7 +591,7 @@ int main (int argc, char* argv[]) {
    srand(1);
 #endif
    MPTRK* trk = prepareTracks(inputtrk);
-   MPHIT* hit = prepareHits(inputhit);
+   MPHIT* hit = prepareHits(inputhits);
    MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -450,10 +607,12 @@ int main (int argc, char* argv[]) {
         for (size_t ib=0;ib<nb;++ib) { // loop over bunches of tracks
           const MPTRK* btracks = bTk(trk, ie, ib);
           MPTRK* obtracks = bTk(outtrk, ie, ib);
+	  (*obtracks) = (*btracks);	  
           for(size_t layer=0;layer<nlayer;++layer){
             const MPHIT* bhits = bHit(hit, ie, ib,layer);
-            propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+            propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
+            // KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
+	    KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);
           }
         }
       }
@@ -467,6 +626,7 @@ int main (int argc, char* argv[]) {
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, nthreads);
 
+   int nnans = 0, nfail = 0;
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;
@@ -478,15 +638,34 @@ int main (int argc, char* argv[]) {
        float pt_ = 1./ipt(outtrk,ie,it);
        float phi_ = phi(outtrk,ie,it);
        float theta_ = theta(outtrk,ie,it);
+       float hx_ = inputhits[nlayer-1].pos[0];
+       float hy_ = inputhits[nlayer-1].pos[1];
+       float hz_ = inputhits[nlayer-1].pos[2];
+       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
+	   ) {
+	 nnans++;
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1.
+           ) {
+	 nfail++;
+	 continue;
+       }
        avgpt += pt_;
        avgphi += phi_;
        avgtheta += theta_;
        avgx += x_;
        avgy += y_;
        avgz += z_;
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
        avgdx += (x_-hx_)/x_;
        avgdy += (y_-hy_)/y_;
        avgdz += (z_-hz_)/z_;
@@ -509,12 +688,27 @@ int main (int argc, char* argv[]) {
        float x_ = x(outtrk,ie,it);
        float y_ = y(outtrk,ie,it);
        float z_ = z(outtrk,ie,it);
+       float pt_ = 1./ipt(outtrk,ie,it);
+       float hx_ = inputhits[nlayer-1].pos[0];
+       float hy_ = inputhits[nlayer-1].pos[1];
+       float hz_ = inputhits[nlayer-1].pos[2];
+       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false
+	   ) {
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1.
+           ) {
+         continue;
+       }
        stdx += (x_-avgx)*(x_-avgx);
        stdy += (y_-avgy)*(y_-avgy);
        stdz += (z_-avgz)*(z_-avgz);
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
@@ -537,6 +731,8 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
+   printf("number of tracks with nans=%i\n", nnans);
+   printf("number of tracks failed=%i\n", nfail);
 
    free(trk);
    free(hit);
