@@ -830,6 +830,7 @@
 #SetAccEntryFunction=functionname
 #SetOutputKernelFileNameBase=filename
 addIncludePath=__openarcrt__
+addIncludePath=./src
 macro=num_streams=__numStreams__,NITER=__NITER__,include_data=__INCLUDE_DATA__
 defaultNumWorkers=32
 defaultNumAsyncQueues=10

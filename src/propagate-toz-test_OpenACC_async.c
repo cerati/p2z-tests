@@ -294,7 +294,7 @@ struct MPHIT* prepareHits(struct AHIT* inputhits) {
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
         for (size_t it=0;it<bsize;++it) {
-	  //pos
+	        //pos
 	  for (size_t ip=0;ip<3;++ip) {
 	    result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
 	  }
@@ -729,7 +729,7 @@ int main (int argc, char* argv[]) {
   printf("Measure Compute Times Only!\n");
 #endif
 
-#include "input_track_c.h"
+#include "input_track.h"
 
    struct AHIT inputhits[26] = {inputhit25,inputhit24,inputhit23,inputhit22,inputhit21,inputhit20,inputhit19,inputhit18,inputhit17,
 				inputhit16,inputhit15,inputhit14,inputhit13,inputhit12,inputhit11,inputhit10,inputhit09,inputhit08,

@@ -54,8 +54,10 @@ TUNE += -DNITER=$(NITER)
 else
 ifeq ($(INCLUDE_DATA),0)
 TUNE += -DNITER=100
+NITER = 100
 else
 TUNE += -DNITER=10
+NITER = 10
 endif
 endif
 ifneq ($(NLAYER),0)
