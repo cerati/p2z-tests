@@ -18,6 +18,7 @@ INCLUDE_DATA ?= 1
 ifneq ($(INCLUDE_DATA),0)
 TUNE += -Dinclude_data=$(INCLUDE_DATA)
 endif
+TUNE += -I../
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
