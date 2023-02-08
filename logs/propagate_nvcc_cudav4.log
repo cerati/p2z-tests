@@ -1,0 +1,44 @@
+RUNNING CUDA Async Version!!
+Measure Both Memory Transfer Times and Compute Times!
+track in pos: x=20.048365, y=86.453407, z=-271.755951, r=88.747551, pt=11.928361, phi=1.384232, theta=2.820985 
+track in cov: 6.82e-05, 1.33e-03, 0.00e+00 
+hit in layer=0, pos: x=18.525879, y=79.874146, z=-271.755951, r=81.994431 
+hit in layer=1, pos: x=18.791328, y=79.798965, z=-250.253082, r=81.981636 
+hit in layer=2, pos: x=16.295025, y=65.746864, z=-226.068665, r=67.736092 
+hit in layer=3, pos: x=19.042385, y=79.725548, z=-229.755692, r=81.968140 
+hit in layer=4, pos: x=15.753889, y=65.829277, z=-226.381378, r=67.688095 
+hit in layer=5, pos: x=15.913563, y=65.799423, z=-207.070282, r=67.696426 
+hit in layer=6, pos: x=15.946718, y=65.782570, z=-207.383026, r=67.687843 
+hit in layer=7, pos: x=15.458244, y=65.860466, z=-189.571487, r=67.650269 
+hit in layer=8, pos: x=16.124157, y=65.740379, z=-189.884399, r=67.688889 
+hit in layer=9, pos: x=13.487497, y=54.576767, z=-179.334564, r=56.218647 
+hit in layer=10, pos: x=13.606212, y=54.542469, z=-165.336273, r=56.213963 
+hit in layer=11, pos: x=10.969297, y=43.480591, z=-148.308456, r=44.842918 
+hit in layer=12, pos: x=11.063412, y=43.450558, z=-134.310318, r=44.836926 
+hit in layer=13, pos: x=9.387657, y=35.499302, z=-109.677956, r=36.719593 
+hit in layer=14, pos: x=6.813858, y=27.925165, z=-106.178093, r=28.744452 
+hit in layer=15, pos: x=9.205368, y=35.535717, z=-109.922653, r=36.708664 
+hit in layer=16, pos: x=7.204010, y=27.753498, z=-106.423027, r=28.673235 
+hit in layer=17, pos: x=7.260882, y=27.738113, z=-93.474022, r=28.672693 
+hit in layer=18, pos: x=7.698053, y=27.590805, z=-80.279007, r=28.644590 
+hit in layer=19, pos: x=7.320264, y=27.722622, z=-80.523956, r=28.672810 
+produce nevts=100 ntrks=9600 smearing by=0.000010 
+NITER=10
+done preparing!
+Size of struct MPTRK trk[] = 107520000
+Size of struct MPTRK outtrk[] = 107520000
+Size of struct struct MPHIT hit[] = 34560000
+setup time time=7.657000 (s)
+done ntracks=9600000 tot time=0.747456 (s) time/trk=7.786000e-08 (s)
+formatted 10 100 9600 32 300 0.747456 0 7.657000 10
+track x avg=6.379984 std/avg=0.004899
+track y avg=24.415772 std/avg=0.003986
+track z avg=-80.409462 std/avg=0.001423
+track dx/x avg=-0.145572 std=0.008516
+track dy/y avg=-0.133656 std=0.007942
+track dz/z avg=0.000000 std=0.000000
+track pt avg=11.772643
+track phi avg=3.729203
+track theta avg=2.817117
+number of tracks with nans=0
+number of tracks failed=1365
