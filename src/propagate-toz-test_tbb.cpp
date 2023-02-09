@@ -12,6 +12,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #include <chrono>
 #include <iomanip>
 
+#define FIXED_RSEED
+
 #ifndef bsize
 #define bsize 128
 #endif
@@ -230,15 +232,15 @@ float x(const MPHIT* hits, size_t it)    { return pos(hits, it, 0); }
 float y(const MPHIT* hits, size_t it)    { return pos(hits, it, 1); }
 float z(const MPHIT* hits, size_t it)    { return pos(hits, it, 2); }
 //
-float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
-  size_t ib = tk/bsize;
-  const MPHIT* bhits = bHit(hits, ev, ib);
-  size_t it = tk % bsize;
-  return pos(bhits,it,ipar);
-}
-float x(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
-float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
-float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
+// float pos(const MPHIT* hits, size_t ev, size_t tk, size_t ipar){
+//   size_t ib = tk/bsize;
+//   const MPHIT* bhits = bHit(hits, ev, ib);
+//   size_t it = tk % bsize;
+//   return pos(bhits,it,ipar);
+// }
+// float x(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 0); }
+// float y(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
+// float z(const MPHIT* hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
 MPTRK* prepareTracks(ATRK inputtrk) {
   MPTRK* result = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); //fixme, align?
@@ -697,6 +699,10 @@ int main (int argc, char* argv[]) {
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+#ifdef FIXED_RSEED
+   //[DEBUG by Seyong on Dec. 28, 2020] add an explicit srand(1) call to generate fixed inputs for better debugging.
+   srand(1);
+#endif
    MPTRK* trk = prepareTracks(inputtrk);
    MPHIT* hit = prepareHits(inputhits);
    MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
@@ -722,8 +728,8 @@ int main (int argc, char* argv[]) {
           for(size_t layer=0; layer<nlayer; ++layer) {
             const MPHIT* bhits = bHit(hit, ie, ib,layer);
             propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par); // vectorized function
-            KalmanUpdate(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);//use v2 for better physics performance
-            //KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);
+            //KalmanUpdate(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);//use v2 for better physics performance
+            KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);
           }
         }});
       }});
@@ -736,7 +742,7 @@ int main (int argc, char* argv[]) {
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, nthreads);
 
-   int nnans = 0, nfail = 0;
+   int nnans = 0, nfail = 0, ngood = 0;
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;
@@ -763,12 +769,14 @@ int main (int argc, char* argv[]) {
 	 continue;
        }
        if (fabs( (x_-hx_)/hx_ )>1. ||
-	   fabs( (y_-hy_)/hy_ )>1. ||
-	   fabs( (z_-hz_)/hz_ )>1. ||
-	   fabs( (pt_-12.)/12.)>1.
-	   ) {
-	 nfail++;
-	 continue;
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+          ) {
+         nfail++;
+         continue;
        }
        avgpt += pt_;
        avgphi += phi_;
@@ -779,17 +787,18 @@ int main (int argc, char* argv[]) {
        avgdx += (x_-hx_)/x_;
        avgdy += (y_-hy_)/y_;
        avgdz += (z_-hz_)/z_;
+       ngood ++;
      }
    }
-   avgpt = avgpt/float(nevts*ntrks);
-   avgphi = avgphi/float(nevts*ntrks);
-   avgtheta = avgtheta/float(nevts*ntrks);
-   avgx = avgx/float(nevts*ntrks);
-   avgy = avgy/float(nevts*ntrks);
-   avgz = avgz/float(nevts*ntrks);
-   avgdx = avgdx/float(nevts*ntrks);
-   avgdy = avgdy/float(nevts*ntrks);
-   avgdz = avgdz/float(nevts*ntrks);
+   avgpt = avgpt/float(ngood);
+   avgphi = avgphi/float(ngood);
+   avgtheta = avgtheta/float(ngood);
+   avgx = avgx/float(ngood);
+   avgy = avgy/float(ngood);
+   avgz = avgz/float(ngood);
+   avgdx = avgdx/float(ngood);
+   avgdy = avgdy/float(ngood);
+   avgdz = avgdz/float(ngood);
 
    float stdx = 0, stdy = 0, stdz = 0;
    float stddx = 0, stddy = 0, stddz = 0;
@@ -799,22 +808,29 @@ int main (int argc, char* argv[]) {
        float y_ = y(outtrk,ie,it);
        float z_ = z(outtrk,ie,it);
        float pt_ = 1./ipt(outtrk,ie,it);
+       float phi_ = phi(outtrk,ie,it);
+       float theta_ = theta(outtrk,ie,it);
        float hx_ = inputhits[nlayer-1].pos[0];
        float hy_ = inputhits[nlayer-1].pos[1];
        float hz_ = inputhits[nlayer-1].pos[2];
        float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
        if (std::isfinite(x_)==false ||
 	   std::isfinite(y_)==false ||
-	   std::isfinite(z_)==false
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
 	   ) {
 	 continue;
        }
        if (fabs( (x_-hx_)/hx_ )>1. ||
-	   fabs( (y_-hy_)/hy_ )>1. ||
-	   fabs( (z_-hz_)/hz_ )>1. ||
-	   fabs( (pt_-12.)/12.)>1.
-	   ) {
-	 continue;
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+          ) {
+         continue;
        }
        stdx += (x_-avgx)*(x_-avgx);
        stdy += (y_-avgy)*(y_-avgy);
@@ -825,12 +841,12 @@ int main (int argc, char* argv[]) {
      }
    }
 
-   stdx = sqrtf(stdx/float(nevts*ntrks));
-   stdy = sqrtf(stdy/float(nevts*ntrks));
-   stdz = sqrtf(stdz/float(nevts*ntrks));
-   stddx = sqrtf(stddx/float(nevts*ntrks));
-   stddy = sqrtf(stddy/float(nevts*ntrks));
-   stddz = sqrtf(stddz/float(nevts*ntrks));
+   stdx = sqrtf(stdx/float(ngood));
+   stdy = sqrtf(stdy/float(ngood));
+   stdz = sqrtf(stdz/float(ngood));
+   stddx = sqrtf(stddx/float(ngood));
+   stddy = sqrtf(stddy/float(ngood));
+   stddz = sqrtf(stddz/float(ngood));
 
    printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
    printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
