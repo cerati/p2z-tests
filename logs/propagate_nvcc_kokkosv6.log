@@ -23,14 +23,33 @@ hit in layer=18, pos: x=7.698053, y=27.590805, z=-80.279007, r=28.644590
 hit in layer=19, pos: x=7.320264, y=27.722622, z=-80.523956, r=28.672810 
 produce nevts=100 ntrks=9600 smearing by=0.000010 
 NITER=10
+After kokkos::init
+Device Execution Space:
+  KOKKOS_ENABLE_CUDA: yes
+Cuda Atomics:
+  KOKKOS_ENABLE_CUDA_ATOMICS: no
+Cuda Options:
+  KOKKOS_ENABLE_CUDA_LAMBDA: yes
+  KOKKOS_ENABLE_CUDA_LDG_INTRINSIC: yes
+  KOKKOS_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE: no
+  KOKKOS_ENABLE_CUDA_UVM: no
+  KOKKOS_ENABLE_CXX11_DISPATCH_LAMBDA: yes
+
+Cuda Runtime Configuration:
+macro  KOKKOS_ENABLE_CUDA      : defined
+macro  CUDA_VERSION          = 11080 = version 11.8
+Kokkos::Cuda[ 0 ] Tesla V100-DGXS-32GB capability 7.0, Total Global Memory: 31.75 G, Shared Memory per Block: 48 K : Selected
+Kokkos::Cuda[ 1 ] Tesla V100-DGXS-32GB capability 7.0, Total Global Memory: 31.75 G, Shared Memory per Block: 48 K
+Kokkos::Cuda[ 2 ] Tesla V100-DGXS-32GB capability 7.0, Total Global Memory: 31.75 G, Shared Memory per Block: 48 K
+Kokkos::Cuda[ 3 ] Tesla V100-DGXS-32GB capability 7.0, Total Global Memory: 31.75 G, Shared Memory per Block: 48 K
+created views!
 done preparing!
 Size of struct MPTRK trk[] = 107520000
 Size of struct MPTRK outtrk[] = 107520000
 Size of struct struct MPHIT hit[] = 34560000
-Size of struct MPTRK = 3584
-setup time time=7.389000 (s)
-done ntracks=9600000 tot time=0.846000 (s) time/trk=8.812500e-08 (s)
-formatted 10 100 9600 32 300 0.846000 0 7.389000 -1
+setup time time=7.831000 (s)
+done ntracks=9600000 tot time=0.767766 (s) time/trk=7.997562e-08 (s)
+formatted 10 100 9600 32 300 0.767766 0 7.831000 10
 track x avg=6.380013 std/avg=0.004601
 track y avg=24.415867 std/avg=0.003601
 track z avg=-80.409546 std/avg=0.001422

@@ -28,17 +28,17 @@ Size of struct MPTRK trk[] = 107520000
 Size of struct MPTRK outtrk[] = 107520000
 Size of struct struct MPHIT hit[] = 34560000
 Size of struct MPTRK = 3584
-setup time time=7.583000 (s)
-done ntracks=9600000 tot time=0.839000 (s) time/trk=8.739583e-08 (s)
-formatted 10 100 9600 32 300 0.839000 0 7.583000 -1
-track x avg=6.379984 std/avg=0.004899
-track y avg=24.415772 std/avg=0.003986
-track z avg=-80.409462 std/avg=0.001423
-track dx/x avg=-0.145572 std=0.008516
-track dy/y avg=-0.133656 std=0.007942
+setup time time=7.385000 (s)
+done ntracks=9600000 tot time=0.842000 (s) time/trk=8.770833e-08 (s)
+formatted 10 100 9600 32 300 0.842000 0 7.385000 -1
+track x avg=6.380013 std/avg=0.004601
+track y avg=24.415867 std/avg=0.003601
+track z avg=-80.409546 std/avg=0.001422
+track dx/x avg=-0.145570 std=0.011900
+track dy/y avg=-0.133655 std=0.011527
 track dz/z avg=0.000000 std=0.000000
-track pt avg=11.772643
-track phi avg=3.729203
-track theta avg=2.817117
-number of tracks with nans=0
-number of tracks failed=1365
+track pt avg=11.772791
+track phi avg=1.594909
+track theta avg=2.816418
+number of tracks with nans=1
+number of tracks failed=1363
