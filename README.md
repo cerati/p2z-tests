@@ -20,13 +20,18 @@ $ make COMPILER=gcc MODE=acc
 ```
 
 ## OpenACC C
-#### Compile with pgi, openarc
+#### Compile with pgi, openarc, gcc
 Compile the OpenACC C sync version
 
 ```shell
 $ make COMPILER=pgi MODE=accc
 $ make COMPILER=openarc MODE=accc INCLUDE_DATA=0
 $ make COMPILER=gcc MODE=accc
+```
+Enable the following environment variable to make OpenARC-compiled program generate the same outputs
+
+```shell
+export OPENARC_JITOPTION="--fmad false"
 ```
 
 Compile the OpenACC C async version (v3 and v4)

@@ -461,7 +461,9 @@ endif
 ifeq ($(COMPILE_CUDA),1)
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr
+# fmad, which is enabled by default, makes different CUDA versions generate different outputs.
+#CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr 
+CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr --fmad false
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
 endif
 ifeq ($(COMPILER),nvcpp)

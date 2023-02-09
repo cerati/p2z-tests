@@ -773,7 +773,6 @@ int main (int argc, char* argv[]) {
    Kokkos::View<MPHIT*>::HostMirror h_hit = prepareHits(inputhits, hit);
    //Kokkos::deep_copy(hit, h_hit);
 
-   //MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
    Kokkos::View<MPTRK*> outtrk("outtrk", nevts*nb);
    Kokkos::View<MPTRK*>::HostMirror h_outtrk = Kokkos::create_mirror_view(outtrk);
 
