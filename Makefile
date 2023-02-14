@@ -68,6 +68,7 @@ THREADSX ?= 0
 THREADSY ?= 0
 BLOCKS ?= 0
 USE_ASYNC ?= 1
+USE_FMAD ?= 1
 ifneq ($(THREADSX),0)
 TUNE += -Dthreadsperblockx=$(THREADSX)
 endif
@@ -461,9 +462,12 @@ endif
 ifeq ($(COMPILE_CUDA),1)
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
+ifeq ($(USE_FMAD),1)
 # fmad, which is enabled by default, makes different CUDA versions generate different outputs.
-#CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr 
+CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr 
+else
 CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr --fmad false
+endif
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
 endif
 ifeq ($(COMPILER),nvcpp)
@@ -606,6 +610,7 @@ endif
 ifneq ($(INCLUDE_DATA),0)
 KOKKOS_FLAGS += INCLUDE_DATA=$(INCLUDE_DATA)
 endif
+KOKKOS_FLAGS += USE_FMAD=$(USE_FMAD)
 endif
 
 ################################################
@@ -677,7 +682,7 @@ endif
 $(TARGET)/$(BENCHMARK): precmd src/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi
 	if [ $(COMPILE_KOKKOS) -eq 0 ]; then $(CXX) $(CFLAGS1) src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK); fi
-	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd src/$(CSRCSDIR); make -j $(KOKKOS_FLAGS); cd ../../; fi
+	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd src/$(CSRCSDIR); make clean; make -j $(KOKKOS_FLAGS); cd ../../; fi
 	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.hip.cpp" ]; then cp ./cetus_output/openarc_kernel.hip.cpp ${TARGET}/; fi

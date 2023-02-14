@@ -31,8 +31,10 @@ TUNE += -I../
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
-#Disable below to apply fmad optimization.
+ifeq ($(USE_FMAD),0)
+#Disable fmad optimization
 TUNE += --fmad false
+endif
 CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dnum_streams=${num_streams} -Dprepin_hostmem=${prepin_hostmem} ${TUNE}
 # KOKKOS_ARCH = "HSW,Kepler35"
 #KOKKOS_ARCH = "SKX,Volta70"
