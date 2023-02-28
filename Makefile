@@ -8,7 +8,7 @@
 ##########################################################
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
 #                   ibm, nvcpp, dpcpp                    #
-# MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
+# MODE options: omp, seq, cuda, tbb, eigen, alpaka,      #
 #               omp4, cudav1, cudav2, cudav3, cudav4,    #
 #               cudauvm, cudahyb, pstl, accc, acccv3,    #
 #               acccv4, omp4c, omp4cv3, omp4cv4, accccpu,#
@@ -261,38 +261,6 @@ CSRCS = "NotSupported"
 endif
 endif
 
-
-################
-#  ACC Setting #
-################
-ifeq ($(MODE),acc)
-# Synchronous version
-#In the following version (V1), PGI incorrectly allocates gang-private data (errorProp, temp, inverse_temp, kGain, newErr) as gang-shared.
-#With nvc++ V21.11 with -O3 option, this compiles and run correctly.
-#CSRCS = propagate-toz-test_OpenACC_sync_v1.cpp
-#In the following version (V2), temporary data (errorProp, temp, inverse_temp, kGain, newErr) are declared as vector-private, 
-#which is correct but very inefficient.
-#CSRCS = propagate-toz-test_OpenACC_sync_v2.cpp
-#In the following version (V3), PGI correctly privatizes the gang-private data (errorProp, temp, inverse_temp, kGain, newErr) in the global memory 
-#but not in the shared memory; less optimal.
-#CSRCS = propagate-toz-test_OpenACC_sync_v3.cpp
-#In the following version (V4), private data (errorProp, temp, inverse_temp, kGain, newErr) are used as vector private with bsize = 1.
-#Performs best when using nvc++ V21.11 with -O3 option.
-CSRCS = propagate-toz-test_OpenACC_sync_v4.cpp
-ifeq ($(COMPILER),pgi)
-CXX=nvc++
-CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-#CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -mcmodel=medium -Mlarge_arrays
-#CXX=pgc++
-#CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-else ifeq ($(COMPILER),gcc)
-CXX=g++
-CFLAGS1 += -O3 -I. -fopenacc -foffload="-lm -O3"
-CLIBS1 += -lm
-else
-CSRCS = "NotSupported"
-endif
-endif
 
 ##################
 #  ACC C Setting #
