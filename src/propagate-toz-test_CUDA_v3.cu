@@ -517,8 +517,8 @@ __forceinline__ __device__ void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const
   for(size_t it=threadIdx.x;it<bsize;it+=blockDim.x){
     #pragma unroll
     for (int i = 0; i < 21; i++){
-      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr.data[ i*bsize+it]; 
-    }   
+      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr.data[ i*bsize+it];
+    }
   }
 }
 

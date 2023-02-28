@@ -426,7 +426,6 @@ endif
 #################
 COMPILE_CUDA = 0
 ifeq ($(MODE),cuda)
-#CSRCS = propagate-toz-test_CUDA.cu
 # CUDA_v0 use USM but has the same computation patterns and communication patterns as CUDA_v3
 CSRCS = propagate-toz-test_CUDA_v0.cu
 COMPILE_CUDA = 1
