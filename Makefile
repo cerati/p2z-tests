@@ -8,8 +8,8 @@
 ##########################################################
 # COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
 #                   ibm, nvcpp, dpcpp                    #
-# MODE options: omp, seq, cuda, tbb, eigen, alpaka,      #
-#               omp4, cudav1, cudav2, cudav3, cudav4,    #
+# MODE options: omp, seq, tbb, eigen, alpaka,            #
+#               cuda, cudav1, cudav2, cudav3, cudav4,    #
 #               cudauvm, cudahyb, pstl, accc, acccv3,    #
 #               acccv4, omp4c, omp4cv3, omp4cv4, accccpu,#
 #               acccv3cpu, acccv4cpu, kokkosv1, kokkosv2,#
@@ -146,37 +146,6 @@ endif
 ifeq ($(COMPILER),ibm)
 CXX=xlc
 CFLAGS1 += -I. -Wall -v -O3 -qarch=pwr9 -qsmp=noauto:omp -qnooffload #host power9
-endif
-endif
-
-
-#################
-#  OMP4 Setting #
-#################
-ifeq ($(MODE),omp4)
-CSRCS = propagate-toz-test_OpenMP4_sync_v1.cpp
-ifeq ($(COMPILER),gcc)
-CXX=g++
-CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
-CLIBS1 += -lm -lgomp 
-else ifeq ($(COMPILER),llvm)
-CXX=clang++
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=$(CUDA_ARCH)
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=x86_64-pc-linux-gnu
-#CFLAGS1 = -Wall -O3 -I. -fopenmp 
-CLIBS1 += -lm
-else ifeq ($(COMPILER),ibm)
-CXX=xlc++_r
-CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
-CLIBS1 += -lm
-else ifeq ($(COMPILER),pgi)
-CXX=nvc++
-CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp=gpu -mcmodel=medium -Mlarge_arrays
-CLIBS1 += -lm
-else
-CSRCS = "NotSupported"
 endif
 endif
 
