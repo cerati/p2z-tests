@@ -818,7 +818,6 @@ int main (int argc, char* argv[]) {
          		//
                         propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
   	        		&errorProp, &temp); // vectorized function
-            		//KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
             		//KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr);
                         KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov, &(*bhits).pos, &resErr_loc, &kGain, &res_loc, &newErr);
          		}
