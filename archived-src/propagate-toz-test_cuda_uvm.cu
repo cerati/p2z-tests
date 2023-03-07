@@ -738,7 +738,7 @@ __device__ void KalmanUpdate_v2(MP6x6SF_ &trkErr, MP6F_ &inPar, const MP3x3SF_ &
 }
 
 //constexpr auto kfact= 100/3.8;
-constexpr auto kfact= 100./(-0.299792458*3.8112);
+constexpr float kfact= 100./(-0.299792458*3.8112);
 
 __device__ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP1I_ &inChg, 
                   const MP3F_ &msP, MP6x6SF_ &outErr, MP6F_ &outPar) {
@@ -749,26 +749,26 @@ __device__ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP
   auto PosInMtrx = [=] (int i, int j, int D) constexpr {return (i*D+j);};
 //#pragma omp simd
   {	
-    const auto zout = msP[iparZ];
+    const float zout = msP[iparZ];
     //note: in principle charge is not needed and could be the sign of ipt
-    const auto k = inChg[0]*kfact;
-    const auto deltaZ = zout - inPar[iparZ];
-    const auto ipt  = inPar[iparIpt];
-    const auto pt   = 1.f/ipt;
-    const auto phi  = inPar[iparPhi];
-    const auto cosP = cosf(phi);
-    const auto sinP = sinf(phi);
-    const auto theta= inPar[iparTheta];
-    const auto cosT = cosf(theta);
-    const auto sinT = sinf(theta);
-    const auto pxin = cosP*pt;
-    const auto pyin = sinP*pt;
-    const auto icosT  = 1.f/cosT;
-    const auto icosTk = icosT/k;
-    const auto alpha  = deltaZ*sinT*ipt*icosTk;
-    //const auto alpha = deltaZ*sinT*ipt(inPar]/(cosT*k);
-    const auto sina = sinf(alpha); // this can be approximated;
-    const auto cosa = cosf(alpha); // this can be approximated;
+    const float k = inChg[0]*kfact;
+    const float deltaZ = zout - inPar[iparZ];
+    const float ipt  = inPar[iparIpt];
+    const float pt   = 1.f/ipt;
+    const float phi  = inPar[iparPhi];
+    const float cosP = cosf(phi);
+    const float sinP = sinf(phi);
+    const float theta= inPar[iparTheta];
+    const float cosT = cosf(theta);
+    const float sinT = sinf(theta);
+    const float pxin = cosP*pt;
+    const float pyin = sinP*pt;
+    const float icosT  = 1.f/cosT;
+    const float icosTk = icosT/k;
+    const float alpha  = deltaZ*sinT*ipt*icosTk;
+    //const float alpha = deltaZ*sinT*ipt(inPar]/(cosT*k);
+    const float sina = sinf(alpha); // this can be approximated;
+    const float cosa = cosf(alpha); // this can be approximated;
     //
     outPar[iparX]     = inPar[iparX] + k*(pxin*sina - pyin*(1.f-cosa));
     outPar[iparY]     = inPar[iparY] + k*(pyin*sina + pxin*(1.f-cosa));
@@ -777,8 +777,8 @@ __device__ void propagateToZ(const MP6x6SF_ &inErr, const MP6F_ &inPar, const MP
     outPar[iparPhi]   = phi +alpha;
     outPar[iparTheta] = theta;
     
-    const auto sCosPsina = sinf(cosP*sina);
-    const auto cCosPsina = cosf(cosP*sina);
+    const float sCosPsina = sinf(cosP*sina);
+    const float cCosPsina = cosf(cosP*sina);
     
     //for (size_t i=0;i<6;++i) errorProp[bsize*PosInMtrx(i,i,6) + it] = 1.;
     errorProp[PosInMtrx(0,0,6)] = 1.0f;

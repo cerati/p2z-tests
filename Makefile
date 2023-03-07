@@ -390,7 +390,6 @@ COMPILE_CUDA = 1
 endif
 
 ifeq ($(MODE),cudauvm)
-#CSRCS = propagate-toz-test_cuda_uvm.cu
 CSRCS = propagate-toz-test_cuda_uvm_v2.cu
 COMPILE_CUDA = 1
 endif
