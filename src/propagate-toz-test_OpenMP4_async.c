@@ -526,11 +526,11 @@ void KalmanUpdate(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3
 }
 #pragma omp end declare target
 
-#pragma acc routine vector
+#pragma omp declare target
 void KalmanUpdate_v2(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3SF* hitErr, const struct MP3F* msP, struct MP2x2SF* resErr_loc, struct MP2x6* kGain, struct MP2F* res_loc, struct MP6x6SF* newErr){
 
    // AddIntoUpperLeft2x2(psErr, msErr, resErr);
-#pragma acc loop vector
+#pragma omp parallel for num_threads(bsize)
    for (size_t it=0;it<bsize;++it)
    {
      resErr_loc->data[0*bsize+it] = trkErr->data[0*bsize+it] + hitErr->data[0*bsize+it];
@@ -539,7 +539,7 @@ void KalmanUpdate_v2(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP
    }
 
    // Matriplex::InvertCramerSym(resErr);
-#pragma acc loop vector
+#pragma omp parallel for num_threads(bsize)
    for (size_t it=0;it<bsize;++it)
    {
      const double det = (double)resErr_loc->data[0*bsize+it] * resErr_loc->data[2*bsize+it] -
@@ -552,7 +552,7 @@ void KalmanUpdate_v2(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP
    }
 
    // KalmanGain(psErr, resErr, K);
-#pragma acc loop vector
+#pragma omp parallel for num_threads(bsize)
    for (size_t it=0;it<bsize;++it)
    {
       kGain->data[ 0*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc->data[ 0*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc->data[ 1*bsize+it];
@@ -571,7 +571,7 @@ void KalmanUpdate_v2(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP
 
    // SubtractFirst2(msPar, psPar, res);
    // MultResidualsAdd(K, psPar, res, outPar);
-#pragma acc loop vector
+#pragma omp parallel for num_threads(bsize)
    for (size_t it=0;it<bsize;++it)
    {
      res_loc->data[0*bsize+it] =  x_pos1(msP,it) - x1(inPar,it);
@@ -591,7 +591,7 @@ void KalmanUpdate_v2(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP
 
    // KHC(K, psErr, outErr);
    // outErr.Subtract(psErr, outErr);
-#pragma acc loop vector
+#pragma omp parallel for num_threads(bsize)
    for (size_t it=0;it<bsize;++it)
    {
       newErr->data[ 0*bsize+it] = kGain->data[ 0*bsize+it]*trkErr->data[ 0*bsize+it] + kGain->data[ 1*bsize+it]*trkErr->data[ 1*bsize+it];
@@ -639,7 +639,7 @@ void KalmanUpdate_v2(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP
       newErr->data[20*bsize+it] = trkErr->data[20*bsize+it] - newErr->data[20*bsize+it];
    }
 
-  #pragma acc loop vector
+#pragma omp parallel for num_threads(bsize)
   for (size_t it=0;it<bsize;++it) {
     #pragma unroll
     for (int i = 0; i < 21; i++){
@@ -647,6 +647,7 @@ void KalmanUpdate_v2(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP
     }
   }
 }
+#pragma omp end declare target
 
 //const float kfact = 100/3.8;
 #define kfact 100./(-0.299792458*3.8112)

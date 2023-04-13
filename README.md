@@ -95,6 +95,8 @@ Version 1 uses unified memory. Version 2 and 3 use explicit memory transfers.
 
 Version 3 has the same computation and communiation patterns as OpenACC async version (v3).
 
+Version 4 has the same computation and communiation patterns as OpenACC async version (v4).
+
 ```shell
 $ make COMPILER=nvcc MODE=cuda #default behaviors: asynchronous execution; measure both memory transfer times and compute times
 $ make COMPILER=nvcc MODE=cuda INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
