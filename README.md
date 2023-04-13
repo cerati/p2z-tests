@@ -10,15 +10,6 @@ $ make COMPILER=icc MODE=omp
 $ make COMPILER=pgi MODE=omp
 ```
 
-## OpenACC C++
-#### Compile with pgi
-Compile the OpenACC C++ sync version
-
-```shell
-$ make COMPILER=pgi MODE=acc
-$ make COMPILER=gcc MODE=acc
-```
-
 ## OpenACC C
 #### Compile with pgi, openarc, gcc
 Compile the OpenACC C sync version
@@ -62,17 +53,6 @@ $ make COMPILER=gcc MODE=acccv3cpu
 $ make COMPILER=openarc MODE=acccv4cpu
 ```
 
-## OpenMP4 C++
-#### Compile with gcc, llvm, ibm
-Compile the OpenMP4 C++ sync version
-
-```shell
-$ make COMPILER=gcc MODE=omp4
-$ make COMPILER=llvm MODE=omp4
-$ make COMPILER=ibm MODE=omp4
-$ make COMPILER=pgi MODE=omp4 #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet). NVHPC V22.2 also fails.
-```
-
 ## OpenMP4 C
 #### Compile with openarc, llvm, ibm, and gcc
 Compile the OpenMP4 C sync version
@@ -96,6 +76,12 @@ $ make COMPILER=gcc MODE=omp4cv3
 $ make COMPILER=pgi MODE=omp4cv3 #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet). NVHPC V22.2 also fails.
 ```
 
+Enable the following environment variable to make OpenARC-compiled program generate the same outputs
+
+```shell
+export OPENARC_JITOPTION="--fmad false"
+```
+
 ## Tbb
 #### Compilers: gcc, icc
 ```shell
@@ -113,6 +99,7 @@ Version 3 has the same computation and communiation patterns as OpenACC async ve
 $ make COMPILER=nvcc MODE=cuda #default behaviors: asynchronous execution; measure both memory transfer times and compute times
 $ make COMPILER=nvcc MODE=cuda INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
 $ make COMPILER=nvcc MODE=cuda INCLUDE_DATA=0 #measure compute times only
+$ make COMPILER=nvcc MODE=cuda USE_FMAD=0 #disable the fmad optimization
 $ make COMPILER=nvcc MODE=cudav1 USE_ASYNC=1 #for asynchronous execution (default)
 $ make COMPILER=nvcc MODE=cudav1 USE_ASYNC=0 #for synchronous execution
 $ make COMPILER=nvcc MODE=cudav1 INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
@@ -127,6 +114,26 @@ $ make COMPILER=nvcc MODE=cudav4 INCLUDE_DATA=1 #measure both memory transfer ti
 $ make COMPILER=nvcc MODE=cudav4 INCLUDE_DATA=0 #measure compute times only
 $ make COMPILER=nvcc MODE=cudauvm INCLUDE_DATA=1 #measure both memory transfer times and compute times (default)
 $ make COMPILER=nvcc MODE=cudauvm INCLUDE_DATA=0 #measure compute times only
+```
+
+## CUDA Hybrid
+#### Compilers: nvc++
+GCC_ROOT option has to be set properly to use a specific GCC version
+
+```shell
+$ make COMPILER=nvcpp MODE=cudahyb 
+$ make COMPILER=nvcpp MODE=cudahyb USE_FMAD=0 #disable the fmad optimization
+$ make COMPILER=nvcpp MODE=cudahyb INCLUDE_DATA=0 #measure compute times only
+```
+
+## PSTL
+#### Compilers: nvc++
+GCC_ROOT option has to be set properly to use a specific GCC version
+
+```shell
+$ make COMPILER=nvcpp MODE=pstl 
+$ make COMPILER=nvcpp MODE=pstl USE_FMAD=0 #disable the fmad optimization
+$ make COMPILER=nvcpp MODE=pstl INCLUDE_DATA=0 #measure compute times only
 ```
 
 ## Eigen

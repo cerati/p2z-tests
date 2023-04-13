@@ -21,7 +21,8 @@ OS ?= linux
 DEBUG ?= 0
 CUDA_ARCH ?= sm_70
 CUDA_CC ?= cc70
-GCC_ROOT ?= /sw/summit/gcc/11.1.0-2
+#GCC_ROOT ?= /sw/summit/gcc/11.1.0-2
+GCC_ROOT ?= g++
 INCLUDE_DATA ?= 1
 ifneq ($(INCLUDE_DATA),0)
 TUNE += -Dinclude_data=$(INCLUDE_DATA)
@@ -122,7 +123,6 @@ endif
 #  PSTL Setting #
 ################
 ifeq ($(MODE),pstl)
-#CSRCS = propagate-toz-test_pstl.cpp
 CSRCS = propagate-toz-test_pstl_v2.cpp
 ifeq ($(COMPILER),gcc)
 CXX=g++
@@ -131,7 +131,11 @@ CLIBS1 += -lm -lgomp -L/opt/intel/tbb-gnu9.3/lib -ltbb
 endif
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
-CFLAGS1 += -O2 -stdpar -gpu=$(CUDA_CC) --gcc-toolchain=$(GCC_ROOT)
+ifeq ($(USE_FMAD),1)
+CFLAGS1 += -O3 -stdpar -gpu=$(CUDA_CC) --gcc-toolchain=$(GCC_ROOT) -Mfma
+else
+CFLAGS1 += -O3 -stdpar -gpu=$(CUDA_CC) --gcc-toolchain=$(GCC_ROOT) -Mnofma
+endif
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
@@ -407,7 +411,11 @@ CLIBS1 += -L${CUDALIBDIR} -lcudart
 endif
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
-CFLAGS1 += -gpu=$(CUDA_CC) -O3
+ifeq ($(USE_FMAD),1)
+CFLAGS1 += -gpu=$(CUDA_CC) -O3 -Mfma
+else
+CFLAGS1 += -gpu=$(CUDA_CC) -O3 -Mnofma
+endif
 CLIBS1 += -lcudart 
 endif
 endif
@@ -416,7 +424,11 @@ ifeq ($(MODE),cudahyb)
 CSRCS = propagate-toz-test_cuda_hybrid.cpp
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
-CFLAGS1 += -cuda -stdpar=gpu -gpu=$(CUDA_CC) -O2 --gcc-toolchain=$(GCC_ROOT) -gpu=managed
+ifeq ($(USE_FMAD),1)
+CFLAGS1 += -cuda -stdpar=gpu -gpu=$(CUDA_CC) -O3 --gcc-toolchain=$(GCC_ROOT) -gpu=managed -Mfma
+else
+CFLAGS1 += -cuda -stdpar=gpu -gpu=$(CUDA_CC) -O3 --gcc-toolchain=$(GCC_ROOT) -gpu=managed -Mnofma
+endif
 CLIBS1 += -lcudart 
 endif
 endif

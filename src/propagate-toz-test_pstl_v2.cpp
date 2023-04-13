@@ -22,7 +22,9 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #include <execution>
 #include <random>
 
+#if defined(__NVCOMPILER_CUDA__)
 #define USE_PARALLEL_COPY
+#endif
 
 #if defined(__NVCOMPILER_CUDA__)
 constexpr bool use_cuda = true;
@@ -43,7 +45,7 @@ constexpr bool use_cuda = false;
 #ifndef nevts
 #define nevts 100
 #endif
-#define smear 0.1
+#define smear 0.00001
 
 #ifndef NITER
 #define NITER 5
@@ -52,12 +54,8 @@ constexpr bool use_cuda = false;
 #define nlayer 20
 #endif
 
-#if defined(__NVCOMPILER_CUDA__)
 #ifdef include_data
 constexpr bool include_data_transfer = true;
-#else
-constexpr bool include_data_transfer = false;
-#endif
 #else
 constexpr bool include_data_transfer = false;
 #endif
@@ -136,6 +134,7 @@ template<int bSize = 1> using MP6x6SF_ = MPNX<float, 21, bSize>;
 template<int bSize = 1> using MP6x6F_  = MPNX<float, 36, bSize>;
 template<int bSize = 1> using MP3x3_   = MPNX<float, 9 , bSize>;
 template<int bSize = 1> using MP3x6_   = MPNX<float, 18, bSize>;
+template<int bSize = 1> using MP2x6_   = MPNX<float, 12, bSize>;
 
 // external data formats:
 using MP1I    = MPNX<int,   1 , bsize>;
@@ -270,10 +269,10 @@ void prepareTracks(std::vector<MPTRK> &trcks, ATRK &inputtrk) {
 	                 }
 	                 //cov, scale by factor 100
 	                 for (auto&& ip : views::iota(0,21)) {
-	                   trck.cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+	                   trck.cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip]*100;
 	                 }
 	                 //q
-	                 trck.q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//can't really smear this or fit will be wrong
+	                 trck.q.data[it] = inputtrk.q;//can't really smear this or fit will be wrong
                        }
                        
                    };
@@ -283,10 +282,10 @@ void prepareTracks(std::vector<MPTRK> &trcks, ATRK &inputtrk) {
   return;
 }
 
-void prepareHits(std::vector<MPHIT> &hits, AHIT& inputhits) {
+void prepareHits(std::vector<MPHIT> &hits, AHIT* inputhits) {
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (auto&& lay : iota_view{0,nlayer}) {
-    for_each(views::iota(0, nevts*nb), [=, &inputhit = inputhits, &hits = hits] (auto&& evtrk) {
+    for_each(views::iota(0, nevts*nb), [=, &inputhit = inputhits[lay], &hits = hits] (auto&& evtrk) {
       for (auto&& it : views::iota(0,bsize)) {
         //pos
         for (auto&& ip : views::iota(0,3)) {
@@ -313,7 +312,7 @@ const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-float q(const MP1I* bq, size_t it){
+int q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 //
@@ -585,8 +584,123 @@ void KalmanUpdate(MP6x6SF_<N> &trkErr, MP6F_<N> &inPar, const MP3x3SF_<N> &hitEr
   return;
 }              
 
-//constexpr auto kfact= 100/(-0.299792458*3.8112);
-constexpr auto kfact= 100/3.8;
+template <int N = 1>
+void KalmanUpdate_v2(MP6x6SF_<N> &trkErr, MP6F_<N> &inPar, const MP3x3SF_<N> &hitErr, const MP3F_<N> &msP){
+   MP2x2SF_<N> resErr_loc;
+   MP2x6_<N> kGain;
+   MP2F_<N> res_loc;
+   MP6x6SF_<N> newErr;
+
+   // AddIntoUpperLeft2x2(psErr, msErr, resErr);
+   {
+     resErr_loc[0] = trkErr[0] + hitErr[0];
+     resErr_loc[1] = trkErr[1] + hitErr[1];
+     resErr_loc[2] = trkErr[2] + hitErr[2];
+   }
+
+   // Matriplex::InvertCramerSym(resErr);
+   {
+     const double det = (double)resErr_loc[0] * resErr_loc[2] -
+                        (double)resErr_loc[1] * resErr_loc[1];
+     const float s   = 1.f / det;
+     const float tmp = s * resErr_loc[2];
+     resErr_loc[1] *= -s;
+     resErr_loc[2]  = s * resErr_loc[0];
+     resErr_loc[0]  = tmp;
+   }
+
+   // KalmanGain(psErr, resErr, K);
+   {
+      kGain[ 0] = trkErr[ 0]*resErr_loc[ 0] + trkErr[ 1]*resErr_loc[ 1];
+      kGain[ 1] = trkErr[ 0]*resErr_loc[ 1] + trkErr[ 1]*resErr_loc[ 2];
+      kGain[ 2] = trkErr[ 1]*resErr_loc[ 0] + trkErr[ 2]*resErr_loc[ 1];
+      kGain[ 3] = trkErr[ 1]*resErr_loc[ 1] + trkErr[ 2]*resErr_loc[ 2];
+      kGain[ 4] = trkErr[ 3]*resErr_loc[ 0] + trkErr[ 4]*resErr_loc[ 1];
+      kGain[ 5] = trkErr[ 3]*resErr_loc[ 1] + trkErr[ 4]*resErr_loc[ 2];
+      kGain[ 6] = trkErr[ 6]*resErr_loc[ 0] + trkErr[ 7]*resErr_loc[ 1];
+      kGain[ 7] = trkErr[ 6]*resErr_loc[ 1] + trkErr[ 7]*resErr_loc[ 2];
+      kGain[ 8] = trkErr[10]*resErr_loc[ 0] + trkErr[11]*resErr_loc[ 1];
+      kGain[ 9] = trkErr[10]*resErr_loc[ 1] + trkErr[11]*resErr_loc[ 2];
+      kGain[10] = trkErr[15]*resErr_loc[ 0] + trkErr[16]*resErr_loc[ 1];
+      kGain[11] = trkErr[15]*resErr_loc[ 1] + trkErr[16]*resErr_loc[ 2];
+   }
+
+   // SubtractFirst2(msPar, psPar, res);
+   // MultResidualsAdd(K, psPar, res, outPar);
+   {
+     res_loc[0] =  msP[iparX] - inPar[iparX];
+     res_loc[1] =  msP[iparY] - inPar[iparY];
+
+     inPar[iparX] = inPar[iparX] + kGain[ 0] * res_loc[ 0] + kGain[ 1] * res_loc[ 1];
+     inPar[iparY] = inPar[iparY] + kGain[ 2] * res_loc[ 0] + kGain[ 3] * res_loc[ 1];
+     inPar[iparZ] = inPar[iparZ] + kGain[ 4] * res_loc[ 0] + kGain[ 5] * res_loc[ 1];
+     inPar[iparIpt] = inPar[iparIpt] + kGain[ 6] * res_loc[ 0] + kGain[ 7] * res_loc[ 1];
+     inPar[iparPhi] = inPar[iparPhi] + kGain[ 8] * res_loc[ 0] + kGain[ 9] * res_loc[ 1];
+     inPar[iparTheta] = inPar[iparTheta] + kGain[10] * res_loc[ 0] + kGain[11] * res_loc[ 1];
+     //note: if ipt changes sign we should update the charge, or we should get rid of the charge altogether and just use the sign of ipt
+   }
+   // squashPhiMPlex(outPar,N_proc); // ensure phi is between |pi|
+   // missing
+
+   // KHC(K, psErr, outErr);
+   // outErr.Subtract(psErr, outErr);
+   {
+      newErr[ 0] = kGain[ 0]*trkErr[ 0] + kGain[ 1]*trkErr[ 1];
+      newErr[ 1] = kGain[ 2]*trkErr[ 0] + kGain[ 3]*trkErr[ 1];
+      newErr[ 2] = kGain[ 2]*trkErr[ 1] + kGain[ 3]*trkErr[ 2];
+      newErr[ 3] = kGain[ 4]*trkErr[ 0] + kGain[ 5]*trkErr[ 1];
+      newErr[ 4] = kGain[ 4]*trkErr[ 1] + kGain[ 5]*trkErr[ 2];
+      newErr[ 5] = kGain[ 4]*trkErr[ 3] + kGain[ 5]*trkErr[ 4];
+      newErr[ 6] = kGain[ 6]*trkErr[ 0] + kGain[ 7]*trkErr[ 1];
+      newErr[ 7] = kGain[ 6]*trkErr[ 1] + kGain[ 7]*trkErr[ 2];
+      newErr[ 8] = kGain[ 6]*trkErr[ 3] + kGain[ 7]*trkErr[ 4];
+      newErr[ 9] = kGain[ 6]*trkErr[ 6] + kGain[ 7]*trkErr[ 7];
+      newErr[10] = kGain[ 8]*trkErr[ 0] + kGain[ 9]*trkErr[ 1];
+      newErr[11] = kGain[ 8]*trkErr[ 1] + kGain[ 9]*trkErr[ 2];
+      newErr[12] = kGain[ 8]*trkErr[ 3] + kGain[ 9]*trkErr[ 4];
+      newErr[13] = kGain[ 8]*trkErr[ 6] + kGain[ 9]*trkErr[ 7];
+      newErr[14] = kGain[ 8]*trkErr[10] + kGain[ 9]*trkErr[11];
+      newErr[15] = kGain[10]*trkErr[ 0] + kGain[11]*trkErr[ 1];
+      newErr[16] = kGain[10]*trkErr[ 1] + kGain[11]*trkErr[ 2];
+      newErr[17] = kGain[10]*trkErr[ 3] + kGain[11]*trkErr[ 4];
+      newErr[18] = kGain[10]*trkErr[ 6] + kGain[11]*trkErr[ 7];
+      newErr[19] = kGain[10]*trkErr[10] + kGain[11]*trkErr[11];
+      newErr[20] = kGain[10]*trkErr[15] + kGain[11]*trkErr[16];
+
+      newErr[ 0] = trkErr[ 0] - newErr[ 0];
+      newErr[ 1] = trkErr[ 1] - newErr[ 1];
+      newErr[ 2] = trkErr[ 2] - newErr[ 2];
+      newErr[ 3] = trkErr[ 3] - newErr[ 3];
+      newErr[ 4] = trkErr[ 4] - newErr[ 4];
+      newErr[ 5] = trkErr[ 5] - newErr[ 5];
+      newErr[ 6] = trkErr[ 6] - newErr[ 6];
+      newErr[ 7] = trkErr[ 7] - newErr[ 7];
+      newErr[ 8] = trkErr[ 8] - newErr[ 8];
+      newErr[ 9] = trkErr[ 9] - newErr[ 9];
+      newErr[10] = trkErr[10] - newErr[10];
+      newErr[11] = trkErr[11] - newErr[11];
+      newErr[12] = trkErr[12] - newErr[12];
+      newErr[13] = trkErr[13] - newErr[13];
+      newErr[14] = trkErr[14] - newErr[14];
+      newErr[15] = trkErr[15] - newErr[15];
+      newErr[16] = trkErr[16] - newErr[16];
+      newErr[17] = trkErr[17] - newErr[17];
+      newErr[18] = trkErr[18] - newErr[18];
+      newErr[19] = trkErr[19] - newErr[19];
+      newErr[20] = trkErr[20] - newErr[20];
+   }
+
+  {
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErr[ i] = trkErr[ i] - newErr[ i];
+    }
+  }
+}
+
+
+constexpr auto kfact= 100./(-0.299792458*3.8112);
+//constexpr auto kfact= 100/3.8;
 
 template<int N = 1>
 void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N> &inChg, 
@@ -596,26 +710,26 @@ void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N
   MP6x6F_<N> temp;
 //#pragma omp simd
   for (size_t it=0;it<N;++it) {	
-    const auto zout = msP(iparZ,it);
+    const float zout = msP(iparZ,it);
     //note: in principle charge is not needed and could be the sign of ipt
-    const auto k = inChg[it]*kfact;
-    const auto deltaZ = zout - inPar(iparZ,it);
-    const auto ipt  = inPar(iparIpt,it);
-    const auto pt   = 1.f/ipt;
-    const auto phi  = inPar(iparPhi,it);
-    const auto cosP = cosf(phi);
-    const auto sinP = sinf(phi);
-    const auto theta= inPar(iparTheta,it);
-    const auto cosT = cosf(theta);
-    const auto sinT = sinf(theta);
-    const auto pxin = cosP*pt;
-    const auto pyin = sinP*pt;
-    const auto icosT  = 1.f/cosT;
-    const auto icosTk = icosT/k;
-    const auto alpha  = deltaZ*sinT*ipt*icosTk;
-    //const auto alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
-    const auto sina = sinf(alpha); // this can be approximated;
-    const auto cosa = cosf(alpha); // this can be approximated;
+    const float k = inChg[it]*kfact;
+    const float deltaZ = zout - inPar(iparZ,it);
+    const float ipt  = inPar(iparIpt,it);
+    const float pt   = 1.f/ipt;
+    const float phi  = inPar(iparPhi,it);
+    const float cosP = cosf(phi);
+    const float sinP = sinf(phi);
+    const float theta= inPar(iparTheta,it);
+    const float cosT = cosf(theta);
+    const float sinT = sinf(theta);
+    const float pxin = cosP*pt;
+    const float pyin = sinP*pt;
+    const float icosT  = 1.f/cosT;
+    const float icosTk = icosT/k;
+    const float alpha  = deltaZ*sinT*ipt*icosTk;
+    //const float alpha = deltaZ*sinT*ipt(inPar,it)/(cosT*k);
+    const float sina = sinf(alpha); // this can be approximated;
+    const float cosa = cosf(alpha); // this can be approximated;
     //
     outPar(iparX, it)     = inPar(iparX,it) + k*(pxin*sina - pyin*(1.f-cosa));
     outPar(iparY, it)     = inPar(iparY,it) + k*(pyin*sina + pxin*(1.f-cosa));
@@ -624,8 +738,8 @@ void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N
     outPar(iparPhi, it)   = phi +alpha;
     outPar(iparTheta, it) = theta;
     
-    const auto sCosPsina = sinf(cosP*sina);
-    const auto cCosPsina = cosf(cosP*sina);
+    const float sCosPsina = sinf(cosP*sina);
+    const float cCosPsina = cosf(cosP*sina);
     
     //for (size_t i=0;i<6;++i) errorProp[bsize*PosInMtrx(i,i,6) + it] = 1.;
     errorProp[PosInMtrx(0,0,6, N) + it] = 1.0f;
@@ -658,25 +772,30 @@ void propagateToZ(const MP6x6SF_<N> &inErr, const MP6F_<N> &inPar, const MP1I_<N
 
 int main (int argc, char* argv[]) {
 
-   ATRK inputtrk = {
-     {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
-     {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
-      6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
-      0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348},
-     1
-   };
+#ifdef include_data
+  printf("Measure Both Memory Transfer Times and Compute Times!\n");
+#else
+  printf("Measure Compute Times Only!\n");
+#endif
 
-   AHIT inputhit = {
-     {-20.7824649810791, -12.24150276184082, 57.8067626953125},
-     {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
-   };
+#include "input_track.h"
 
-   printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
-   printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66[(0)]],
-                                              inputtrk.cov[SymOffsets66[(1*6+1)]],
-                                              inputtrk.cov[SymOffsets66[(2*6+2)]]);
-   printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
-   
+   struct AHIT inputhits[26] = {inputhit25,inputhit24,inputhit23,inputhit22,inputhit21,inputhit20,inputhit19,inputhit18,inputhit17,
+                inputhit16,inputhit15,inputhit14,inputhit13,inputhit12,inputhit11,inputhit10,inputhit09,inputhit08,
+                inputhit07,inputhit06,inputhit05,inputhit04,inputhit03,inputhit02,inputhit01,inputhit00};
+
+   printf("track in pos: x=%f, y=%f, z=%f, r=%f, pt=%f, phi=%f, theta=%f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2],
+      sqrtf(inputtrk.par[0]*inputtrk.par[0] + inputtrk.par[1]*inputtrk.par[1]),
+      1./inputtrk.par[3], inputtrk.par[4], inputtrk.par[5]);
+
+   printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66[PosInMtrx(0,0,6)]],
+                                               inputtrk.cov[SymOffsets66[PosInMtrx(1,1,6)]],
+                                           inputtrk.cov[SymOffsets66[PosInMtrx(2,2,6)]]);
+   for (size_t lay=0; lay<nlayer; lay++){
+     printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
+   }
+
+
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
 
@@ -694,7 +813,7 @@ int main (int argc, char* argv[]) {
    prepareTracks(h_trcks, inputtrk);
    // 
    std::vector<MPHIT> h_hits(nlayer*nevts*nb);
-   prepareHits(h_hits, inputhit);
+   prepareHits(h_hits, inputhits);
    //
    std::vector<MPTRK> outtrcks(nevts*nb);
    //
@@ -721,14 +840,16 @@ int main (int argc, char* argv[]) {
                          MPTRK_<N> obtracks;
                           
                          const auto& btracks = btracksPtr[tid].load<N>(batch_id);
+                         obtracks = btracks;
                          //
 #pragma unroll                         
                          for(int layer=0; layer<nlayer; ++layer) {
                            //
                            const auto& bhits = bhitsPtr[layer+layers*tid].load<N>(batch_id);
                            //
-                           propagateToZ<N>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par);
-                           KalmanUpdate<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
+                           propagateToZ<N>(obtracks.cov, obtracks.par, obtracks.q, bhits.pos, obtracks.cov, obtracks.par);
+                           //KalmanUpdate<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
+                           KalmanUpdate_v2<N>(obtracks.cov, obtracks.par, bhits.cov, bhits.pos);
                            //
                          }
                          //
@@ -751,6 +872,17 @@ int main (int argc, char* argv[]) {
    const int tot_phys_length = phys_length*(use_cuda ? bsize : 1);//re-scale the exe domain for the cuda backend! 
       
    auto outer_loop_range = views::iota(0, tot_phys_length);
+   if constexpr (include_data_transfer == false){
+#ifdef USE_PARALLEL_COPY
+     //enforce data migration:
+     std::copy(policy, h_trcks.begin(), h_trcks.end(), trcks.begin());
+     std::copy(policy, h_hits.begin(), h_hits.end(), hits.begin());
+#else
+     //just a regular copy, no migration
+     std::copy(h_trcks.begin(), h_trcks.end(), trcks.begin());
+     std::copy(h_hits.begin(), h_hits.end(), hits.begin());
+#endif
+   }  
 
    //
    auto wall_start = std::chrono::high_resolution_clock::now();
@@ -784,6 +916,15 @@ int main (int argc, char* argv[]) {
    //
    auto wall_stop = std::chrono::high_resolution_clock::now();
    //
+
+   if constexpr (include_data_transfer == false) {
+#ifdef USE_PARALLEL_COPY
+      std::copy(policy, outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
+#else
+      std::copy(outtrcks.begin(), outtrcks.end(), h_outtrcks.begin());
+#endif
+   }
+   //
    auto wall_diff = wall_stop - wall_start;
    //
    wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;
@@ -795,6 +936,7 @@ int main (int argc, char* argv[]) {
    auto outtrk = outtrcks.data();
    auto hit    = hits.data();
 
+   int nnans = 0, nfail = 0;
    double avgx = 0, avgy = 0, avgz = 0;
    double avgpt = 0, avgphi = 0, avgtheta = 0;
    double avgdx = 0, avgdy = 0, avgdz = 0;
@@ -806,15 +948,35 @@ int main (int argc, char* argv[]) {
        float pt_ = 1./ipt(outtrk,ie,it);
        float phi_ = phi(outtrk,ie,it);
        float theta_ = theta(outtrk,ie,it);
+       float hx_ = x(hit,ie,it);
+       float hy_ = y(hit,ie,it);
+       float hz_ = z(hit,ie,it);
+       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (isnan(x_) ||
+       isnan(y_) ||
+       isnan(z_) ||
+       isnan(pt_) ||
+       isnan(phi_) ||
+       isnan(theta_)
+       ) {  
+     nnans++;
+     continue;
+       }    
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1.
+           ) {  
+     nfail++;
+     continue;
+       }
        avgpt += pt_;
        avgphi += phi_;
        avgtheta += theta_;
        avgx += x_;
        avgy += y_;
        avgz += z_;
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
+
        avgdx += (x_-hx_)/x_;
        avgdy += (y_-hy_)/y_;
        avgdz += (z_-hz_)/z_;
@@ -837,12 +999,27 @@ int main (int argc, char* argv[]) {
        float x_ = x(outtrk,ie,it);
        float y_ = y(outtrk,ie,it);
        float z_ = z(outtrk,ie,it);
-       stdx += (x_-avgx)*(x_-avgx);
-       stdy += (y_-avgy)*(y_-avgy);
-       stdz += (z_-avgz)*(z_-avgz);
        float hx_ = x(hit,ie,it);
        float hy_ = y(hit,ie,it);
        float hz_ = z(hit,ie,it);
+       float pt_ = 1./ipt(outtrk,ie,it);
+       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (isnan(x_) ||
+       isnan(y_) ||
+       isnan(z_)
+       ) {
+     continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1.
+           ) {
+         continue;
+       }
+       stdx += (x_-avgx)*(x_-avgx);
+       stdy += (y_-avgy)*(y_-avgy);
+       stdz += (z_-avgz)*(z_-avgz);
        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
@@ -865,6 +1042,8 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
+   printf("number of tracks with nans=%i\n", nnans);
+   printf("number of tracks failed=%i\n", nfail);
 
    return 0;
 }

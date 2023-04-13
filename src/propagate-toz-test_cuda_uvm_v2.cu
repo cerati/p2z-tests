@@ -18,19 +18,18 @@
 
 #define FIXED_RSEED
 
-#ifndef ntrks
-#define ntrks 9600
-#endif
-
-#ifndef bsize
-#define bsize 32
-#endif
-
-#define nb    (ntrks/bsize)
 
 #ifndef nevts
 #define nevts 100
 #endif
+#ifndef bsize
+#define bsize 32
+#endif
+#ifndef ntrks
+#define ntrks 9600
+#endif
+
+#define nb    (ntrks/bsize)
 #define smear 0.00001
 
 #ifndef NITER
@@ -39,7 +38,6 @@
 #ifndef nlayer
 #define nlayer 20
 #endif
-
 #ifndef num_streams
 #define num_streams 1
 #endif
@@ -208,7 +206,6 @@ using MP6x6SF = MPNX<float, 21, bsize>;
 using MP6x6F  = MPNX<float, 36, bsize>;
 using MP3x3   = MPNX<float, 9 , bsize>;
 using MP3x6   = MPNX<float, 18, bsize>;
-using MP2x2SF   = MPNX<float, 3, bsize>;
 using MP2x6   = MPNX<float, 12, bsize>;
 using MP2F   = MPNX<float, 2, bsize>;
 
@@ -224,9 +221,7 @@ using MP6x6SF_ = MPNX<float, 21>;
 using MP6x6F_  = MPNX<float, 36>;
 using MP3x3_   = MPNX<float, 9 >;
 using MP3x6_   = MPNX<float, 18>;
-using MP2x2SF_   = MPNX<float, 3>;
 using MP2x6_   = MPNX<float, 12>;
-using MP2F_   = MPNX<float, 2>;
 
 struct MPTRK_ {
   MP6F_    par;
