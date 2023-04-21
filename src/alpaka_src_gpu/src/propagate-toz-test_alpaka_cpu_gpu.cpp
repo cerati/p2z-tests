@@ -599,7 +599,7 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
  }
 
 template< typename TAcc>
-inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, TAcc const & acc){
+inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP2x2SF & resErr_loc, MP2x6 & kGain, MP2F &res_loc, TAcc const & acc){
 
   using Dim = alpaka::Dim<TAcc>;
   using Idx = alpaka::Idx<TAcc>;
@@ -609,7 +609,6 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 
-  MP2x2SF resErr_loc;
 #if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
 #else
@@ -640,7 +639,6 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
   }
 
   // KalmanGain(psErr, resErr, K);
-  MP2x6 kGain;
 #if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
 #else
@@ -664,7 +662,6 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
 
   // SubtractFirst2(msPar, psPar, res);
   // MultResidualsAdd(K, psPar, res, outPar);
-  MP2F res_loc;
 #if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
 #else
@@ -829,6 +826,9 @@ public:
        // auto & inverse_temp = alpaka::declareSharedVar<MP3x3,__COUNTER__>(acc);
        // auto & kGain = alpaka::declareSharedVar<MP3x6,__COUNTER__>(acc);
        // auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
+       auto & resErr_loc = alpaka::declareSharedVar<MP2x2SF,__COUNTER__>(acc);
+       auto & kGain = alpaka::declareSharedVar<MP2x6,__COUNTER__>(acc);
+       auto & res_loc = alpaka::declareSharedVar<MP2F,__COUNTER__>(acc);
 
       int ie_range;  
       if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
@@ -844,7 +844,7 @@ public:
                //struct MP6x6F errorProp, temp;
               propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp, acc); // vectorized function
               //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,&inverse_temp, &kGain, &(newErr), acc);
-	      KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos,acc);
+	      KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos, resErr_loc, kGain, res_loc, acc);
        }
      }
    }
