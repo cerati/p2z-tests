@@ -82,14 +82,14 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef blockspergridy
-//#define blockspergridy 20
-#define blockspergridy 1
+#define blockspergridy 20
+//#define blockspergridy 1
 //#define blockspergridy nevts*nb/num_streams
 #endif
 
 #ifndef blockspergridx
-//#define blockspergridx 15
-#define blockspergridx nevts*nb/num_streams
+#define blockspergridx 15
+//#define blockspergridx nevts*nb/num_streams
 //#define blockspergridx 1
 #endif
 
@@ -1115,12 +1115,12 @@ int main (int argc, char* argv[]) {
        float hy_ = inputhits[nlayer-1].pos[1];
        float hz_ = inputhits[nlayer-1].pos[2];
        float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (std::isfinite(x_)==false ||
-	   std::isfinite(y_)==false ||
-	   std::isfinite(z_)==false ||
-	   std::isfinite(pt_)==false ||
-	   std::isfinite(phi_)==false ||
-	   std::isfinite(theta_)==false
+       if (isnan(x_) ||
+	   isnan(y_) ||
+	   isnan(z_) ||
+	   isnan(pt_) ||
+	   isnan(phi_) ||
+	   isnan(theta_)
 	   ) {
 	 nnans++;
 	 continue;
@@ -1166,9 +1166,9 @@ int main (int argc, char* argv[]) {
        float hy_ = inputhits[nlayer-1].pos[1];
        float hz_ = inputhits[nlayer-1].pos[2];
        float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (std::isfinite(x_)==false ||
-	   std::isfinite(y_)==false ||
-	   std::isfinite(z_)==false
+       if (isnan(x_) ||
+	   isnan(y_) ||
+	   isnan(z_)
 	   ) {
 	 continue;
        }
