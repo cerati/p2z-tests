@@ -473,6 +473,7 @@ endif
 #  ALPAKA Setting #
 ###################
 COMPILE_CMAKE = 0
+CMAKECMD = pwd #dummy command 
 
 ifeq ($(ALPAKASRC),alpaka_src_gpu)
 ########################################################################################
