@@ -21,9 +21,20 @@ find_package(alpaka REQUIRED)
 
 set(CMAKE_CUDA_ARCHITECTURES 70)
 #add_compile_definitions(num_streams=1)
-#add_compile_definitions(NITER=1)
-add_compile_definitions(EXCLUDE_H2D_TRANSFER=1)
-add_compile_definitions(EXCLUDE_D2H_TRANSFER=1)
+IF(NITER)
+add_compile_definitions(NITER=${NITER})
+ENDIF()
+IF(DEVICE_TYPE)
+add_compile_definitions(DEVICE_TYPE=${DEVICE_TYPE})
+ENDIF()
+IF(INCLUDE_DATA)
+add_compile_definitions(include_data=${INCLUDE_DATA})
+ENDIF()
+IF(USE_FMAD STREQUAL 0)
+IF(DEVICE_TYPE STREQUAL 1)
+add_compile_options(--fmad false)
+ENDIF()
+ENDIF()
 #set(CMAKE_BUILD_TYPE Debug)
 #set(CMAKE_BUILD_TYPE RelWithDebInfo)
 #add_compile_options(-std=c++17)
@@ -36,7 +47,7 @@ add_compile_definitions(EXCLUDE_D2H_TRANSFER=1)
 #add_compile_options(-fopenmp-simd)
 
 set(INCLUDE_DIR
-    "~/fermi/p2r-tests/alpaka/include/" 
+    "../" 
 )
 #
 include_directories(${INCLUDE_DIR})

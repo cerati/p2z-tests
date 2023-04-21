@@ -149,11 +149,14 @@ $ make COMPILER=nvcc MODE=eigen
 
 ## Alpaka
 #### Compilers: gcc, nvcc 
-ALPAKA_INSTALL_ROOT should be set to the ALPAKA install root directory
+ALPAKA_INSTALL_ROOT should be set to the Alpaka install root directory
 
 ```shell
-$ make COMPILER=gcc MODE=alpaka #compile src/propagate-toz-test_alpaka.cpp
-$ make COMPILER=nvcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp
+$ make COMPILER=nvcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp for GPU using nvcc
+$ make COMPILER=nvcc MODE=alpaka USE_FMAD=0 #disable fmad optimization
+$ make COMPILER=nvcc MODE=alpaka USE_FMAD=0 INCLUDE_DATA=0 
+$ make COMPILER=gcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp for CPU using gcc
+$ make COMPILER=gcc MODE=alpaka ALPAKASRC=. #compile src/propagate-toz-test_alpaka.cpp for CPU using gcc
 ```
 
 ## Kokkos

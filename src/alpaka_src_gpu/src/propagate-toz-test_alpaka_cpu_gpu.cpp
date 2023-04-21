@@ -19,12 +19,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NWARMUP 2
 #endif
 
-#ifndef EXCLUDE_H2D_TRANSFER
-#define MEASURE_H2D_TRANSFER
-#endif
-
-#ifndef EXCLUDE_D2H_TRANSFER
-#define MEASURE_D2H_TRANSFER
+#ifndef DEVICE_TYPE
+#define DEVICE_TYPE 1
 #endif
 
 #define FIXED_RSEED
@@ -348,9 +344,12 @@ inline void ALPAKA_FN_ACC MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B,
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  #pragma omp simd
-  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#if DEVICE_TYPE == 1
   for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
+#else
+  #pragma omp simd
+  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#endif
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -403,9 +402,12 @@ inline void ALPAKA_FN_ACC MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  #pragma omp simd
-  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#if DEVICE_TYPE == 1
   for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
+#else
+  #pragma omp simd
+  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#endif
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
     c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
@@ -443,9 +445,12 @@ inline void ALPAKA_FN_ACC KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  #pragma omp simd
-  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#if DEVICE_TYPE == 1
   for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ //for gpu
+#else
+  #pragma omp simd
+  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#endif
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
@@ -477,9 +482,12 @@ inline void ALPAKA_FN_ACC KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C,
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  #pragma omp simd
-  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#if DEVICE_TYPE == 1
   for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
+#else
+  #pragma omp simd
+  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#endif
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
     c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
@@ -514,9 +522,12 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  #pragma omp simd
-  //for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+#if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) { // for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+#endif
     const float xin = x(inPar,it);
     const float yin = y(inPar,it);
     const float zin = z(inPar,it);
@@ -572,7 +583,7 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
  }
 
 template< typename TAcc>
-inline void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, TAcc const & acc){
+inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, TAcc const & acc){
 
   using Dim = alpaka::Dim<TAcc>;
   using Idx = alpaka::Idx<TAcc>;
@@ -583,9 +594,12 @@ inline void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr,
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 
   MP2x2SF resErr_loc;
-#pragma omp simd
-  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
   {
     resErr_loc.data[0*bsize+it] = trkErr->data[0*bsize+it] + hitErr->data[0*bsize+it];
     resErr_loc.data[1*bsize+it] = trkErr->data[1*bsize+it] + hitErr->data[1*bsize+it];
@@ -593,9 +607,12 @@ inline void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr,
   }
 
   // Matriplex::InvertCramerSym(resErr);
-#pragma omp simd
-  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
   {
     const double det = (double)resErr_loc.data[0*bsize+it] * resErr_loc.data[2*bsize+it] -
                        (double)resErr_loc.data[1*bsize+it] * resErr_loc.data[1*bsize+it];
@@ -608,9 +625,12 @@ inline void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr,
 
   // KalmanGain(psErr, resErr, K);
   MP2x6 kGain;
-#pragma omp simd
-  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
   {
      kGain.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it];
      kGain.data[ 1*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 2*bsize+it];
@@ -629,9 +649,12 @@ inline void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr,
   // SubtractFirst2(msPar, psPar, res);
   // MultResidualsAdd(K, psPar, res, outPar);
   MP2F res_loc;
-pragma omp simd
-  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
   {
     res_loc.data[0*bsize+it] =  x(msP,it) - x(inPar,it);
     res_loc.data[1*bsize+it] =  y(msP,it) - y(inPar,it);
@@ -650,9 +673,12 @@ pragma omp simd
   // KHC(K, psErr, outErr);
   // outErr.Subtract(psErr, outErr);
   MP6x6SF newErr;
-pragma omp simd
-  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
   {
      newErr.data[ 0*bsize+it] = kGain.data[ 0*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 1*bsize+it]*trkErr->data[ 1*bsize+it];
      newErr.data[ 1*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 1*bsize+it];
@@ -712,9 +738,12 @@ inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, 
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-  #pragma omp simd
-  //for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+#if DEVICE_TYPE == 1
   for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) {	 //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+#endif
     const float zout = z(msP,it);
     const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z(inPar,it);
@@ -812,12 +841,23 @@ int main (int argc, char* argv[]) {
    using Dim = alpaka::DimInt<2u>;
    using Idx = std::size_t;
    // using accelerator
+#if DEVICE_TYPE == 1
    using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
-   //using Acc = alpaka::AccCpuSerial<Dim, Idx>;
-   //using Acc = alpaka::AccCpuOmp2Blocks<Dim, Idx>;
-   //using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
+#elif DEVICE_TYPE == 2
+   using Acc = alpaka::AccCpuSerial<Dim, Idx>;
+#elif DEVICE_TYPE == 3
+   using Acc = alpaka::AccCpuOmp2Blocks<Dim, Idx>;
+#elif DEVICE_TYPE == 4
+   using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
+#endif
    using WorkDiv = alpaka::WorkDivMembers<Dim, Idx>;
    using Vec = alpaka::Vec<Dim, Idx>;
+
+#ifdef include_data
+  printf("Measure Both Memory Transfer Times and Compute Times!\n");
+#else
+  printf("Measure Compute Times Only!\n");
+#endif
  
    std::cout << "Using alpaka accelerator: " << alpaka::getAccName<Acc>() << std::endl;
     
@@ -978,7 +1018,7 @@ int main (int argc, char* argv[]) {
      std::cout<< msg <<std::endl;
      double wall_time = 0;
 
-#ifdef MEASURE_H2D_TRANSFER
+#ifdef include_data
      for(int itr=0; itr<nIters; itr++) {
        auto wall_start = std::chrono::high_resolution_clock::now();
        for (int s = 0; s<num_streams;s++) {
@@ -988,12 +1028,10 @@ int main (int argc, char* argv[]) {
        for (int s = 0; s<num_streams;s++) {
          alpaka::enqueue(queue[s], Kernel(s));
        }
-#ifdef MEASURE_D2H_TRANSFER
        for (int s = 0; s<num_streams;s++) {
          // DtoH
          alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
        }
-#endif
        for (int s = 0; s<num_streams;s++) {
         alpaka::wait(queue[s]); 
         }
@@ -1014,12 +1052,6 @@ int main (int argc, char* argv[]) {
        for (int s = 0; s<num_streams;s++) {
          alpaka::enqueue(queue[s], Kernel(s));
        }
-#ifdef MEASURE_D2H_TRANSFER
-       for (int s = 0; s<num_streams;s++) {
-         // DtoH
-         alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
-       }
-#endif
        for (int s = 0; s<num_streams;s++) {
        alpaka::wait(queue[s]); 
       }
@@ -1028,7 +1060,7 @@ int main (int argc, char* argv[]) {
      }
 #endif
 
-#ifndef MEASURE_D2H_TRANSFER
+#ifndef include_data
      for (int s = 0; s<num_streams;s++) {
        // DtoH
        alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
@@ -1040,17 +1072,6 @@ int main (int argc, char* argv[]) {
 
    doWork("Warming up", NWARMUP);
    auto wall_time = doWork("Launching", NITER);
-
-#ifdef MEASURE_H2D_TRANSFER
-   printf("Measuring H2D Transfer\n");
-#else
-   printf("Excluding H2D Transfer\n");
-#endif
-#ifdef MEASURE_D2H_TRANSFER
-   printf("Measuring D2H Transfer\n");
-#else
-   printf("Excluding D2H Transfer\n");
-#endif
 
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
