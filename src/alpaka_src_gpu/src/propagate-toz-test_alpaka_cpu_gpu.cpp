@@ -43,7 +43,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define nevts 100
 #endif
 
-#define smear 0.1
+#define smear 0.00001
 
 #ifndef NITER
 #define NITER 5 
@@ -143,6 +143,18 @@ struct MP6x6F {
   float data[36*bsize];
 };
 
+struct MP2x2SF {
+  float data[3*bsize];
+};
+
+struct MP2x6 {
+  float data[12*bsize];
+};
+
+struct MP2F {
+  float data[2*bsize];
+};
+
 struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
@@ -183,7 +195,7 @@ ALPAKA_FN_ACC const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
    return &(tracks[ib + nb*ev]);
 }
  
-ALPAKA_FN_ACC float q(const MP1I* bq, size_t it){
+ALPAKA_FN_ACC int q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 
@@ -278,35 +290,43 @@ MPTRK* prepareTracks(ATRK inputtrk) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
       	//par
-      	for (size_t ip=0;ip<6;++ip) {
-      	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
-      	}
-      	//cov
-      	for (size_t ip=0;ip<21;++ip) {
-      	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
-      	}
-      	//q
-      	result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+	for (size_t ip=0;ip<6;++ip) {
+	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+	}
+	//cov, scale by factor 100
+	for (size_t ip=0;ip<21;++ip) {
+	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip]*100;
+	}
+	//q
+	result[ib + nb*ie].q.data[it] = inputtrk.q;//can't really smear this or fit will be wrong
       }
     }
   }
   return result;
 }
-MPHIT* prepareHits(AHIT inputhit) {
-//MPHIT* prepareHits(std::vector<AHIT>& inputhits) {
+
+MPHIT* prepareHits(std::vector<AHIT>& inputhits) {
   MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
   for (size_t lay=0;lay<nlayer;++lay) {
+
+    size_t mylay = lay;
+    if (lay>=inputhits.size()) {
+      // int wraplay = inputhits.size()/lay;
+      exit(1);
+    }
+    AHIT& inputhit = inputhits[mylay];
+
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
         for (size_t it=0;it<bsize;++it) {
-        	//pos
-        	for (size_t ip=0;ip<3;++ip) {
-        	  result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
-        	}
-        	//cov
-        	for (size_t ip=0;ip<6;++ip) {
-        	  result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
-        	}
+	  //pos
+	  for (size_t ip=0;ip<3;++ip) {
+	    result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+	  }
+	  //cov
+	  for (size_t ip=0;ip<6;++ip) {
+	    result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+	  }
         }
       }
     }
@@ -551,7 +571,138 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
   (*trkErr) = *newErr;
  }
 
-const float kfact= 100/3.8;
+template< typename TAcc>
+inline void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, TAcc const & acc){
+
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+  
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+
+  MP2x2SF resErr_loc;
+#pragma omp simd
+  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  {
+    resErr_loc.data[0*bsize+it] = trkErr->data[0*bsize+it] + hitErr->data[0*bsize+it];
+    resErr_loc.data[1*bsize+it] = trkErr->data[1*bsize+it] + hitErr->data[1*bsize+it];
+    resErr_loc.data[2*bsize+it] = trkErr->data[2*bsize+it] + hitErr->data[2*bsize+it];
+  }
+
+  // Matriplex::InvertCramerSym(resErr);
+#pragma omp simd
+  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  {
+    const double det = (double)resErr_loc.data[0*bsize+it] * resErr_loc.data[2*bsize+it] -
+                       (double)resErr_loc.data[1*bsize+it] * resErr_loc.data[1*bsize+it];
+    const float s   = 1.f / det;
+    const float tmp = s * resErr_loc.data[2*bsize+it];
+    resErr_loc.data[1*bsize+it] *= -s;
+    resErr_loc.data[2*bsize+it]  = s * resErr_loc.data[0*bsize+it];
+    resErr_loc.data[0*bsize+it]  = tmp;
+  }
+
+  // KalmanGain(psErr, resErr, K);
+  MP2x6 kGain;
+#pragma omp simd
+  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  {
+     kGain.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 1*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[ 2*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 3*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[ 4*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 5*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[ 6*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 7*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[ 8*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 9*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[10*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[11*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc.data[ 2*bsize+it];
+  }
+
+  // SubtractFirst2(msPar, psPar, res);
+  // MultResidualsAdd(K, psPar, res, outPar);
+  MP2F res_loc;
+pragma omp simd
+  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  {
+    res_loc.data[0*bsize+it] =  x(msP,it) - x(inPar,it);
+    res_loc.data[1*bsize+it] =  y(msP,it) - y(inPar,it);
+
+    setx    (inPar, it, x    (inPar, it) + kGain.data[ 0*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 1*bsize+it] * res_loc.data[ 1*bsize+it]);
+    sety    (inPar, it, y    (inPar, it) + kGain.data[ 2*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 3*bsize+it] * res_loc.data[ 1*bsize+it]);
+    setz    (inPar, it, z    (inPar, it) + kGain.data[ 4*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 5*bsize+it] * res_loc.data[ 1*bsize+it]);
+    setipt  (inPar, it, ipt  (inPar, it) + kGain.data[ 6*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 7*bsize+it] * res_loc.data[ 1*bsize+it]);
+    setphi  (inPar, it, phi  (inPar, it) + kGain.data[ 8*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 9*bsize+it] * res_loc.data[ 1*bsize+it]);
+    settheta(inPar, it, theta(inPar, it) + kGain.data[10*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[11*bsize+it] * res_loc.data[ 1*bsize+it]);
+    //note: if ipt changes sign we should update the charge, or we should get rid of the charge altogether and just use the sign of ipt
+  }
+
+  // squashPhiMPlex(outPar,N_proc); // ensure phi is between |pi|
+  // missing
+  // KHC(K, psErr, outErr);
+  // outErr.Subtract(psErr, outErr);
+  MP6x6SF newErr;
+pragma omp simd
+  //for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  {
+     newErr.data[ 0*bsize+it] = kGain.data[ 0*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 1*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[ 1*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[ 2*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[ 3*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[ 4*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[ 5*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 4*bsize+it];
+     newErr.data[ 6*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[ 7*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[ 8*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 4*bsize+it];
+     newErr.data[ 9*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 7*bsize+it];
+     newErr.data[10*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[11*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[12*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 4*bsize+it];
+     newErr.data[13*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 7*bsize+it];
+     newErr.data[14*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[10*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[11*bsize+it];
+     newErr.data[15*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[16*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[17*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 4*bsize+it];
+     newErr.data[18*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 7*bsize+it];
+     newErr.data[19*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[10*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[11*bsize+it];
+     newErr.data[20*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[15*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[16*bsize+it];
+
+     newErr.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it] - newErr.data[ 0*bsize+it];
+     newErr.data[ 1*bsize+it] = trkErr->data[ 1*bsize+it] - newErr.data[ 1*bsize+it];
+     newErr.data[ 2*bsize+it] = trkErr->data[ 2*bsize+it] - newErr.data[ 2*bsize+it];
+     newErr.data[ 3*bsize+it] = trkErr->data[ 3*bsize+it] - newErr.data[ 3*bsize+it];
+     newErr.data[ 4*bsize+it] = trkErr->data[ 4*bsize+it] - newErr.data[ 4*bsize+it];
+     newErr.data[ 5*bsize+it] = trkErr->data[ 5*bsize+it] - newErr.data[ 5*bsize+it];
+     newErr.data[ 6*bsize+it] = trkErr->data[ 6*bsize+it] - newErr.data[ 6*bsize+it];
+     newErr.data[ 7*bsize+it] = trkErr->data[ 7*bsize+it] - newErr.data[ 7*bsize+it];
+     newErr.data[ 8*bsize+it] = trkErr->data[ 8*bsize+it] - newErr.data[ 8*bsize+it];
+     newErr.data[ 9*bsize+it] = trkErr->data[ 9*bsize+it] - newErr.data[ 9*bsize+it];
+     newErr.data[10*bsize+it] = trkErr->data[10*bsize+it] - newErr.data[10*bsize+it];
+     newErr.data[11*bsize+it] = trkErr->data[11*bsize+it] - newErr.data[11*bsize+it];
+     newErr.data[12*bsize+it] = trkErr->data[12*bsize+it] - newErr.data[12*bsize+it];
+     newErr.data[13*bsize+it] = trkErr->data[13*bsize+it] - newErr.data[13*bsize+it];
+     newErr.data[14*bsize+it] = trkErr->data[14*bsize+it] - newErr.data[14*bsize+it];
+     newErr.data[15*bsize+it] = trkErr->data[15*bsize+it] - newErr.data[15*bsize+it];
+     newErr.data[16*bsize+it] = trkErr->data[16*bsize+it] - newErr.data[16*bsize+it];
+     newErr.data[17*bsize+it] = trkErr->data[17*bsize+it] - newErr.data[17*bsize+it];
+     newErr.data[18*bsize+it] = trkErr->data[18*bsize+it] - newErr.data[18*bsize+it];
+     newErr.data[19*bsize+it] = trkErr->data[19*bsize+it] - newErr.data[19*bsize+it];
+     newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - newErr.data[20*bsize+it];
+  }
+
+  (*trkErr) = newErr;
+}
+
+const float kfact= 100./(-0.299792458*3.8112);
 template< typename TAcc>
 inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg, const MP3F* msP, MP6x6SF* outErr, MP6F* outPar, MP6x6F* errorProp, MP6x6F* temp, TAcc const & acc) {
   using Dim = alpaka::Dim<TAcc>;
@@ -630,9 +781,9 @@ public:
         
        auto & errorProp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
        auto & temp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
-       auto & inverse_temp = alpaka::declareSharedVar<MP3x3,__COUNTER__>(acc);
-       auto & kGain = alpaka::declareSharedVar<MP3x6,__COUNTER__>(acc);
-       auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
+       // auto & inverse_temp = alpaka::declareSharedVar<MP3x3,__COUNTER__>(acc);
+       // auto & kGain = alpaka::declareSharedVar<MP3x6,__COUNTER__>(acc);
+       // auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
 
       int ie_range;  
       if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
@@ -642,11 +793,13 @@ public:
      for (size_t ib=blockIdx[1];ib<nb;ib+=blockExtent[1]) { //loop for TbbBlocks & Omp2Blocks & GPU
            const MPTRK* btracks = bTk(trk, ie, ib);
            MPTRK* obtracks = bTk(outtrk, ie, ib);
+           (*obtracks) = (*btracks);
            for( size_t layer=0; layer<nlayer;++layer){
               const MPHIT* bhits = bHit(hit, ie, ib,layer);
                //struct MP6x6F errorProp, temp;
               propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp, acc); // vectorized function
-              KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,&inverse_temp, &kGain, &(newErr), acc);
+              //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,&inverse_temp, &kGain, &(newErr), acc);
+	      KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos,acc);
        }
      }
    }
@@ -697,24 +850,22 @@ int main (int argc, char* argv[]) {
 
    printf("streams: %d, blockx: %d, blocky: %d, thready: %d, bsize = %i\n",num_streams,blockspergridx,blockspergridy,threadsperblocky,bsize);
     
-   ATRK inputtrk = {
-     {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
-     {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
-      6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
-      0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348},
-     1
-   };
+#include "input_track.h"
+   std::vector<AHIT> inputhits{inputhit25,inputhit24,inputhit23,inputhit22,inputhit21,inputhit20,inputhit19,inputhit18,inputhit17,
+                               inputhit16,inputhit15,inputhit14,inputhit13,inputhit12,inputhit11,inputhit10,inputhit09,inputhit08,
+                               inputhit07,inputhit06,inputhit05,inputhit04,inputhit03,inputhit02,inputhit01,inputhit00};
 
-   AHIT inputhit = {
-     {-20.7824649810791, -12.24150276184082, 57.8067626953125},
-     {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
-   };
-
-   printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
+   printf("track in pos: x=%f, y=%f, z=%f, r=%f, pt=%f, phi=%f, theta=%f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2],
+	  sqrtf(inputtrk.par[0]*inputtrk.par[0] + inputtrk.par[1]*inputtrk.par[1]),
+	  1./inputtrk.par[3], inputtrk.par[4], inputtrk.par[5]);
+  
    printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
-   printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
+
+   for (size_t lay=0; lay<nlayer; lay++){
+     printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
+   }
 
    printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
@@ -724,6 +875,10 @@ int main (int argc, char* argv[]) {
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+#ifdef FIXED_RSEED
+   //[DEBUG by Seyong on Dec. 28, 2020] add an explicit srand(1) call to generate fixed inputs for better debugging.
+   srand(1);
+#endif
 
    auto chunkSize = [&](int s) {
      return s < num_streams ? stream_chunk : stream_remainder;
@@ -769,7 +924,7 @@ int main (int argc, char* argv[]) {
 
    // prepare input data for computations, all on host
    MPTRK* input_trk = prepareTracks(inputtrk);
-   MPHIT* input_hit = prepareHits(inputhit);
+   MPHIT* input_hit = prepareHits(inputhits);
    MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); 
 
    MPTRK* trks_host[num_streams];
@@ -907,6 +1062,7 @@ int main (int argc, char* argv[]) {
     offset_trk += chunkSize(s);
    }
 
+   int nnans = 0, nfail = 0;
    float avgx = 0, avgy = 0, avgz = 0;
    float avgpt = 0, avgphi = 0, avgtheta = 0;
    float avgdx = 0, avgdy = 0, avgdz = 0;
@@ -918,15 +1074,34 @@ int main (int argc, char* argv[]) {
        float pt_ = 1./ipt(outtrk,ie,it);
        float phi_ = phi(outtrk,ie,it);
        float theta_ = theta(outtrk,ie,it);
+       float hx_ = inputhits[nlayer-1].pos[0];
+       float hy_ = inputhits[nlayer-1].pos[1];
+       float hz_ = inputhits[nlayer-1].pos[2];
+       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
+	   ) {
+	 nnans++;
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1.
+           ) {
+	 nfail++;
+	 continue;
+       }
        avgpt += pt_;
        avgphi += phi_;
        avgtheta += theta_;
        avgx += x_;
        avgy += y_;
        avgz += z_;
-       float hx_ = x(input_hit,ie,it);
-       float hy_ = y(input_hit,ie,it);
-       float hz_ = z(input_hit,ie,it);
        avgdx += (x_-hx_)/x_;
        avgdy += (y_-hy_)/y_;
        avgdz += (z_-hz_)/z_;
@@ -949,12 +1124,27 @@ int main (int argc, char* argv[]) {
        float x_ = x(outtrk,ie,it);
        float y_ = y(outtrk,ie,it);
        float z_ = z(outtrk,ie,it);
+       float pt_ = 1./ipt(outtrk,ie,it);
+       float hx_ = inputhits[nlayer-1].pos[0];
+       float hy_ = inputhits[nlayer-1].pos[1];
+       float hz_ = inputhits[nlayer-1].pos[2];
+       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false
+	   ) {
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1.
+           ) {
+         continue;
+       }
        stdx += (x_-avgx)*(x_-avgx);
        stdy += (y_-avgy)*(y_-avgy);
        stdz += (z_-avgz)*(z_-avgz);
-       float hx_ = x(input_hit,ie,it);
-       float hy_ = y(input_hit,ie,it);
-       float hz_ = z(input_hit,ie,it);
        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
@@ -977,6 +1167,8 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
+   printf("number of tracks with nans=%i\n", nnans);
+   printf("number of tracks failed=%i\n", nfail);
 
    return 0;
 }

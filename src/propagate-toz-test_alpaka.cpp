@@ -556,12 +556,21 @@ inline void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, co
   (*trkErr) = newErr;
  }
 
-void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP){
 
-   // AddIntoUpperLeft2x2(psErr, msErr, resErr);
+template< typename TAcc>
+inline void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, TAcc const & acc){
+
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+
    MP2x2SF resErr_loc;
 #pragma omp simd
-   for (size_t it=0;it<bsize;++it)
+   for (size_t it=0; it<ElementExtent[1]; it++)
    {
      resErr_loc.data[0*bsize+it] = trkErr->data[0*bsize+it] + hitErr->data[0*bsize+it];
      resErr_loc.data[1*bsize+it] = trkErr->data[1*bsize+it] + hitErr->data[1*bsize+it];
@@ -570,7 +579,7 @@ void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const 
 
    // Matriplex::InvertCramerSym(resErr);
 #pragma omp simd
-   for (size_t it=0;it<bsize;++it)
+   for (size_t it=0; it<ElementExtent[1]; it++)
    {
      const double det = (double)resErr_loc.data[0*bsize+it] * resErr_loc.data[2*bsize+it] -
                         (double)resErr_loc.data[1*bsize+it] * resErr_loc.data[1*bsize+it];
@@ -584,7 +593,7 @@ void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const 
    // KalmanGain(psErr, resErr, K);
    MP2x6 kGain;
 #pragma omp simd
-   for (size_t it=0;it<bsize;++it)
+   for (size_t it=0; it<ElementExtent[1]; it++)
    {
       kGain.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it];
       kGain.data[ 1*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 2*bsize+it];
@@ -604,7 +613,7 @@ void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const 
    // MultResidualsAdd(K, psPar, res, outPar);
    MP2F res_loc;
 #pragma omp simd
-   for (size_t it=0;it<bsize;++it)
+   for (size_t it=0; it<ElementExtent[1]; it++)
    {
      res_loc.data[0*bsize+it] =  x(msP,it) - x(inPar,it);
      res_loc.data[1*bsize+it] =  y(msP,it) - y(inPar,it);
@@ -624,7 +633,7 @@ void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const 
    // outErr.Subtract(psErr, outErr);
    MP6x6SF newErr;
 #pragma omp simd
-   for (size_t it=0;it<bsize;++it)
+   for (size_t it=0; it<ElementExtent[1]; it++)
    {
       newErr.data[ 0*bsize+it] = kGain.data[ 0*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 1*bsize+it]*trkErr->data[ 1*bsize+it];
       newErr.data[ 1*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 1*bsize+it];
@@ -770,7 +779,7 @@ void ALPAKA_FN_ACC alpaka_kernel(TAcc const & acc, MPTRK* trk, MPHIT* hit, MPTRK
           propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
 	        &errorProp, &temp, acc); // vectorized function
           //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,acc);
-	  KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos);
+	  KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos,acc);
        }
      }
    }
