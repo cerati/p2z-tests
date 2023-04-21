@@ -28,7 +28,7 @@ add_compile_definitions(EXCLUDE_D2H_TRANSFER=1)
 #set(CMAKE_BUILD_TYPE RelWithDebInfo)
 #add_compile_options(-std=c++17)
 #add_compile_options(-maxrregcount=128)
-add_compile_options(--use_fast_math)
+#add_compile_options(--use_fast_math)
 
 #add_compile_options(-ffast-math)
 #add_compile_options(-march=native)

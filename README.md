@@ -149,10 +149,11 @@ $ make COMPILER=nvcc MODE=eigen
 
 ## Alpaka
 #### Compilers: gcc, nvcc 
+ALPAKA_INSTALL_ROOT should be set to the ALPAKA install root directory
 
 ```shell
-$ make COMPILER=gcc MODE=alpaka
-$ make COMPILER=nvcc MODE=alpaka//not yet functional
+$ make COMPILER=gcc MODE=alpaka #compile src/propagate-toz-test_alpaka.cpp
+$ make COMPILER=nvcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp
 ```
 
 ## Kokkos
@@ -198,6 +199,7 @@ Here we have basic instructions.
 	c. The executable can be found under `bin` with the others
 3. compile option 2:
 	compile using the Makefile in the current directory:
+	(KOKKOS_ROOT needs to be set to the Kokkos root directory)
 
 ```shell
 $ make COMPILER=nvcc MODE=kokkosv1 INCLUDE_DATA=0

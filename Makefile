@@ -19,8 +19,7 @@ COMPILER ?= nvcc
 MODE ?= eigen
 OS ?= linux
 DEBUG ?= 0
-CUDA_ARCH ?= sm_70
-CUDA_CC ?= cc70
+CUDA_ARCH ?= 70
 #GCC_ROOT ?= /sw/summit/gcc/11.1.0-2
 GCC_ROOT ?= g++
 INCLUDE_DATA ?= 1
@@ -89,6 +88,12 @@ KOKKOS_PATH ?= $(KOKKOS_ROOT)
 KOKKOS_DEVICES ?= Cuda
 PREPIN_HOSTMEM ?= 1
 
+##########ALPAKA Make Options########################
+# Assume that ALPAKA_INSTALL_ROOT is set to the ALPAKA install root directory
+ALPAKA_PATH ?= $(ALPAKA_INSTALL_ROOT)
+# Set ALPAKASRC to alpaka_src_gpu to use versions in alpata_src_gpu directory.
+ALPAKASRC ?= alpaka_src_gpu
+
 ################
 #  OMP Setting #
 ################
@@ -132,9 +137,9 @@ endif
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
 ifeq ($(USE_FMAD),1)
-CFLAGS1 += -O3 -stdpar -gpu=$(CUDA_CC) --gcc-toolchain=$(GCC_ROOT) -Mfma
+CFLAGS1 += -O3 -stdpar -gpu=cc$(CUDA_ARCH) --gcc-toolchain=$(GCC_ROOT) -Mfma
 else
-CFLAGS1 += -O3 -stdpar -gpu=$(CUDA_CC) --gcc-toolchain=$(GCC_ROOT) -Mnofma
+CFLAGS1 += -O3 -stdpar -gpu=cc$(CUDA_ARCH) --gcc-toolchain=$(GCC_ROOT) -Mnofma
 endif
 endif
 ifeq ($(COMPILER),icc)
@@ -180,7 +185,7 @@ CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=$(CUDA_ARCH)
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_$(CUDA_ARCH)
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
 CLIBS1 += -lm
@@ -403,18 +408,18 @@ ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 ifeq ($(USE_FMAD),1)
 # fmad, which is enabled by default, makes different CUDA versions generate different outputs.
-CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr 
+CFLAGS1 += -arch=sm_$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr 
 else
-CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr --fmad false
+CFLAGS1 += -arch=sm_$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr --fmad false
 endif
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
 endif
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
 ifeq ($(USE_FMAD),1)
-CFLAGS1 += -gpu=$(CUDA_CC) -O3 -Mfma
+CFLAGS1 += -gpu=cc$(CUDA_ARCH) -O3 -Mfma
 else
-CFLAGS1 += -gpu=$(CUDA_CC) -O3 -Mnofma
+CFLAGS1 += -gpu=cc$(CUDA_ARCH) -O3 -Mnofma
 endif
 CLIBS1 += -lcudart 
 endif
@@ -425,9 +430,9 @@ CSRCS = propagate-toz-test_cuda_hybrid.cpp
 ifeq ($(COMPILER),nvcpp)
 CXX=nvc++
 ifeq ($(USE_FMAD),1)
-CFLAGS1 += -cuda -stdpar=gpu -gpu=$(CUDA_CC) -O3 --gcc-toolchain=$(GCC_ROOT) -gpu=managed -Mfma
+CFLAGS1 += -cuda -stdpar=gpu -gpu=cc$(CUDA_ARCH) -O3 --gcc-toolchain=$(GCC_ROOT) -gpu=managed -Mfma
 else
-CFLAGS1 += -cuda -stdpar=gpu -gpu=$(CUDA_CC) -O3 --gcc-toolchain=$(GCC_ROOT) -gpu=managed -Mnofma
+CFLAGS1 += -cuda -stdpar=gpu -gpu=cc$(CUDA_ARCH) -O3 --gcc-toolchain=$(GCC_ROOT) -gpu=managed -Mnofma
 endif
 CLIBS1 += -lcudart 
 endif
@@ -458,21 +463,45 @@ endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_Eigen.cu
-#CFLAGS1 += -arch=$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
-#CFLAGS1 += -arch=$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -Ieigen -I/mnt/data1/dsr/cub
-CFLAGS1 += -arch=$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I${EIGEN_ROOT}
+#CFLAGS1 += -arch=sm_$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
+#CFLAGS1 += -arch=sm_$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -Ieigen -I/mnt/data1/dsr/cub
+CFLAGS1 += -arch=sm_$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I${EIGEN_ROOT}
 endif
 endif
 
 ###################
 #  ALPAKA Setting #
 ###################
+COMPILE_CMAKE = 0
+
+ifeq ($(ALPAKASRC),alpaka_src_gpu)
+########################################################################################
+# New commands to compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp #
+########################################################################################
 ifeq ($(MODE),alpaka)
+COMPILE_CMAKE = 1
+CSRCSDIR = alpaka_src_gpu/src
+CSRCS = ${CSRCSDIR}/propagate-toz-test_alpaka_cpu_gpu.cpp
+CMAKEDIR = alpaka_src_gpu
+CMAKEOUTPUT = alpaka_gpu_src
+ifeq ($(COMPILER),gcc)
+#CMAKECMD = cmake -DCMAKE_BUILD_TYPE=Release -Dalpaka_ROOT=$(ALPAKA_INSTALL_ROOT) -DCMAKE_CXX_COMPILER=g++  -DCMAKE_C_COMPILER=gcc -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLE=on -DALPAKA_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS="-O3 -DDEVICE_TYPE=3" ..
+CMAKECMD = cmake -DCMAKE_BUILD_TYPE=Release -Dalpaka_ROOT=$(ALPAKA_INSTALL_ROOT) -DCMAKE_CXX_COMPILER=g++  -DCMAKE_C_COMPILER=gcc -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLE=on -DALPAKA_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS="-O3 -DDEVICE_TYPE=2" ..
+endif
+ifeq ($(COMPILER),nvcc)
+CMAKECMD = cmake -DCMAKE_BUILD_TYPE=Release -Dalpaka_ROOT=$(ALPAKA_INSTALL_ROOT) -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DCMAKE_CUDA_COMPILER=nvcc -DALPAKA_CXX_STANDARD=17 -DALPAKA_ACC_GPU_CUDA_ENABLE=on -DCMAKE_CUDA_ARCHITECTURES=$(CUDA_ARCH) -DCMAKE_CXX_FLAGS="-O3 -DDEVICE_TYPE=1"  ..
+endif
+endif
+else
+###########################################################
+# Old commands to compile src/propagate-toz-test_alpaka.* #
+###########################################################
+ifeq ($(MODE),alpaka)
+CLIBS1 = -I${ALPAKA_INSTALL_ROOT}/include 
+ifeq ($(COMPILER),gcc)
 CSRCS = propagate-toz-test_alpaka.cpp
 TBB_PREIX := /opt/intel
-CLIBS1 = -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include 
 CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
-ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
 CFLAGS1+= -fopenmp -O3 -I.
@@ -482,10 +511,11 @@ endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_alpaka.cu
-CFLAGS1+= -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda
+CFLAGS1+= -arch=sm_$(CUDA_ARCH) -O3 --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda
 CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 #CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 CLIBS1 += -L${CUDALIBDIR} -lcudart -g
+endif
 endif
 endif
 
@@ -628,8 +658,9 @@ endif
 
 $(TARGET)/$(BENCHMARK): precmd src/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi
-	if [ $(COMPILE_KOKKOS) -eq 0 ]; then $(CXX) $(CFLAGS1) src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK); fi
-	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd src/$(CSRCSDIR); make clean; make -j $(KOKKOS_FLAGS); cd ../../; fi
+	if [ $(COMPILE_CMAKE) -eq 0 ] && [ $(COMPILE_KOKKOS) -eq 0 ]; then $(CXX) $(CFLAGS1) ./src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK); fi
+	if [ $(COMPILE_CMAKE) -eq 0 ] && [ $(COMPILE_KOKKOS) -eq 1 ]; then cd ./src/$(CSRCSDIR); make clean; make -j $(KOKKOS_FLAGS); cd ../../; fi
+	if [ $(COMPILE_CMAKE) -eq 1 ]; then cd src/$(CMAKEDIR); if [ ! -d build ]; then mkdir build; fi; cd build; $(CMAKECMD); make -j32; cd ../../../; mv ./src/$(CMAKEDIR)/build/$(CMAKEOUTPUT) $(TARGET)/$(BENCHMARK); fi
 	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.hip.cpp" ]; then cp ./cetus_output/openarc_kernel.hip.cpp ${TARGET}/; fi
@@ -641,7 +672,8 @@ precmd:
 
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
-	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd src/$(CSRCSDIR); make clean; cd ../../; fi
+	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd ./src/$(CSRCSDIR); make clean; cd ../../; fi
+	if [ $(COMPILE_CMAKE) -eq 1 ]; then cd ./src/$(CMAKEDIR); rm -rf build; cd ../../; fi
 
 cleanall: purge
 	rm -f $(TARGET)/* 
