@@ -872,7 +872,7 @@ int main (int argc, char* argv[]) {
    
    printf("Number of struct MPTRK trk[] = %d\n", nevts*nb);
    printf("Number of struct MPTRK outtrk[] = %d\n", nevts*nb);
-   printf("Number of struct struct MPHIT hit[] = %d\n", nevts*nb);
+   printf("Number of struct struct MPHIT hit[] = %d\n", nlayer*nevts*nb);
 
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));

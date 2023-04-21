@@ -50,7 +50,11 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef num_streams
+#if DEVICE_TYPE == 1
 #define num_streams 10 // set to 1 if using cpu
+#else
+#define num_streams 1 // set to 1 if using cpu
+#endif
 #endif
 
 #ifndef elementsperthready
@@ -58,11 +62,19 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef elementsperthreadx
+#if DEVICE_TYPE == 1
+#define elementsperthreadx 1 // set to 1 if using gpu
+#else
 #define elementsperthreadx bsize // set to 1 if using gpu
+#endif
 #endif
 
 #ifndef threadsperblocky
-#define threadsperblocky 32 // set to 1 if using cpu blocks
+#if DEVICE_TYPE == 1
+#define threadsperblocky bsize // set to 1 if using cpu blocks
+#else
+#define threadsperblocky 1 // set to 1 if using cpu blocks
+#endif
 #endif
 
 #ifndef threadsperblockx
@@ -70,11 +82,15 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef blockspergridy
-#define blockspergridy 20
+//#define blockspergridy 20
+#define blockspergridy 1
+//#define blockspergridy nevts*nb/num_streams
 #endif
 
 #ifndef blockspergridx
-#define blockspergridx 15
+//#define blockspergridx 15
+#define blockspergridx nevts*nb/num_streams
+//#define blockspergridx 1
 #endif
 
 
@@ -1000,7 +1016,7 @@ int main (int argc, char* argv[]) {
  
    printf("Number of struct MPTRK trk[] = %d\n", nevts*nb);
    printf("Number of struct MPTRK outtrk[] = %d\n", nevts*nb);
-   printf("Number of struct struct MPHIT hit[] = %d\n", nevts*nb);
+   printf("Number of struct struct MPHIT hit[] = %d\n", nlayer*nevts*nb);
   
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
@@ -1019,8 +1035,8 @@ int main (int argc, char* argv[]) {
      double wall_time = 0;
 
 #ifdef include_data
+     auto wall_start = std::chrono::high_resolution_clock::now();
      for(int itr=0; itr<nIters; itr++) {
-       auto wall_start = std::chrono::high_resolution_clock::now();
        for (int s = 0; s<num_streams;s++) {
          // HtoD
          alpaka::memcpy(queue[s], trk_bufDevs[s], trk_bufHosts[s], extent_trk[s]);
@@ -1032,12 +1048,12 @@ int main (int argc, char* argv[]) {
          // DtoH
          alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
        }
-       for (int s = 0; s<num_streams;s++) {
-        alpaka::wait(queue[s]); 
-        }
-       auto wall_stop = std::chrono::high_resolution_clock::now();
-       wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
      }
+     for (int s = 0; s<num_streams;s++) {
+        alpaka::wait(queue[s]); 
+      }
+     auto wall_stop = std::chrono::high_resolution_clock::now();
+     wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
 #else
      for (int s = 0; s<num_streams;s++) {
          // HtoD
@@ -1047,17 +1063,17 @@ int main (int argc, char* argv[]) {
      for (int s = 0; s<num_streams;s++) {
      alpaka::wait(queue[s]); 
      }
+     auto wall_start = std::chrono::high_resolution_clock::now();
      for(int itr=0; itr<nIters; itr++) {
-       auto wall_start = std::chrono::high_resolution_clock::now();
        for (int s = 0; s<num_streams;s++) {
          alpaka::enqueue(queue[s], Kernel(s));
        }
-       for (int s = 0; s<num_streams;s++) {
-       alpaka::wait(queue[s]); 
-      }
-       auto wall_stop = std::chrono::high_resolution_clock::now();
-       wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
      }
+     for (int s = 0; s<num_streams;s++) {
+       alpaka::wait(queue[s]); 
+     }
+     auto wall_stop = std::chrono::high_resolution_clock::now();
+     wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
 #endif
 
 #ifndef include_data
@@ -1084,9 +1100,9 @@ int main (int argc, char* argv[]) {
    }
 
    int nnans = 0, nfail = 0;
-   float avgx = 0, avgy = 0, avgz = 0;
-   float avgpt = 0, avgphi = 0, avgtheta = 0;
-   float avgdx = 0, avgdy = 0, avgdz = 0;
+   double avgx = 0, avgy = 0, avgz = 0;
+   double avgpt = 0, avgphi = 0, avgtheta = 0;
+   double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
        float x_ = x(outtrk,ie,it);
@@ -1128,18 +1144,18 @@ int main (int argc, char* argv[]) {
        avgdz += (z_-hz_)/z_;
      }
    }
-   avgpt = avgpt/float(nevts*ntrks);
-   avgphi = avgphi/float(nevts*ntrks);
-   avgtheta = avgtheta/float(nevts*ntrks);
-   avgx = avgx/float(nevts*ntrks);
-   avgy = avgy/float(nevts*ntrks);
-   avgz = avgz/float(nevts*ntrks);
-   avgdx = avgdx/float(nevts*ntrks);
-   avgdy = avgdy/float(nevts*ntrks);
-   avgdz = avgdz/float(nevts*ntrks);
+   avgpt = avgpt/double(nevts*ntrks);
+   avgphi = avgphi/double(nevts*ntrks);
+   avgtheta = avgtheta/double(nevts*ntrks);
+   avgx = avgx/double(nevts*ntrks);
+   avgy = avgy/double(nevts*ntrks);
+   avgz = avgz/double(nevts*ntrks);
+   avgdx = avgdx/double(nevts*ntrks);
+   avgdy = avgdy/double(nevts*ntrks);
+   avgdz = avgdz/double(nevts*ntrks);
 
-   float stdx = 0, stdy = 0, stdz = 0;
-   float stddx = 0, stddy = 0, stddz = 0;
+   double stdx = 0, stdy = 0, stdz = 0;
+   double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
        float x_ = x(outtrk,ie,it);
@@ -1172,12 +1188,12 @@ int main (int argc, char* argv[]) {
      }
    }
 
-   stdx = sqrtf(stdx/float(nevts*ntrks));
-   stdy = sqrtf(stdy/float(nevts*ntrks));
-   stdz = sqrtf(stdz/float(nevts*ntrks));
-   stddx = sqrtf(stddx/float(nevts*ntrks));
-   stddy = sqrtf(stddy/float(nevts*ntrks));
-   stddz = sqrtf(stddz/float(nevts*ntrks));
+   stdx = sqrtf(stdx/double(nevts*ntrks));
+   stdy = sqrtf(stdy/double(nevts*ntrks));
+   stdz = sqrtf(stdz/double(nevts*ntrks));
+   stddx = sqrtf(stddx/double(nevts*ntrks));
+   stddy = sqrtf(stddy/double(nevts*ntrks));
+   stddz = sqrtf(stddz/double(nevts*ntrks));
 
    printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
    printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));

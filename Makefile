@@ -500,6 +500,9 @@ ifneq ($(INCLUDE_DATA),0)
 CMAKE_FLAGS += -DINCLUDE_DATA=$(INCLUDE_DATA)
 endif
 CMAKE_FLAGS += -DUSE_FMAD=$(USE_FMAD)
+ifneq ($(STREAMS),0)
+CMAKE_FLAGS += -Dnum_streams=$(STREAMS)
+endif
 ifeq ($(COMPILER),gcc)
 #For serial CPU
 #CMAKECMD = cmake -DCMAKE_BUILD_TYPE=Release -Dalpaka_ROOT=$(ALPAKA_INSTALL_ROOT) -DCMAKE_CXX_COMPILER=g++  -DCMAKE_C_COMPILER=gcc -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLE=on -DALPAKA_CXX_STANDARD=17 -DDEVICE_TYPE=2 $(CMAKE_FLAGS) ..
@@ -692,6 +695,7 @@ clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
 	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd ./src/$(CSRCSDIR); make clean; cd ../../; fi
 	if [ $(COMPILE_CMAKE) -eq 1 ]; then cd ./src/$(CMAKEDIR); rm -rf build; cd ../../; fi
+	rm -rf ./src/alpaka_src_gpu/build
 
 cleanall: purge
 	rm -f $(TARGET)/* 
