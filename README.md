@@ -149,7 +149,8 @@ $ make COMPILER=nvcc MODE=eigen
 
 ## Alpaka
 #### Compilers: gcc, nvcc 
-ALPAKA_INSTALL_ROOT should be set to the Alpaka install root directory
+ALPAKA_INSTALL_ROOT should be set to the Alpaka install root directory.
+(Refer to ./src/alpaka_src_gpu/Readme.md to install Alpaka.)
 
 ```shell
 $ make COMPILER=nvcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp for GPU using nvcc
