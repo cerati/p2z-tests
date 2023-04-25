@@ -69,28 +69,24 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 #endif
 
-#ifndef threadsperblocky
+#ifndef threadsperblockx
 #if DEVICE_TYPE == 1
-#define threadsperblocky bsize // set to 1 if using cpu blocks
+#define threadsperblockx bsize // set to 1 if using cpu blocks
 #else
-#define threadsperblocky 1 // set to 1 if using cpu blocks
+#define threadsperblockx 1 // set to 1 if using cpu blocks
 #endif
 #endif
 
-#ifndef threadsperblockx
-#define threadsperblockx 1 // set to 1 if using cpu blocks
+#ifndef threadsperblocky
+#define threadsperblocky 1 // set to 1 if using cpu blocks
 #endif
 
 #ifndef blockspergridy
-#define blockspergridy 20
-//#define blockspergridy 1
-//#define blockspergridy nevts*nb/num_streams
+#define blockspergridy 10
 #endif
 
 #ifndef blockspergridx
-#define blockspergridx 15
-//#define blockspergridx nevts*nb/num_streams
-//#define blockspergridx 1
+#define blockspergridx 300
 #endif
 
 
@@ -361,7 +357,7 @@ inline void ALPAKA_FN_ACC MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B,
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 #if DEVICE_TYPE == 1
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
+  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ // for gpu
 #else
   #pragma omp simd
   for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
@@ -419,7 +415,7 @@ inline void ALPAKA_FN_ACC MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 #if DEVICE_TYPE == 1
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
+  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ // for gpu
 #else
   #pragma omp simd
   for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
@@ -462,7 +458,7 @@ inline void ALPAKA_FN_ACC KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 #if DEVICE_TYPE == 1
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ //for gpu
+  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ //for gpu
 #else
   #pragma omp simd
   for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
@@ -499,7 +495,7 @@ inline void ALPAKA_FN_ACC KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C,
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 #if DEVICE_TYPE == 1
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
+  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ // for gpu
 #else
   #pragma omp simd
   for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
@@ -539,7 +535,7 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 #if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) { // for gpu
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1]) { // for gpu
 #else
   #pragma omp simd
   for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
@@ -599,7 +595,7 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
  }
 
 template< typename TAcc>
-inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP2x2SF & resErr_loc, MP2x6 & kGain, MP2F &res_loc, TAcc const & acc){
+inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP2x2SF & resErr_loc, MP2x6 & kGain, MP2F &res_loc, MP6x6SF &newErr, TAcc const & acc){
 
   using Dim = alpaka::Dim<TAcc>;
   using Idx = alpaka::Idx<TAcc>;
@@ -610,7 +606,7 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 
 #if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
 #else
   #pragma omp simd
   for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
@@ -623,7 +619,7 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
 
   // Matriplex::InvertCramerSym(resErr);
 #if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
 #else
   #pragma omp simd
   for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
@@ -640,7 +636,7 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
 
   // KalmanGain(psErr, resErr, K);
 #if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
 #else
   #pragma omp simd
   for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
@@ -663,7 +659,7 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
   // SubtractFirst2(msPar, psPar, res);
   // MultResidualsAdd(K, psPar, res, outPar);
 #if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
 #else
   #pragma omp simd
   for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
@@ -685,9 +681,8 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
   // missing
   // KHC(K, psErr, outErr);
   // outErr.Subtract(psErr, outErr);
-  MP6x6SF newErr;
 #if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0])  //for gpu
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
 #else
   #pragma omp simd
   for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
@@ -752,7 +747,7 @@ inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, 
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 #if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) {	 //for gpu
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1]) {	 //for gpu
 #else
   #pragma omp simd
   for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
@@ -829,6 +824,7 @@ public:
        auto & resErr_loc = alpaka::declareSharedVar<MP2x2SF,__COUNTER__>(acc);
        auto & kGain = alpaka::declareSharedVar<MP2x6,__COUNTER__>(acc);
        auto & res_loc = alpaka::declareSharedVar<MP2F,__COUNTER__>(acc);
+       auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
 
       int ie_range;  
       if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
@@ -844,7 +840,7 @@ public:
                //struct MP6x6F errorProp, temp;
               propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp, acc); // vectorized function
               //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,&inverse_temp, &kGain, &(newErr), acc);
-	      KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos, resErr_loc, kGain, res_loc, acc);
+	      KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos, resErr_loc, kGain, res_loc, newErr, acc);
        }
      }
    }
