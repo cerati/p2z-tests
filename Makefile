@@ -554,7 +554,7 @@ COMPILE_KOKKOS = 1
 endif
 ifeq ($(MODE),kokkosv2)
 CSRCSDIR = kokkos_src_v2
-CSRCS = $(CSRCSDIR)/ptoz_kokkos.cpp
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v2.cpp
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
 COMPILE_KOKKOS = 1
 endif

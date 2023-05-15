@@ -1,4 +1,4 @@
- KOKKOS_PATH ?= ${KOKKOS_ROOT}
+KOKKOS_PATH ?= ${KOKKOS_ROOT}
 #KOKKOS_DEVICES = "OpenMP"
 KOKKOS_DEVICES ?= "Cuda"
 # KOKKOS_DEVICES = "OpenMP,Cuda"
@@ -14,10 +14,19 @@ endif
 ifndef NLAYER
 NLAYER=20
 endif
+INCLUDE_DATA ?= 1
+ifneq ($(INCLUDE_DATA),0)
+TUNE += -Dinclude_data=$(INCLUDE_DATA)
+endif
+TUNE += -I../
 
 ifneq (,$(findstring Cuda,$(KOKKOS_DEVICES)))
 CXX = ${KOKKOS_PATH}/bin/nvcc_wrapper
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
+ifeq ($(USE_FMAD),0)
+#Disable fmad optimization
+TUNE += --fmad false
+endif
+CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} ${TUNE}
 # KOKKOS_ARCH = "HSW,Kepler35"
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"
@@ -27,7 +36,7 @@ USE_GPU=1
 else
 # -9 needed on apollo
 CXX = g++
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER}
+CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} ${TUNE}
 #CXX = g++-9
 # CXX = icpc
 EXE = "../../bin/propagate_gcc_kokkosv2"

@@ -12,7 +12,8 @@ $ make COMPILER=pgi MODE=omp
 
 ## OpenACC C
 #### Compile with pgi, openarc, gcc
-Compile the OpenACC C sync version
+Compile the OpenACC C sync version, which may use CUDA shared memory for temporary data.
+(In OpenACC, different OpenACC compilers may allocate the temporary data on different memory spaces.)
 
 ```shell
 $ make COMPILER=pgi MODE=accc
