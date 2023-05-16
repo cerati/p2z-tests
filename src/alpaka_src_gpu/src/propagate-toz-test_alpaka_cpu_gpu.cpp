@@ -838,7 +838,7 @@ public:
            for( size_t layer=0; layer<nlayer;++layer){
               const MPHIT* bhits = bHit(hit, ie, ib,layer);
                //struct MP6x6F errorProp, temp;
-              propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp, acc); // vectorized function
+              propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp, acc); // vectorized function
               //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,&inverse_temp, &kGain, &(newErr), acc);
 	      KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos, resErr_loc, kGain, res_loc, newErr, acc);
        }
