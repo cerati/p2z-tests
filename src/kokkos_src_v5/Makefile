@@ -40,6 +40,7 @@ CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} ${TUNE}
 #CXX = g++-9
 # CXX = icpc
 EXE = "../../bin/propagate_gcc_kokkosv5"
+USE_GPU=0
 KOKKOS_ARCH = "SKX"
 #KOKKOS_ARCH = "POWER9"
 endif
@@ -50,7 +51,7 @@ LINKFLAGS =
 # CXXFLAGS += -march=skylake-avx512 -qopt-zmm-usage=high
 
 ifdef USE_GPU
-CXXFLAGS += -DUSE_GPU=1
+CXXFLAGS += -DUSE_GPU=$(USE_GPU)
 endif
 
 DEPFLAGS = -M
@@ -66,7 +67,7 @@ $(EXE): $(OBJ) $(KOKKOS_LINK_DEPENDS)
 	$(LINK) $(KOKKOS_LDFLAGS) $(LINKFLAGS) $(EXTRA_PATH) $(OBJ) $(KOKKOS_LIBS) $(LIB) -o $(EXE)
 
 clean: kokkos-clean
-	rm -f *.o *.cuda *.host
+	rm -rf *.o *.cuda *.host desul
 
 purge: clean
 	rm -f $(EXE)

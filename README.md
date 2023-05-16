@@ -1,21 +1,22 @@
 # p2z-tests
 
 ## OpenMP
-#### Compilers: gcc, icc, pgi.
+#### Compilers: gcc, icc, nvhpc.
 Version 3 is most up to date. 
 
 ```shell
 $ make COMPILER=gcc MODE=omp
 $ make COMPILER=icc MODE=omp
-$ make COMPILER=pgi MODE=omp
+$ make COMPILER=nvhpc MODE=omp
 ```
 
 ## OpenACC C
-#### Compile with pgi, openarc, gcc
-Compile the OpenACC C sync version
+#### Compile with nvhpc, openarc, gcc
+Compile the OpenACC C sync version, which may use CUDA shared memory for temporary data.
+(In OpenACC, different OpenACC compilers may allocate the temporary data on different memory spaces.)
 
 ```shell
-$ make COMPILER=pgi MODE=accc
+$ make COMPILER=nvhpc MODE=accc INCLUDE_DATA=0 USE_FMAD=0 #NVHPC V22.11 compiles correctly.
 $ make COMPILER=openarc MODE=accc INCLUDE_DATA=0
 $ make COMPILER=gcc MODE=accc
 ```
@@ -28,18 +29,19 @@ export OPENARC_JITOPTION="--fmad false"
 Compile the OpenACC C async version (v3 and v4)
 
 ```shell
-$ make COMPILER=pgi MODE=acccv3
+$ make COMPILER=nvhpc MODE=acccv3 INCLUDE_DATA=0 USE_FMAD=0 #NVHPC V22.11 compiles correctly.
 $ make COMPILER=openarc MODE=acccv3 INCLUDE_DATA=0
 $ make COMPILER=gcc MODE=acccv3
 $ make COMPILER=openarc MODE=acccv4 INCLUDE_DATA=0
+$ make COMPILER=nvhpc MODE=acccv4 INCLUDE_DATA=0 USE_FMAD=0 #NVHPC V22.11 compiles correctly.
 ```
 
 ## OpenACC C for CPU
-#### Compile with pgi, openarc
+#### Compile with nvhpc, openarc
 Compile the OpenACC C sync version for CPU
 
 ```shell
-$ make COMPILER=pgi MODE=accccpu
+$ make COMPILER=nvhpc MODE=accccpu
 $ make COMPILER=openarc MODE=accccpu
 $ make COMPILER=gcc MODE=accccpu
 ```
@@ -47,7 +49,8 @@ $ make COMPILER=gcc MODE=accccpu
 Compile the OpenACC C async version (v3 and v4) for CPU
 
 ```shell
-$ make COMPILER=pgi MODE=acccv3cpu
+$ make COMPILER=nvhpc MODE=acccv3cpu INCLUDE_DATA=0
+$ make COMPILER=nvhpc MODE=acccv4cpu INCLUDE_DATA=0
 $ make COMPILER=openarc MODE=acccv3cpu
 $ make COMPILER=gcc MODE=acccv3cpu
 $ make COMPILER=openarc MODE=acccv4cpu
@@ -62,7 +65,7 @@ $ make COMPILER=openarc MODE=omp4c INCLUDE_DATA=0
 $ make COMPILER=llvm MODE=omp4c
 $ make COMPILER=ibm MODE=omp4c
 $ make COMPILER=gcc MODE=omp4c
-$ make COMPILER=pgi MODE=omp4c #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet). NVHPC V22.2 also fails.
+$ make COMPILER=nvhpc MODE=omp4c #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet). NVHPC V22.11 also fails.
 ```
 
 Compile the OpenMP4 C async version (v3 and v4)
@@ -73,7 +76,8 @@ $ make COMPILER=openarc MODE=omp4cv3 INCLUDE_DATA=0
 $ make COMPILER=llvm MODE=omp4cv3
 $ make COMPILER=ibm MODE=omp4cv3
 $ make COMPILER=gcc MODE=omp4cv3
-$ make COMPILER=pgi MODE=omp4cv3 #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet). NVHPC V22.2 also fails.
+$ make COMPILER=nvhpc MODE=omp4cv3 #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet). NVHPC V22.11 also fails.
+$ make COMPILER=nvhpc MODE=omp4cv4 INCLUDE_DATA=0 USE_FMAD=0 #NVHPC V22.11 compiles correctly.
 ```
 
 Enable the following environment variable to make OpenARC-compiled program generate the same outputs
@@ -123,9 +127,9 @@ $ make COMPILER=nvcc MODE=cudauvm INCLUDE_DATA=0 #measure compute times only
 GCC_ROOT option has to be set properly to use a specific GCC version
 
 ```shell
-$ make COMPILER=nvcpp MODE=cudahyb 
-$ make COMPILER=nvcpp MODE=cudahyb USE_FMAD=0 #disable the fmad optimization
-$ make COMPILER=nvcpp MODE=cudahyb INCLUDE_DATA=0 #measure compute times only
+$ make COMPILER=nvhpc MODE=cudahyb 
+$ make COMPILER=nvhpc MODE=cudahyb USE_FMAD=0 #disable the fmad optimization
+$ make COMPILER=nvhpc MODE=cudahyb INCLUDE_DATA=0 #measure compute times only
 ```
 
 ## PSTL
@@ -133,9 +137,9 @@ $ make COMPILER=nvcpp MODE=cudahyb INCLUDE_DATA=0 #measure compute times only
 GCC_ROOT option has to be set properly to use a specific GCC version
 
 ```shell
-$ make COMPILER=nvcpp MODE=pstl 
-$ make COMPILER=nvcpp MODE=pstl USE_FMAD=0 #disable the fmad optimization
-$ make COMPILER=nvcpp MODE=pstl INCLUDE_DATA=0 #measure compute times only
+$ make COMPILER=nvhpc MODE=pstl 
+$ make COMPILER=nvhpc MODE=pstl USE_FMAD=0 #disable the fmad optimization
+$ make COMPILER=nvhpc MODE=pstl INCLUDE_DATA=0 #measure compute times only
 ```
 
 ## Eigen
@@ -204,14 +208,19 @@ Here we have basic instructions.
 3. compile option 2:
 	compile using the Makefile in the current directory:
 	(KOKKOS_ROOT needs to be set to the Kokkos root directory)
+		- use KOKKOS_ARCH option to set a target device architecture (default GPU architecture: Volta70, CPU architecture: SKX)
 
 ```shell
-$ make COMPILER=nvcc MODE=kokkosv1 INCLUDE_DATA=0
-$ make COMPILER=nvcc MODE=kokkosv2 INCLUDE_DATA=0
+$ make COMPILER=nvcc MODE=kokkosv1 USE_FMAD=0 USE_GPU=1 #compile Kokkos V1 for NVIDIA Volta GPU using CUDA
+$ make COMPILER=gcc MODE=kokkosv1 USE_GPU=0 KOKKOS_ARCH=BDW #compile Kokkos V1 for Intel Broadwell Xeon CPU using OpenMP
+$ make COMPILER=nvcc MODE=kokkosv2 INCLUDE_DATA=0 USE_FMAD=0
+$ make COMPILER=gcc MODE=kokkosv2 INCLUDE_DATA=0 USE_GPU=0 KOKKOS_ARCH=BDW
 $ make COMPILER=nvcc MODE=kokkosv3 INCLUDE_DATA=0
-$ make COMPILER=nvcc MODE=kokkosv4 INCLUDE_DATA=0
+$ make COMPILER=gcc MODE=kokkosv3 INCLUDE_DATA=0 USE_GPU=0 KOKKOS_ARCH=BDW
+$ make COMPILER=nvcc MODE=kokkosv4 INCLUDE_DATA=0 #work only for NVIDIA GPUs
 $ make COMPILER=nvcc MODE=kokkosv5 INCLUDE_DATA=0
-$ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=0
+$ make COMPILER=gcc MODE=kokkosv5 INCLUDE_DATA=0 USE_GPU=0 KOKKOS_ARCH=BDW
+$ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=0 #work only for NVIDIA GPUs
 $ make MODE=kokkosv6 clean
 ```
 
