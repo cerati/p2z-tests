@@ -669,6 +669,7 @@ void KalmanUpdate_v2(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP
     }
   }
 }
+#pragma omp end declare target
 
 //const float kfact = 100/3.8;
 #define kfact 100./(-0.299792458*3.8112)

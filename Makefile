@@ -6,8 +6,8 @@
 ##########################################################
 #       Set macros used for the input program            #
 ##########################################################
-# COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
-#                   ibm, nvcpp, dpcpp                    #
+# COMPILER options: gcc, openarc, nvcc, icc, llvm        #
+#                   ibm, nvhpc, dpcpp                    #
 # MODE options: omp, seq, tbb, eigen, alpaka,            #
 #               cuda, cudav1, cudav2, cudav3, cudav4,    #
 #               cudauvm, cudahyb, pstl, accc, acccv3,    #
@@ -106,9 +106,8 @@ CXX=g++
 CFLAGS1 += -O3 -I. -fopenmp
 CLIBS1 += -lm -lgomp
 endif
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
-#CXX=pgc++
 CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),icc)
@@ -136,7 +135,7 @@ CXX=g++
 CFLAGS1 += -O3 -I. -fopenmp 
 CLIBS1 += -lm -lgomp -L/opt/intel/tbb-gnu9.3/lib -ltbb
 endif
-ifeq ($(COMPILER),nvcpp)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
 ifeq ($(USE_FMAD),1)
 CFLAGS1 += -O3 -stdpar -gpu=cc$(CUDA_ARCH) --gcc-toolchain=$(GCC_ROOT) -Mfma
@@ -195,7 +194,7 @@ else ifeq ($(COMPILER),ibm)
 CXX=xlc_r
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
 CLIBS1 += -lm
-else ifeq ($(COMPILER),pgi)
+else ifeq ($(COMPILER),nvhpc)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp=gpu -mcmodel=medium -Mlarge_arrays
 CLIBS1 += -lm
@@ -265,9 +264,14 @@ endif
 
 ifeq ($(COMPILE_ACC_DEVICE),1)
 CSRCS = $(CSRCSBASE).c
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc
-CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -mcmodel=medium -Mlarge_arrays
+ifeq ($(USE_FMAD),1)
+CFLAGS1 += -gpu=cc$(CUDA_ARCH) -O3 -Mfma
+else
+CFLAGS1 += -gpu=cc$(CUDA_ARCH) -O3 -Mnofma
+endif
 else ifeq ($(COMPILER),gcc)
 CXX=gcc
 CFLAGS1 += -O3 -I. -fopenacc -foffload="-lm -O3"
@@ -328,7 +332,7 @@ endif
 
 ifeq ($(COMPILE_ACC_HOST),1)
 CSRCS = $(CSRCSBASE).c
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc=multicore -mcmodel=medium -Mlarge_arrays
 else ifeq ($(COMPILER),gcc)
@@ -361,9 +365,8 @@ ifeq ($(COMPILER),icc)
 CXX=icc
 CFLAGS1+= -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
 endif
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
-#CXX=pgc++
 CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 endif
@@ -416,7 +419,7 @@ CFLAGS1 += -arch=sm_$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxr
 endif
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
 endif
-ifeq ($(COMPILER),nvcpp)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
 ifeq ($(USE_FMAD),1)
 CFLAGS1 += -gpu=cc$(CUDA_ARCH) -O3 -Mfma
@@ -429,7 +432,7 @@ endif
 
 ifeq ($(MODE),cudahyb)
 CSRCS = propagate-toz-test_cuda_hybrid.cpp
-ifeq ($(COMPILER),nvcpp)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
 ifeq ($(USE_FMAD),1)
 CFLAGS1 += -cuda -stdpar=gpu -gpu=cc$(CUDA_ARCH) -O3 --gcc-toolchain=$(GCC_ROOT) -gpu=managed -Mfma
@@ -457,9 +460,8 @@ ifeq ($(COMPILER),icc)
 CXX=icc
 CFLAGS1 += -fopenmp -O3 -fopenmp-simd  -mtune=native -march=native -xHost -qopt-zmm-usage=high
 endif
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
-#CXX=pgc++
 CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),nvcc)

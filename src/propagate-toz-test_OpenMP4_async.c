@@ -711,6 +711,7 @@ void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
   MultHelixPropTranspEndcap(errorProp, temp, outErr);
 }
 #pragma omp end declare target
+
 void memcpy_host2dev(struct MPTRK* trk, struct MPHIT* hit, int chunkSize, int lastChunkSize) {
     int localChunkSize = chunkSize;
     for (int s = 0; s<num_streams;s++){
