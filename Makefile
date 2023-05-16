@@ -69,6 +69,7 @@ THREADSY ?= 0
 BLOCKS ?= 0
 USE_ASYNC ?= 1
 USE_FMAD ?= 1
+USE_GPU ?= 1
 ifneq ($(THREADSX),0)
 TUNE += -Dthreadsperblockx=$(THREADSX)
 endif
@@ -86,6 +87,7 @@ endif
 # Assume that KOKKOS_ROOT is set to the Kokkos root directory
 KOKKOS_PATH ?= $(KOKKOS_ROOT)
 KOKKOS_DEVICES ?= Cuda
+KOKKOS_ARCH ?= None
 PREPIN_HOSTMEM ?= 1
 
 ##########ALPAKA Make Options########################
@@ -548,7 +550,7 @@ COMPILE_KOKKOS = 0
 
 ifeq ($(MODE),kokkosv1)
 CSRCSDIR = kokkos_src_v1
-CSRCS = $(CSRCSDIR)/ptoz_kokkos.cpp
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v1.cpp
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
 COMPILE_KOKKOS = 1
 endif
@@ -610,6 +612,15 @@ ifneq ($(INCLUDE_DATA),0)
 KOKKOS_FLAGS += INCLUDE_DATA=$(INCLUDE_DATA)
 endif
 KOKKOS_FLAGS += USE_FMAD=$(USE_FMAD)
+KOKKOS_FLAGS += USE_GPU=$(USE_GPU)
+ifeq ($(USE_GPU),0)
+KOKKOS_FLAGS += KOKKOS_DEVICES=OpenMP
+else
+KOKKOS_FLAGS += KOKKOS_DEVICES=$(KOKKOS_DEVICES)
+endif
+ifneq ($(KOKKOS_ARCH),None)
+KOKKOS_FLAGS += KOKKOS_ARCH=$(KOKKOS_ARCH)
+endif
 endif
 
 ################################################

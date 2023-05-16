@@ -48,6 +48,20 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define num_streams 1
 #endif
 
+#ifndef USE_GPU
+#define USE_GPU 1
+#endif
+
+#if USE_GPU == 1
+// GPU options
+typedef Kokkos::Cuda          ExecSpace;    // Backend to execute
+typedef Kokkos::CudaUVMSpace  MemSpace_CB;  // What type of memory to use
+#else
+// CPU options
+typedef Kokkos::OpenMP   ExecSpace;
+typedef Kokkos::OpenMP   MemSpace_CB;
+#endif
+
 
 KOKKOS_FUNCTION size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -123,11 +137,11 @@ struct MP2F {
   float data[2*bsize];
 };
 
-typedef Kokkos::View<MP6F*> MP6FCB;
-typedef Kokkos::View<MP6x6SF*> MP6x6SFCB;
-typedef Kokkos::View<MP1I*> MP1ICB;
-typedef Kokkos::View<MP3F*> MP3FCB;
-typedef Kokkos::View<MP3x3SF*> MP3x3SFCB;
+typedef Kokkos::View<MP6F*, MemSpace_CB> MP6FCB;
+typedef Kokkos::View<MP6x6SF*, MemSpace_CB> MP6x6SFCB;
+typedef Kokkos::View<MP1I*, MemSpace_CB> MP1ICB;
+typedef Kokkos::View<MP3F*, MemSpace_CB> MP3FCB;
+typedef Kokkos::View<MP3x3SF*, MemSpace_CB> MP3x3SFCB;
 
 struct CBTRK {
   MP6FCB    par;
@@ -619,11 +633,7 @@ KOKKOS_FUNCTION void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 
 int main (int argc, char* argv[]) {
 
-#ifdef include_data
-  printf("Measure Both Memory Transfer Times and Compute Times!\n");
-#else
-  printf("Measure Compute Times Only!\n");
-#endif
+  printf("Use Unified Shared Memory!\n");
 
 #include "input_track.h"
 
@@ -731,26 +741,10 @@ int main (int argc, char* argv[]) {
    int team_size = threadsperblockx;  // team size
    int vector_size = elementsperthread;  // thread size
 
-#ifndef include_data
-   Kokkos::deep_copy(trk.cov, h_trk.cov);
-   Kokkos::deep_copy(trk.par, h_trk.par);
-   Kokkos::deep_copy(trk.q, h_trk.q);
-   Kokkos::deep_copy(hit.cov, h_hit.cov);
-   Kokkos::deep_copy(hit.pos, h_hit.pos);
-   Kokkos::fence();
-#endif
-
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    int itr;
    for(itr=0; itr<NITER; itr++) {
-#ifdef include_data
-     Kokkos::deep_copy(trk.cov, h_trk.cov);
-     Kokkos::deep_copy(trk.par, h_trk.par);
-     Kokkos::deep_copy(trk.q, h_trk.q);
-     Kokkos::deep_copy(hit.cov, h_hit.cov);
-     Kokkos::deep_copy(hit.pos, h_hit.pos);
-#endif
      {
      Kokkos::parallel_for("Kernel", team_policy(team_policy_range,team_size,vector_size).set_scratch_size( 0, Kokkos::PerTeam( total_shared_bytes )),
                                     KOKKOS_LAMBDA( const member_type &teamMember){
@@ -772,22 +766,11 @@ int main (int argc, char* argv[]) {
          }
      }); 
    }  
-#ifdef include_data
-   Kokkos::deep_copy(h_outtrk.cov, outtrk.cov);
-   Kokkos::deep_copy(h_outtrk.par, outtrk.par);
-   Kokkos::deep_copy(h_outtrk.q, outtrk.q);
-#endif
    } //end of itr loop
 
    //Syncthreads
    Kokkos::fence();
    auto wall_stop = std::chrono::high_resolution_clock::now();
-#ifndef include_data
-   Kokkos::deep_copy(h_outtrk.cov, outtrk.cov);
-   Kokkos::deep_copy(h_outtrk.par, outtrk.par);
-   Kokkos::deep_copy(h_outtrk.q, outtrk.q);
-   Kokkos::fence();
-#endif
 
    auto wall_diff = wall_stop - wall_start;
    auto wall_time = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_diff).count()) / 1e6;

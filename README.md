@@ -207,8 +207,9 @@ Here we have basic instructions.
 	(KOKKOS_ROOT needs to be set to the Kokkos root directory)
 
 ```shell
-$ make COMPILER=nvcc MODE=kokkosv1 INCLUDE_DATA=0
-$ make COMPILER=nvcc MODE=kokkosv2 INCLUDE_DATA=0
+$ make COMPILER=nvcc MODE=kokkosv1 USE_FMAD=0 USE_GPU=1
+$ make COMPILER=gcc MODE=kokkosv1 USE_GPU=0 KOKKOS_ARCH=BDW
+$ make COMPILER=nvcc MODE=kokkosv2 INCLUDE_DATA=0 USE_FMAD=0
 $ make COMPILER=nvcc MODE=kokkosv3 INCLUDE_DATA=0
 $ make COMPILER=nvcc MODE=kokkosv4 INCLUDE_DATA=0
 $ make COMPILER=nvcc MODE=kokkosv5 INCLUDE_DATA=0

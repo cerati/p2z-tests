@@ -50,7 +50,7 @@ LINKFLAGS =
 # CXXFLAGS += -march=skylake-avx512 -qopt-zmm-usage=high
 
 ifdef USE_GPU
-CXXFLAGS += -DUSE_GPU=1
+CXXFLAGS += -DUSE_GPU=$(USE_GPU)
 endif
 
 DEPFLAGS = -M
@@ -66,7 +66,7 @@ $(EXE): $(OBJ) $(KOKKOS_LINK_DEPENDS)
 	$(LINK) $(KOKKOS_LDFLAGS) $(LINKFLAGS) $(EXTRA_PATH) $(OBJ) $(KOKKOS_LIBS) $(LIB) -o $(EXE)
 
 clean: kokkos-clean
-	rm -f *.o *.cuda *.host
+	rm -rf *.o *.cuda *.host desul
 
 purge: clean
 	rm -f $(EXE)
