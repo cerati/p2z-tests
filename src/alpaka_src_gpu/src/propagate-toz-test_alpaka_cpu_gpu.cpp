@@ -82,11 +82,11 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef blockspergridy
-#define blockspergridy 10
+#define blockspergridy nevts
 #endif
 
 #ifndef blockspergridx
-#define blockspergridx 300
+#define blockspergridx nb
 #endif
 
 
