@@ -18,7 +18,7 @@ Compile the OpenACC C sync version, which may use CUDA shared memory for tempora
 ```shell
 $ make COMPILER=nvhpc MODE=accc INCLUDE_DATA=0 USE_FMAD=0 #NVHPC V22.11 compiles correctly.
 $ make COMPILER=openarc MODE=accc INCLUDE_DATA=0
-$ make COMPILER=gcc MODE=accc
+$ make COMPILER=gcc MODE=accc INCLUDE_DATA=0
 ```
 Enable the following environment variable to make OpenARC-compiled program generate the same outputs
 
@@ -31,7 +31,7 @@ Compile the OpenACC C async version (v3 and v4)
 ```shell
 $ make COMPILER=nvhpc MODE=acccv3 INCLUDE_DATA=0 USE_FMAD=0 #NVHPC V22.11 compiles correctly.
 $ make COMPILER=openarc MODE=acccv3 INCLUDE_DATA=0
-$ make COMPILER=gcc MODE=acccv3
+$ make COMPILER=gcc MODE=acccv3 INCLUDE_DATA=0
 $ make COMPILER=openarc MODE=acccv4 INCLUDE_DATA=0
 $ make COMPILER=nvhpc MODE=acccv4 INCLUDE_DATA=0 USE_FMAD=0 #NVHPC V22.11 compiles correctly.
 ```
@@ -52,7 +52,7 @@ Compile the OpenACC C async version (v3 and v4) for CPU
 $ make COMPILER=nvhpc MODE=acccv3cpu INCLUDE_DATA=0
 $ make COMPILER=nvhpc MODE=acccv4cpu INCLUDE_DATA=0
 $ make COMPILER=openarc MODE=acccv3cpu
-$ make COMPILER=gcc MODE=acccv3cpu
+$ make COMPILER=gcc MODE=acccv3cpu 
 $ make COMPILER=openarc MODE=acccv4cpu
 ```
 
@@ -62,9 +62,9 @@ Compile the OpenMP4 C sync version
 
 ```shell
 $ make COMPILER=openarc MODE=omp4c INCLUDE_DATA=0
-$ make COMPILER=llvm MODE=omp4c
-$ make COMPILER=ibm MODE=omp4c
-$ make COMPILER=gcc MODE=omp4c
+$ make COMPILER=llvm MODE=omp4c INCLUDE_DATA=0 #LLVM V15.0.0
+$ make COMPILER=ibm MODE=omp4c INCLUDE_DATA=0 #XLC V16.1.1-10
+$ make COMPILER=gcc MODE=omp4c INCLUDE_DATA=0 #GCC V12.2.1
 $ make COMPILER=nvhpc MODE=omp4c #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet). NVHPC V22.11 also fails.
 ```
 
@@ -73,9 +73,9 @@ Compile the OpenMP4 C async version (v3 and v4)
 ```shell
 $ make COMPILER=openarc MODE=omp4cv4 INCLUDE_DATA=0
 $ make COMPILER=openarc MODE=omp4cv3 INCLUDE_DATA=0
-$ make COMPILER=llvm MODE=omp4cv3
-$ make COMPILER=ibm MODE=omp4cv3
-$ make COMPILER=gcc MODE=omp4cv3
+$ make COMPILER=llvm MODE=omp4cv3 INCLUDE_DATA=0
+$ make COMPILER=ibm MODE=omp4cv3 INCLUDE_DATA=0
+$ make COMPILER=gcc MODE=omp4cv3 INCLUDE_DATA=0
 $ make COMPILER=nvhpc MODE=omp4cv3 #NVHPC V21.11 fails due to an unsupported feature (Standalone 'omp parallel' in a 'declare target' routine is not supported yet). NVHPC V22.11 also fails.
 $ make COMPILER=nvhpc MODE=omp4cv4 INCLUDE_DATA=0 USE_FMAD=0 #NVHPC V22.11 compiles correctly.
 ```
@@ -160,6 +160,7 @@ ALPAKA_INSTALL_ROOT should be set to the Alpaka install root directory.
 $ make COMPILER=nvcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp for GPU using nvcc
 $ make COMPILER=nvcc MODE=alpaka USE_FMAD=0 #disable fmad optimization
 $ make COMPILER=nvcc MODE=alpaka USE_FMAD=0 INCLUDE_DATA=0 
+$ make COMPILER=nvcc MODE=alpaka INCLUDE_DATA=0 
 $ make COMPILER=gcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp for CPU using gcc
 $ make COMPILER=gcc MODE=alpaka ALPAKASRC=. #compile src/propagate-toz-test_alpaka.cpp for CPU using gcc
 ```
