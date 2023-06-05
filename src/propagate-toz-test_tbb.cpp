@@ -15,7 +15,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define FIXED_RSEED
 
 #ifndef bsize
-#define bsize 128
+#define bsize 32//128
 #endif
 #ifndef ntrks
 #define ntrks 9600

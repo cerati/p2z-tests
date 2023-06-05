@@ -20,7 +20,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef bsize
-#define bsize 128
+#define bsize 32//128
 #endif
 #ifndef ntrks
 #define ntrks 9600

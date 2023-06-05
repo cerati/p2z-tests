@@ -103,7 +103,7 @@ ifeq ($(MODE),omp)
 CSRCS = propagate-toz-test_OMP.cpp
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1 += -O3 -I. -fopenmp
+CFLAGS1 += -O3 -I. -fopenmp -march=native -mprefer-vector-width=512
 CLIBS1 += -lm -lgomp
 endif
 ifeq ($(COMPILER),nvhpc)
@@ -112,7 +112,7 @@ CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
-CFLAGS1 += -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
+CFLAGS1 += -Wall -I. -O3 -fopenmp -xHost -qopt-zmm-usage=high
 endif
 ifeq ($(COMPILER),llvm)
 CXX=clang
@@ -354,16 +354,17 @@ endif
 ################
 ifeq ($(MODE),tbb)
 CSRCS = propagate-toz-test_tbb.cpp
-TBB_PREFIX := /opt/intel/tbb-gnu9.3
-CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
+TBB_PREFIX := /packages/intel/oneapi/tbb/2021.1.1
+#TBB_PREFIX := /packages/intel/oneapi/tbb/2021.1.1 # /opt/intel/tbb-gnu9.3
+CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib/intel64/gcc4.8 -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1+=  -fopenmp -O3 -I.
+CFLAGS1+=  -fopenmp -O3 -I. -march=native -mprefer-vector-width=512
 CLIBS1 += -lm -lgomp -L/opt/intel/compilers_and_libraries/linux/tbb/lib/intel64/gcc4.8
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
-CFLAGS1+= -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
+CFLAGS1+= -Wall -I. -O3 -fopenmp -xHost -qopt-zmm-usage=high
 endif
 ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
