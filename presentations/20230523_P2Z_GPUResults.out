@@ -1,0 +1,349 @@
+//Performance of GPU versions of the P2Z benchmark
+//Compute-Time-Only (NITER = 100, repeat each test 10 times)
+//Target System: V100 on Summit
+//Compilers/Runtimes:
+//	- NVCC: V11.0
+//	- NVHPC: V22.11
+//	- OpenARC: V0.73
+//	- IBM XLC: V16.1.1-10
+//	- LLVM: V15.0
+//	- GCC: V12.2.1
+//	- Kokkos: V4.0
+//	- Alpaka: V0.8
+Input program: propagate_nvcc_cuda_async
+0: time/trk=1.492912e-08
+1: time/trk=1.499825e-08
+2: time/trk=1.464734e-08
+3: time/trk=1.465517e-08
+4: time/trk=1.478925e-08
+5: time/trk=1.468157e-08
+6: time/trk=1.465251e-08
+7: time/trk=1.487165e-08
+8: time/trk=1.465278e-08
+9: time/trk=1.465872e-08
+Min time/trk	1.464734e-08
+Input program: propagate_nvcc_cudav1_async
+0: time/trk=1.963833e-09
+1: time/trk=2.478906e-09
+2: time/trk=1.763875e-09
+3: time/trk=2.016854e-09
+4: time/trk=2.538698e-09
+5: time/trk=1.781656e-09
+6: time/trk=2.049469e-09
+7: time/trk=2.537073e-09
+8: time/trk=2.492646e-09
+9: time/trk=1.996000e-09
+Min time/trk	1.763875e-09
+Input program: propagate_nvcc_cudav2_async
+0: time/trk=4.665160e-07
+1: time/trk=4.669060e-07
+2: time/trk=4.665294e-07
+3: time/trk=4.667049e-07
+4: time/trk=4.663136e-07
+5: time/trk=4.666506e-07
+6: time/trk=4.668628e-07
+7: time/trk=4.668980e-07
+8: time/trk=4.667634e-07
+9: time/trk=4.663127e-07
+Min time/trk	4.663127e-07
+Input program: propagate_nvcc_cudav3_async
+0: time/trk=1.492168e-08
+1: time/trk=1.460091e-08
+2: time/trk=1.460109e-08
+3: time/trk=1.492279e-08
+4: time/trk=1.460163e-08
+5: time/trk=1.460131e-08
+6: time/trk=1.495678e-08
+7: time/trk=1.460256e-08
+8: time/trk=1.460166e-08
+9: time/trk=1.496885e-08
+Min time/trk	1.460091e-08
+Input program: propagate_nvcc_cudav4_async
+0: time/trk=2.454177e-09
+1: time/trk=2.442437e-09
+2: time/trk=2.589031e-09
+3: time/trk=2.483844e-09
+4: time/trk=2.435781e-09
+5: time/trk=2.591115e-09
+6: time/trk=2.466708e-09
+7: time/trk=2.457906e-09
+8: time/trk=2.557771e-09
+9: time/trk=2.447333e-09
+Min time/trk	2.435781e-09
+Input program: propagate_nvcc_cudauvm
+0: time/trk=2.515208e-09
+1: time/trk=2.515198e-09
+2: time/trk=2.596875e-09
+3: time/trk=2.488917e-09
+4: time/trk=2.499354e-09
+5: time/trk=2.618354e-09
+6: time/trk=2.492875e-09
+7: time/trk=2.499260e-09
+8: time/trk=2.608896e-09
+9: time/trk=2.496646e-09
+Min time/trk	2.488917e-09
+Input program: propagate_openarc_accc
+0: time/trk=1.577083e-08
+1: time/trk=1.583333e-08
+2: time/trk=1.575000e-08
+3: time/trk=1.575000e-08
+4: time/trk=1.598958e-08
+5: time/trk=1.575000e-08
+6: time/trk=1.576042e-08
+7: time/trk=1.605208e-08
+8: time/trk=1.576042e-08
+9: time/trk=1.575000e-08
+Min time/trk	1.575000e-08
+Input program: propagate_openarc_acccv3
+0: time/trk=1.539583e-08
+1: time/trk=1.518750e-08
+2: time/trk=1.516667e-08
+3: time/trk=1.543750e-08
+4: time/trk=1.516667e-08
+5: time/trk=1.517708e-08
+6: time/trk=1.554167e-08
+7: time/trk=1.516667e-08
+8: time/trk=1.516667e-08
+9: time/trk=1.516667e-08
+Min time/trk	1.516667e-08
+Input program: propagate_openarc_acccv4
+0: time/trk=2.791667e-09
+1: time/trk=2.645833e-09
+2: time/trk=2.645833e-09
+3: time/trk=2.770833e-09
+4: time/trk=2.656250e-09
+5: time/trk=2.656250e-09
+6: time/trk=2.656250e-09
+7: time/trk=2.822917e-09
+8: time/trk=2.656250e-09
+9: time/trk=2.645833e-09
+Min time/trk	2.645833e-09
+Input program: propagate_openarc_omp4c
+0: time/trk=1.594792e-08
+1: time/trk=1.577083e-08
+2: time/trk=1.576042e-08
+3: time/trk=1.594792e-08
+4: time/trk=1.576042e-08
+5: time/trk=1.575000e-08
+6: time/trk=1.607292e-08
+7: time/trk=1.575000e-08
+8: time/trk=1.575000e-08
+9: time/trk=1.603125e-08
+Min time/trk	1.575000e-08
+Input program: propagate_openarc_omp4cv3
+0: time/trk=1.568750e-08
+1: time/trk=1.567708e-08
+2: time/trk=1.602083e-08
+3: time/trk=1.567708e-08
+4: time/trk=1.567708e-08
+5: time/trk=1.593750e-08
+6: time/trk=1.567708e-08
+7: time/trk=1.567708e-08
+8: time/trk=1.600000e-08
+9: time/trk=1.567708e-08
+Min time/trk	1.567708e-08
+Input program: propagate_openarc_omp4cv4
+0: time/trk=2.718750e-09
+1: time/trk=2.822917e-09
+2: time/trk=2.739583e-09
+3: time/trk=2.729167e-09
+4: time/trk=2.718750e-09
+5: time/trk=2.864583e-09
+6: time/trk=2.739583e-09
+7: time/trk=2.708333e-09
+8: time/trk=2.750000e-09
+9: time/trk=2.718750e-09
+Min time/trk	2.708333e-09
+Input program: propagate_nvhpc_accc
+0: time/trk=1.443750e-08
+1: time/trk=1.454167e-08
+2: time/trk=1.444792e-08
+3: time/trk=1.444792e-08
+4: time/trk=1.443750e-08
+5: time/trk=1.457292e-08
+6: time/trk=1.444792e-08
+7: time/trk=1.444792e-08
+8: time/trk=1.459375e-08
+9: time/trk=1.443750e-08
+Min time/trk	1.443750e-08
+Input program: propagate_nvhpc_acccv3
+0: time/trk=2.029167e-08
+1: time/trk=2.071875e-08
+2: time/trk=2.016667e-08
+3: time/trk=2.015625e-08
+4: time/trk=2.027083e-08
+5: time/trk=2.016667e-08
+6: time/trk=2.017708e-08
+7: time/trk=2.027083e-08
+8: time/trk=2.016667e-08
+9: time/trk=2.017708e-08
+Min time/trk	2.015625e-08
+Input program: propagate_nvhpc_acccv4
+0: time/trk=1.927083e-09
+1: time/trk=1.781250e-09
+2: time/trk=1.750000e-09
+3: time/trk=1.750000e-09
+4: time/trk=1.854167e-09
+5: time/trk=1.750000e-09
+6: time/trk=1.739583e-09
+7: time/trk=1.906250e-09
+8: time/trk=1.781250e-09
+9: time/trk=1.750000e-09
+Min time/trk	1.739583e-09
+Input program: propagate_nvcc_kokkosv1
+0: time/trk=2.634731e-08
+1: time/trk=2.633858e-08
+2: time/trk=2.618800e-08
+3: time/trk=2.618255e-08
+4: time/trk=2.634804e-08
+5: time/trk=2.616731e-08
+6: time/trk=2.618866e-08
+7: time/trk=2.642533e-08
+8: time/trk=2.616793e-08
+9: time/trk=2.616474e-08
+Min time/trk    2.616474e-08
+Input program: propagate_nvcc_kokkosv2
+0: time/trk=2.560778e-08
+1: time/trk=2.543424e-08
+2: time/trk=2.543156e-08
+3: time/trk=2.566874e-08
+4: time/trk=2.542873e-08
+5: time/trk=2.542859e-08
+6: time/trk=2.577774e-08
+7: time/trk=2.539615e-08
+8: time/trk=2.539765e-08
+9: time/trk=2.564775e-08
+Min time/trk    2.539615e-08
+Input program: propagate_nvcc_kokkosv3
+0: time/trk=2.593198e-08
+1: time/trk=2.593112e-08
+2: time/trk=2.618046e-08
+3: time/trk=2.593471e-08
+4: time/trk=2.593592e-08
+5: time/trk=2.625345e-08
+6: time/trk=2.593134e-08
+7: time/trk=2.593546e-08
+8: time/trk=2.621039e-08
+9: time/trk=2.593415e-08
+Min time/trk    2.593112e-08
+Input program: propagate_nvcc_kokkosv4_prepin_host
+0: time/trk=2.525656e-08
+1: time/trk=2.560842e-08
+2: time/trk=2.525634e-08
+3: time/trk=2.525695e-08
+4: time/trk=2.544366e-08
+5: time/trk=2.525346e-08
+6: time/trk=2.525702e-08
+7: time/trk=2.553651e-08
+8: time/trk=2.525372e-08
+9: time/trk=2.525259e-08
+Min time/trk    2.525259e-08
+Input program: propagate_nvcc_kokkosv5
+0: time/trk=6.240521e-09
+1: time/trk=6.115677e-09
+2: time/trk=6.127698e-09
+3: time/trk=6.333781e-09
+4: time/trk=6.135708e-09
+5: time/trk=6.170646e-09
+6: time/trk=6.323521e-09
+7: time/trk=6.130573e-09
+8: time/trk=6.125729e-09
+9: time/trk=6.166708e-09
+Min time/trk    6.115677e-09
+Input program: propagate_nvcc_kokkosv6_prepin_host
+0: time/trk=6.260750e-09
+1: time/trk=6.025417e-09
+2: time/trk=6.027406e-09
+3: time/trk=6.273281e-09
+4: time/trk=6.019854e-09
+5: time/trk=6.025458e-09
+6: time/trk=6.216688e-09
+7: time/trk=6.050510e-09
+8: time/trk=6.041469e-09
+9: time/trk=6.209667e-09
+Min time/trk    6.019854e-09
+Input program: propagate_nvhpc_cudahyb
+0: time/trk=2.527667e-09
+1: time/trk=2.584000e-09
+2: time/trk=2.529531e-09
+3: time/trk=2.520781e-09
+4: time/trk=2.525563e-09
+5: time/trk=2.518125e-09
+6: time/trk=2.522708e-09
+7: time/trk=2.519198e-09
+8: time/trk=2.522958e-09
+9: time/trk=2.519344e-09
+Min time/trk	2.518125e-09
+Input program: propagate_nvhpc_pstl
+0: time/trk=6.819896e-09
+1: time/trk=6.804865e-09
+2: time/trk=6.801427e-09
+3: time/trk=6.795177e-09
+4: time/trk=6.811083e-09
+5: time/trk=6.790323e-09
+6: time/trk=6.791719e-09
+7: time/trk=6.801906e-09
+8: time/trk=6.801615e-09
+9: time/trk=6.794156e-09
+Min time/trk	6.790323e-09
+Input program: propagate_ibm_omp4c
+0: time/trk=9.272917e-08
+1: time/trk=9.283333e-08
+2: time/trk=9.280208e-08
+3: time/trk=9.282292e-08
+4: time/trk=9.303125e-08
+5: time/trk=9.282292e-08
+6: time/trk=9.294792e-08
+7: time/trk=9.276042e-08
+8: time/trk=9.285417e-08
+9: time/trk=9.286458e-08
+Min time/trk	9.272917e-08
+Input program: propagate_ibm_omp4cv3
+0: time/trk=8.816667e-08
+1: time/trk=8.817708e-08
+2: time/trk=8.817708e-08
+3: time/trk=8.814583e-08
+4: time/trk=8.816667e-08
+5: time/trk=8.817708e-08
+6: time/trk=8.816667e-08
+7: time/trk=8.818750e-08
+8: time/trk=8.815625e-08
+9: time/trk=8.818750e-08
+Min time/trk	8.814583e-08
+Input program: propagate_ibm_omp4cv4
+0: time/trk=3.864583e-09
+1: time/trk=3.864583e-09
+2: time/trk=3.854167e-09
+3: time/trk=3.864583e-09
+4: time/trk=3.864583e-09
+5: time/trk=3.854167e-09
+6: time/trk=3.854167e-09
+7: time/trk=3.854167e-09
+8: time/trk=3.864583e-09
+9: time/trk=3.864583e-09
+Min time/trk	3.854167e-09
+Input program: propagate_llvm_omp4c
+0: time/trk=5.921875e-08
+1: time/trk=5.935417e-08
+2: time/trk=5.910417e-08
+3: time/trk=5.945833e-08
+4: time/trk=5.914583e-08
+5: time/trk=5.913542e-08
+6: time/trk=5.966667e-08
+7: time/trk=5.913542e-08
+8: time/trk=5.957292e-08
+9: time/trk=5.901042e-08
+Min time/trk	5.901042e-08
+Input program: propagate_llvm_omp4cv3
+0: time/trk=5.812500e-08
+1: time/trk=5.845833e-08
+2: time/trk=5.803125e-08
+3: time/trk=5.840625e-08
+4: time/trk=5.809375e-08
+5: time/trk=5.798958e-08
+6: time/trk=5.851042e-08
+7: time/trk=5.797917e-08
+8: time/trk=5.865625e-08
+9: time/trk=5.818750e-08
+Min time/trk	5.797917e-08
+//All gcc versions failed.
