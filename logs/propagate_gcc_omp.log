@@ -1,4 +1,4 @@
-bsize: 128, nb:75, omp threads:64
+bsize: 32, nb:300, omp threads:64
 track in pos: x=20.048365, y=86.453407, z=-271.755951, r=88.747551, pt=11.928361, phi=1.384232, theta=2.820985 
 track in cov: 6.82e-05, 1.33e-03, 0.00e+00 
 hit in layer=0, pos: x=18.525879, y=79.874146, z=-271.755951, r=81.994431 
@@ -21,20 +21,20 @@ hit in layer=16, pos: x=7.204010, y=27.753498, z=-106.423027, r=28.673235
 hit in layer=17, pos: x=7.260882, y=27.738113, z=-93.474022, r=28.672693 
 hit in layer=18, pos: x=7.698053, y=27.590805, z=-80.279007, r=28.644590 
 hit in layer=19, pos: x=7.320264, y=27.722622, z=-80.523956, r=28.672810 
-produce nevts=100 ntrks=9600 smearing by=0.000010 
+produce nevts=100 ntrks=9600 smearing by=1.0e-07 
 NITER=10
 done preparing!
-setup time time=4.467000 (s)
-done ntracks=9600000 tot time=0.794746 (s) time/trk=8.278604e-08 (s)
-formatted 10 100 9600 128 75 0.794746 0 4.467000 64
-track x avg=6.474940 std/avg=0.044321
-track y avg=24.236568 std/avg=0.040548
-track z avg=-80.165565 std/avg=0.004459
-track dx/x avg=-0.150640 std=6.593014
-track dy/y avg=-0.138794 std=0.273632
-track dz/z avg=0.000000 std=0.000010
-track pt avg=12.342579
-track phi avg=1.324507
-track theta avg=2.823806
-number of tracks with nans=1
-number of tracks failed=18651
+setup time time=4.401000 (s)
+done ntracks=9600000 tot time=0.766436 (s) time/trk=7.983708e-08 (s)
+formatted 10 100 9600 32 300 0.766436 0 4.401000 64
+track x avg=6.443559 std/avg=0.000039
+track y avg=24.394711 std/avg=0.000039
+track z avg=-80.523956 std/avg=0.000000
+track dx/x avg=-0.136059 std=0.000045
+track dy/y avg=-0.136419 std=0.000044
+track dz/z avg=0.000000 std=0.000000
+track pt avg=12.328098
+track phi avg=1.325565
+track theta avg=2.820840
+number of tracks with nans=0
+number of tracks failed=0

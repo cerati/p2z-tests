@@ -39,7 +39,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define nevts 100
 #endif
 
-#define smear 0.00001
+#define smear 0.0000001
 
 #ifndef NITER
 #define NITER 5 
@@ -68,6 +68,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define elementsperthreadx bsize // set to 1 if using gpu
 #endif
 #endif
+
+//how do we set multithreading on CPU in alpaka?
 
 #ifndef threadsperblockx
 #if DEVICE_TYPE == 1
@@ -597,6 +599,8 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
 template< typename TAcc>
 inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP2x2SF & resErr_loc, MP2x6 & kGain, MP2F &res_loc, MP6x6SF &newErr, TAcc const & acc){
 
+  //printf("kalman in: x=%7f, y=%7f, z=%7f, ipt=%7f, phi=%7f, theta=%7f \n", x    (inPar, 0), y    (inPar, 0), z    (inPar, 0), ipt  (inPar, 0), phi  (inPar, 0), theta(inPar, 0));
+
   using Dim = alpaka::Dim<TAcc>;
   using Idx = alpaka::Idx<TAcc>;
   using Vec = alpaka::Vec<Dim, Idx>;
@@ -919,7 +923,7 @@ int main (int argc, char* argv[]) {
      printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
    }
 
-   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   printf("produce nevts=%i ntrks=%i smearing by=%2.1e \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
 
    long setup_start, setup_stop;
@@ -1101,22 +1105,22 @@ int main (int argc, char* argv[]) {
    double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       float pt_ = 1./ipt(outtrk,ie,it);
-       float phi_ = phi(outtrk,ie,it);
-       float theta_ = theta(outtrk,ie,it);
-       float hx_ = inputhits[nlayer-1].pos[0];
-       float hy_ = inputhits[nlayer-1].pos[1];
-       float hz_ = inputhits[nlayer-1].pos[2];
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (isnan(x_) ||
-	   isnan(y_) ||
-	   isnan(z_) ||
-	   isnan(pt_) ||
-	   isnan(phi_) ||
-	   isnan(theta_)
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = inputhits[nlayer-1].pos[0];
+       double hy_ = inputhits[nlayer-1].pos[1];
+       double hz_ = inputhits[nlayer-1].pos[2];
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
 	   ) {
 	 nnans++;
 	 continue;
@@ -1124,10 +1128,12 @@ int main (int argc, char* argv[]) {
        if (fabs( (x_-hx_)/hx_ )>1. ||
            fabs( (y_-hy_)/hy_ )>1. ||
            fabs( (z_-hz_)/hz_ )>1. ||
-           fabs( (pt_-12.)/12.)>1.
-           ) {
-	 nfail++;
-	 continue;
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+          ) {
+         nfail++;
+         continue;
        }
        avgpt += pt_;
        avgphi += phi_;
@@ -1154,25 +1160,32 @@ int main (int argc, char* argv[]) {
    double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       float pt_ = 1./ipt(outtrk,ie,it);
-       float hx_ = inputhits[nlayer-1].pos[0];
-       float hy_ = inputhits[nlayer-1].pos[1];
-       float hz_ = inputhits[nlayer-1].pos[2];
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (isnan(x_) ||
-	   isnan(y_) ||
-	   isnan(z_)
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = inputhits[nlayer-1].pos[0];
+       double hy_ = inputhits[nlayer-1].pos[1];
+       double hz_ = inputhits[nlayer-1].pos[2];
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
 	   ) {
 	 continue;
        }
        if (fabs( (x_-hx_)/hx_ )>1. ||
            fabs( (y_-hy_)/hy_ )>1. ||
            fabs( (z_-hz_)/hz_ )>1. ||
-           fabs( (pt_-12.)/12.)>1.
-           ) {
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+          ) {
          continue;
        }
        stdx += (x_-avgx)*(x_-avgx);

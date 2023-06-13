@@ -27,7 +27,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #define nb    (ntrks/bsize)
-#define smear 0.00001
+#define smear 0.0000001
 
 #ifndef NITER
 #define NITER 5
@@ -705,7 +705,7 @@ int main (int argc, char* argv[]) {
      printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
    }
    
-   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   printf("produce nevts=%i ntrks=%i smearing by=%2.1e \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
    long setup_start, setup_stop;
    struct timeval timecheck;
@@ -756,21 +756,21 @@ int main (int argc, char* argv[]) {
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, nthreads);
    
    int nnans = 0, nfail = 0, ngood = 0;
-   float avgx = 0, avgy = 0, avgz = 0;
-   float avgpt = 0, avgphi = 0, avgtheta = 0;
-   float avgdx = 0, avgdy = 0, avgdz = 0;
+   double avgx = 0, avgy = 0, avgz = 0;
+   double avgpt = 0, avgphi = 0, avgtheta = 0;
+   double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       float pt_ = 1./ipt(outtrk,ie,it);
-       float phi_ = phi(outtrk,ie,it);
-       float theta_ = theta(outtrk,ie,it);
-       float hx_ = inputhits[nlayer-1].pos[0];
-       float hy_ = inputhits[nlayer-1].pos[1];
-       float hz_ = inputhits[nlayer-1].pos[2];
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = inputhits[nlayer-1].pos[0];
+       double hy_ = inputhits[nlayer-1].pos[1];
+       double hz_ = inputhits[nlayer-1].pos[2];
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
        if (std::isfinite(x_)==false ||
 	   std::isfinite(y_)==false ||
 	   std::isfinite(z_)==false ||
@@ -805,30 +805,30 @@ int main (int argc, char* argv[]) {
        ngood ++;
      }
    }
-   avgpt = avgpt/float(ngood);
-   avgphi = avgphi/float(ngood);
-   avgtheta = avgtheta/float(ngood);
-   avgx = avgx/float(ngood);
-   avgy = avgy/float(ngood);
-   avgz = avgz/float(ngood);
-   avgdx = avgdx/float(ngood);
-   avgdy = avgdy/float(ngood);
-   avgdz = avgdz/float(ngood);
+   avgpt = avgpt/double(ngood);
+   avgphi = avgphi/double(ngood);
+   avgtheta = avgtheta/double(ngood);
+   avgx = avgx/double(ngood);
+   avgy = avgy/double(ngood);
+   avgz = avgz/double(ngood);
+   avgdx = avgdx/double(ngood);
+   avgdy = avgdy/double(ngood);
+   avgdz = avgdz/double(ngood);
 
-   float stdx = 0, stdy = 0, stdz = 0;
-   float stddx = 0, stddy = 0, stddz = 0;
+   double stdx = 0, stdy = 0, stdz = 0;
+   double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       float pt_ = 1./ipt(outtrk,ie,it);
-       float phi_ = phi(outtrk,ie,it);
-       float theta_ = theta(outtrk,ie,it);
-       float hx_ = inputhits[nlayer-1].pos[0];
-       float hy_ = inputhits[nlayer-1].pos[1];
-       float hz_ = inputhits[nlayer-1].pos[2];
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = inputhits[nlayer-1].pos[0];
+       double hy_ = inputhits[nlayer-1].pos[1];
+       double hz_ = inputhits[nlayer-1].pos[2];
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
        if (std::isfinite(x_)==false ||
 	   std::isfinite(y_)==false ||
 	   std::isfinite(z_)==false ||
@@ -856,12 +856,12 @@ int main (int argc, char* argv[]) {
      }
    }
 
-   stdx = sqrtf(stdx/float(ngood));
-   stdy = sqrtf(stdy/float(ngood));
-   stdz = sqrtf(stdz/float(ngood));
-   stddx = sqrtf(stddx/float(ngood));
-   stddy = sqrtf(stddy/float(ngood));
-   stddz = sqrtf(stddz/float(ngood));
+   stdx = sqrtf(stdx/double(ngood));
+   stdy = sqrtf(stdy/double(ngood));
+   stdz = sqrtf(stdz/double(ngood));
+   stddx = sqrtf(stddx/double(ngood));
+   stddy = sqrtf(stddy/double(ngood));
+   stddz = sqrtf(stddz/double(ngood));
 
    printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
    printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));

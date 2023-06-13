@@ -360,7 +360,9 @@ CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib/intel64/gcc4.8 -Wl,-rpath,$
 ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1+=  -fopenmp -O3 -I. -march=native -mprefer-vector-width=512
-CLIBS1 += -lm -lgomp -L/opt/intel/compilers_and_libraries/linux/tbb/lib/intel64/gcc4.8
+TBB_PREFIX := /packages/intel/oneapi/tbb/2021.1.1
+CLIBS1 += -lm -lgomp -L${TBB_PREFIX}/lib/intel64/gcc4.8 -ltbb
+#-L/opt/intel/compilers_and_libraries/linux/tbb/lib/intel64/gcc4.8
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
