@@ -24,8 +24,8 @@ produce nevts=100 ntrks=9600 smearing by=1.0e-07
 NITER=10
 done preparing!
 setup time time=4.409000 (s)
-done ntracks=9600000 tot time=0.543245 (s) time/trk=5.658802e-08 (s)
-formatted 10 100 9600 32 300 0.543245 0 4.409000 64
+done ntracks=9600000 tot time=0.554024 (s) time/trk=5.771083e-08 (s)
+formatted 10 100 9600 32 300 0.554024 0 4.409000 64
 track x avg=6.443559 std/avg=0.000039
 track y avg=24.394711 std/avg=0.000039
 track z avg=-80.523956 std/avg=0.000000

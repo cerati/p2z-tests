@@ -755,8 +755,7 @@ int main (int argc, char* argv[]) {
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    int itr;
-   //for(itr=0; itr<NITER; itr++) {
-   for(itr=0; itr<1; itr++) {
+   for(itr=0; itr<NITER; itr++) {
       parallel_for(blocked_range<size_t>(0,nevts,4),[&](blocked_range<size_t> iex){
       for(size_t ie =iex.begin(); ie<iex.end();++ie){
         parallel_for(blocked_range<size_t>(0,nb,4),[&](blocked_range<size_t> ibx){

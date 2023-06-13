@@ -40,9 +40,9 @@ done preparing!
 Size of struct MPTRK trk[] = 107520000
 Size of struct MPTRK outtrk[] = 107520000
 Size of struct struct MPHIT hit[] = 691200000
-setup time time=6.125000 (s)
-done ntracks=96000000 tot time=0.129937 (s) time/trk=1.353510e-09 (s)
-formatted 100 100 9600 32 300 0.129937 0 6.125000 -1
+setup time time=6.236000 (s)
+done ntracks=96000000 tot time=11.106957 (s) time/trk=1.156975e-07 (s)
+formatted 100 100 9600 32 300 11.106957 0 6.236000 -1
 track x avg=6.443559 std/avg=0.000039
 track y avg=24.394712 std/avg=0.000039
 track z avg=-80.523956 std/avg=0.000000

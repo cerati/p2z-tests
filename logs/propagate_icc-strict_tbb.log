@@ -23,17 +23,17 @@ hit in layer=19, pos: x=7.320264, y=27.722622, z=-80.523956, r=28.672810
 produce nevts=100 ntrks=9600 smearing by=1.0e-07 
 NITER=10
 done preparing!
-setup time time=4.085000 (s)
-done ntracks=9600000 tot time=0.215275 (s) time/trk=2.242448e-08 (s)
-formatted 10 100 9600 32 300 0.215275 0 4.085000 64
-track x avg=6.443813 std/avg=0.000040
-track y avg=24.395778 std/avg=0.000039
+setup time time=11.093000 (s)
+done ntracks=9600000 tot time=0.613150 (s) time/trk=6.386979e-08 (s)
+formatted 10 100 9600 32 300 0.613150 0 11.093000 64
+track x avg=6.443561 std/avg=0.000039
+track y avg=24.394716 std/avg=0.000039
 track z avg=-80.523956 std/avg=0.000000
-track dx/x avg=-0.136014 std=0.000045
-track dy/y avg=-0.136370 std=0.000045
+track dx/x avg=-0.136059 std=0.000045
+track dy/y avg=-0.136419 std=0.000044
 track dz/z avg=0.000000 std=0.000000
-track pt avg=12.329988
-track phi avg=1.325591
-track theta avg=2.820849
+track pt avg=12.328070
+track phi avg=1.325565
+track theta avg=2.820840
 number of tracks with nans=0
 number of tracks failed=0

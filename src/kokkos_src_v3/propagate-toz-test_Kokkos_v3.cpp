@@ -855,8 +855,7 @@ int main (int argc, char* argv[]) {
    auto wall_start = std::chrono::high_resolution_clock::now();
 
    int itr;
-   //for(itr=0; itr<NITER; itr++) {
-   for(itr=0; itr<1; itr++) {
+   for(itr=0; itr<NITER; itr++) {
 #ifdef include_data
      Kokkos::deep_copy(trk, h_trk);
      Kokkos::deep_copy(hit, h_hit);
