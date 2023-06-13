@@ -1,4 +1,4 @@
-Measure Compute Times Only!
+Measure Both Memory Transfer Times and Compute Times!
 track in pos: x=20.048365, y=86.453407, z=-271.755951, r=88.747551, pt=11.928361, phi=1.384232, theta=2.820985 
 track in cov: 6.82e-05, 1.33e-03, 0.00e+00 
 hit in layer=0, pos: x=18.525879, y=79.874146, z=-271.755951, r=81.994431 
@@ -22,7 +22,7 @@ hit in layer=17, pos: x=7.260882, y=27.738113, z=-93.474022, r=28.672693
 hit in layer=18, pos: x=7.698053, y=27.590805, z=-80.279007, r=28.644590 
 hit in layer=19, pos: x=7.320264, y=27.722622, z=-80.523956, r=28.672810 
 produce nevts=100 ntrks=9600 smearing by=1.0e-07 
-NITER=100
+NITER=10
 Kokkos::OpenMP::initialize WARNING: OMP_PROC_BIND environment variable not set
   In general, for best performance with OpenMP 4.0 or better set OMP_PROC_BIND=spread and OMP_PLACES=threads
   For best performance with OpenMP 3.1 set OMP_PROC_BIND=true
@@ -40,9 +40,9 @@ done preparing!
 Size of struct MPTRK trk[] = 107520000
 Size of struct MPTRK outtrk[] = 107520000
 Size of struct struct MPHIT hit[] = 691200000
-setup time time=6.236000 (s)
-done ntracks=96000000 tot time=11.106957 (s) time/trk=1.156975e-07 (s)
-formatted 100 100 9600 32 300 11.106957 0 6.236000 -1
+setup time time=6.183000 (s)
+done ntracks=9600000 tot time=1.091332 (s) time/trk=1.136804e-07 (s)
+formatted 10 100 9600 32 300 1.091332 0 6.183000 -1
 track x avg=6.443559 std/avg=0.000039
 track y avg=24.394712 std/avg=0.000039
 track z avg=-80.523956 std/avg=0.000000
