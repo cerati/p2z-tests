@@ -27,7 +27,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef nevts
 #define nevts 100
 #endif
-#define smear 0.00001
+#define smear 0.0000001
 
 #ifndef NITER
 #define NITER 5
@@ -624,28 +624,6 @@ KOKKOS_FUNCTION void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF
       newErr->data[18*bsize+it] = kGain->data[10*bsize+it]*trkErr->data[ 6*bsize+it] + kGain->data[11*bsize+it]*trkErr->data[ 7*bsize+it];
       newErr->data[19*bsize+it] = kGain->data[10*bsize+it]*trkErr->data[10*bsize+it] + kGain->data[11*bsize+it]*trkErr->data[11*bsize+it];
       newErr->data[20*bsize+it] = kGain->data[10*bsize+it]*trkErr->data[15*bsize+it] + kGain->data[11*bsize+it]*trkErr->data[16*bsize+it];
-
-      newErr->data[ 0*bsize+it] = trkErr->data[ 0*bsize+it] - newErr->data[ 0*bsize+it];
-      newErr->data[ 1*bsize+it] = trkErr->data[ 1*bsize+it] - newErr->data[ 1*bsize+it];
-      newErr->data[ 2*bsize+it] = trkErr->data[ 2*bsize+it] - newErr->data[ 2*bsize+it];
-      newErr->data[ 3*bsize+it] = trkErr->data[ 3*bsize+it] - newErr->data[ 3*bsize+it];
-      newErr->data[ 4*bsize+it] = trkErr->data[ 4*bsize+it] - newErr->data[ 4*bsize+it];
-      newErr->data[ 5*bsize+it] = trkErr->data[ 5*bsize+it] - newErr->data[ 5*bsize+it];
-      newErr->data[ 6*bsize+it] = trkErr->data[ 6*bsize+it] - newErr->data[ 6*bsize+it];
-      newErr->data[ 7*bsize+it] = trkErr->data[ 7*bsize+it] - newErr->data[ 7*bsize+it];
-      newErr->data[ 8*bsize+it] = trkErr->data[ 8*bsize+it] - newErr->data[ 8*bsize+it];
-      newErr->data[ 9*bsize+it] = trkErr->data[ 9*bsize+it] - newErr->data[ 9*bsize+it];
-      newErr->data[10*bsize+it] = trkErr->data[10*bsize+it] - newErr->data[10*bsize+it];
-      newErr->data[11*bsize+it] = trkErr->data[11*bsize+it] - newErr->data[11*bsize+it];
-      newErr->data[12*bsize+it] = trkErr->data[12*bsize+it] - newErr->data[12*bsize+it];
-      newErr->data[13*bsize+it] = trkErr->data[13*bsize+it] - newErr->data[13*bsize+it];
-      newErr->data[14*bsize+it] = trkErr->data[14*bsize+it] - newErr->data[14*bsize+it];
-      newErr->data[15*bsize+it] = trkErr->data[15*bsize+it] - newErr->data[15*bsize+it];
-      newErr->data[16*bsize+it] = trkErr->data[16*bsize+it] - newErr->data[16*bsize+it];
-      newErr->data[17*bsize+it] = trkErr->data[17*bsize+it] - newErr->data[17*bsize+it];
-      newErr->data[18*bsize+it] = trkErr->data[18*bsize+it] - newErr->data[18*bsize+it];
-      newErr->data[19*bsize+it] = trkErr->data[19*bsize+it] - newErr->data[19*bsize+it];
-      newErr->data[20*bsize+it] = trkErr->data[20*bsize+it] - newErr->data[20*bsize+it];
    });
 
   Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) 
@@ -742,7 +720,7 @@ int main (int argc, char* argv[]) {
      printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
    }
 
-   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   printf("produce nevts=%i ntrks=%i smearing by=%2.1e \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
    
    long setup_start, setup_stop;
@@ -961,22 +939,22 @@ int main (int argc, char* argv[]) {
    double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(h_outtrk.data(),ie,it);
-       float y_ = y(h_outtrk.data(),ie,it);
-       float z_ = z(h_outtrk.data(),ie,it);
-       float pt_ = 1./ipt(h_outtrk.data(),ie,it);
-       float phi_ = phi(h_outtrk.data(),ie,it);
-       float theta_ = theta(h_outtrk.data(),ie,it);
-       float hx_ = x(h_hit.data(),ie,it);
-       float hy_ = y(h_hit.data(),ie,it);
-       float hz_ = z(h_hit.data(),ie,it);
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (isnan(x_) ||
-	   isnan(y_) ||
-	   isnan(z_) ||
-	   isnan(pt_) ||
-	   isnan(phi_) ||
-	   isnan(theta_)
+       double x_ = x(h_outtrk.data(),ie,it);
+       double y_ = y(h_outtrk.data(),ie,it);
+       double z_ = z(h_outtrk.data(),ie,it);
+       double pt_ = 1./ipt(h_outtrk.data(),ie,it);
+       double phi_ = phi(h_outtrk.data(),ie,it);
+       double theta_ = theta(h_outtrk.data(),ie,it);
+       double hx_ = x(h_hit.data(),ie,it);
+       double hy_ = y(h_hit.data(),ie,it);
+       double hz_ = z(h_hit.data(),ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
 	   ) {
 	 nnans++;
 	 continue;
@@ -984,7 +962,9 @@ int main (int argc, char* argv[]) {
        if (fabs( (x_-hx_)/hx_ )>1. ||
            fabs( (y_-hy_)/hy_ )>1. ||
            fabs( (z_-hz_)/hz_ )>1. ||
-           fabs( (pt_-12.)/12.)>1.
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
            ) {
 	 nfail++;
 	 continue;
@@ -1027,24 +1007,31 @@ int main (int argc, char* argv[]) {
    double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(h_outtrk.data(),ie,it);
-       float y_ = y(h_outtrk.data(),ie,it);
-       float z_ = z(h_outtrk.data(),ie,it);
-       float hx_ = x(h_hit.data(),ie,it);
-       float hy_ = y(h_hit.data(),ie,it);
-       float hz_ = z(h_hit.data(),ie,it);
-       float pt_ = 1./ipt(h_outtrk.data(),ie,it);
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (isnan(x_) ||
-	   isnan(y_) ||
-	   isnan(z_)
+       double x_ = x(h_outtrk.data(),ie,it);
+       double y_ = y(h_outtrk.data(),ie,it);
+       double z_ = z(h_outtrk.data(),ie,it);
+       double pt_ = 1./ipt(h_outtrk.data(),ie,it);
+       double phi_ = phi(h_outtrk.data(),ie,it);
+       double theta_ = theta(h_outtrk.data(),ie,it);
+       double hx_ = x(h_hit.data(),ie,it);
+       double hy_ = y(h_hit.data(),ie,it);
+       double hz_ = z(h_hit.data(),ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
 	   ) {
 	 continue;
        }
        if (fabs( (x_-hx_)/hx_ )>1. ||
            fabs( (y_-hy_)/hy_ )>1. ||
            fabs( (z_-hz_)/hz_ )>1. ||
-           fabs( (pt_-12.)/12.)>1.
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
            ) {
          continue;
        }
