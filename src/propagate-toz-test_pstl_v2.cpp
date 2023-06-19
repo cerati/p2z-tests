@@ -45,7 +45,7 @@ constexpr bool use_cuda = false;
 #ifndef nevts
 #define nevts 100
 #endif
-#define smear 0.00001
+#define smear 0.0000001
 
 #ifndef NITER
 #define NITER 5
@@ -666,28 +666,6 @@ void KalmanUpdate_v2(MP6x6SF_<N> &trkErr, MP6F_<N> &inPar, const MP3x3SF_<N> &hi
       newErr[18] = kGain[10]*trkErr[ 6] + kGain[11]*trkErr[ 7];
       newErr[19] = kGain[10]*trkErr[10] + kGain[11]*trkErr[11];
       newErr[20] = kGain[10]*trkErr[15] + kGain[11]*trkErr[16];
-
-      newErr[ 0] = trkErr[ 0] - newErr[ 0];
-      newErr[ 1] = trkErr[ 1] - newErr[ 1];
-      newErr[ 2] = trkErr[ 2] - newErr[ 2];
-      newErr[ 3] = trkErr[ 3] - newErr[ 3];
-      newErr[ 4] = trkErr[ 4] - newErr[ 4];
-      newErr[ 5] = trkErr[ 5] - newErr[ 5];
-      newErr[ 6] = trkErr[ 6] - newErr[ 6];
-      newErr[ 7] = trkErr[ 7] - newErr[ 7];
-      newErr[ 8] = trkErr[ 8] - newErr[ 8];
-      newErr[ 9] = trkErr[ 9] - newErr[ 9];
-      newErr[10] = trkErr[10] - newErr[10];
-      newErr[11] = trkErr[11] - newErr[11];
-      newErr[12] = trkErr[12] - newErr[12];
-      newErr[13] = trkErr[13] - newErr[13];
-      newErr[14] = trkErr[14] - newErr[14];
-      newErr[15] = trkErr[15] - newErr[15];
-      newErr[16] = trkErr[16] - newErr[16];
-      newErr[17] = trkErr[17] - newErr[17];
-      newErr[18] = trkErr[18] - newErr[18];
-      newErr[19] = trkErr[19] - newErr[19];
-      newErr[20] = trkErr[20] - newErr[20];
    }
 
   {
@@ -796,7 +774,7 @@ int main (int argc, char* argv[]) {
    }
 
 
-   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   printf("produce nevts=%i ntrks=%i smearing by=%2.1e \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
 
    long setup_start, setup_stop;
@@ -942,22 +920,22 @@ int main (int argc, char* argv[]) {
    double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       float pt_ = 1./ipt(outtrk,ie,it);
-       float phi_ = phi(outtrk,ie,it);
-       float theta_ = theta(outtrk,ie,it);
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (isnan(x_) ||
-       isnan(y_) ||
-       isnan(z_) ||
-       isnan(pt_) ||
-       isnan(phi_) ||
-       isnan(theta_)
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = x(hit,ie,it);
+       double hy_ = y(hit,ie,it);
+       double hz_ = z(hit,ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+       std::isfinite(y_)==false ||
+       std::isfinite(z_)==false ||
+       std::isfinite(pt_)==false ||
+       std::isfinite(phi_)==false ||
+       std::isfinite(theta_)==false
        ) {  
      nnans++;
      continue;
@@ -965,7 +943,9 @@ int main (int argc, char* argv[]) {
        if (fabs( (x_-hx_)/hx_ )>1. ||
            fabs( (y_-hy_)/hy_ )>1. ||
            fabs( (z_-hz_)/hz_ )>1. ||
-           fabs( (pt_-12.)/12.)>1.
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
            ) {  
      nfail++;
      continue;
@@ -996,24 +976,31 @@ int main (int argc, char* argv[]) {
    double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
-       float pt_ = 1./ipt(outtrk,ie,it);
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (isnan(x_) ||
-       isnan(y_) ||
-       isnan(z_)
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = x(hit,ie,it);
+       double hy_ = y(hit,ie,it);
+       double hz_ = z(hit,ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+       std::isfinite(y_)==false ||
+       std::isfinite(z_)==false ||
+       std::isfinite(pt_)==false ||
+       std::isfinite(phi_)==false ||
+       std::isfinite(theta_)==false
        ) {
      continue;
        }
        if (fabs( (x_-hx_)/hx_ )>1. ||
            fabs( (y_-hy_)/hy_ )>1. ||
            fabs( (z_-hz_)/hz_ )>1. ||
-           fabs( (pt_-12.)/12.)>1.
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
            ) {
          continue;
        }
