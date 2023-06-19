@@ -41,7 +41,7 @@ nvc++ -O2 -std=c++20 --gcc-toolchain=path-to-gnu-compiler -stdpar=multicore ./sr
 #endif
 
 #define nb    (ntrks/bsize)
-#define smear 0.00001
+#define smear 0.0000001
 
 #ifndef NITER
 #define NITER 5
@@ -336,7 +336,6 @@ using MP6x6SF = MPNX<float, 21, bsize>;
 using MP6x6F  = MPNX<float, 36, bsize>;
 using MP3x3   = MPNX<float, 9 , bsize>;
 using MP3x6   = MPNX<float, 18, bsize>;
-using MP2x2SF   = MPNX<float, 3, bsize>;
 using MP2x6   = MPNX<float, 12, bsize>;
 using MP2F   = MPNX<float, 2, bsize>;
 
@@ -874,28 +873,6 @@ void KalmanUpdate_v2(MP6x6SF_<N> &trkErr, MP6F_<N> &inPar, const MP3x3SF_<N> &hi
       newErr[18*N+it] = kGain[10*N+it]*trkErr[ 6*N+it] + kGain[11*N+it]*trkErr[ 7*N+it];
       newErr[19*N+it] = kGain[10*N+it]*trkErr[10*N+it] + kGain[11*N+it]*trkErr[11*N+it];
       newErr[20*N+it] = kGain[10*N+it]*trkErr[15*N+it] + kGain[11*N+it]*trkErr[16*N+it];
-
-      newErr[ 0*N+it] = trkErr[ 0*N+it] - newErr[ 0*N+it];
-      newErr[ 1*N+it] = trkErr[ 1*N+it] - newErr[ 1*N+it];
-      newErr[ 2*N+it] = trkErr[ 2*N+it] - newErr[ 2*N+it];
-      newErr[ 3*N+it] = trkErr[ 3*N+it] - newErr[ 3*N+it];
-      newErr[ 4*N+it] = trkErr[ 4*N+it] - newErr[ 4*N+it];
-      newErr[ 5*N+it] = trkErr[ 5*N+it] - newErr[ 5*N+it];
-      newErr[ 6*N+it] = trkErr[ 6*N+it] - newErr[ 6*N+it];
-      newErr[ 7*N+it] = trkErr[ 7*N+it] - newErr[ 7*N+it];
-      newErr[ 8*N+it] = trkErr[ 8*N+it] - newErr[ 8*N+it];
-      newErr[ 9*N+it] = trkErr[ 9*N+it] - newErr[ 9*N+it];
-      newErr[10*N+it] = trkErr[10*N+it] - newErr[10*N+it];
-      newErr[11*N+it] = trkErr[11*N+it] - newErr[11*N+it];
-      newErr[12*N+it] = trkErr[12*N+it] - newErr[12*N+it];
-      newErr[13*N+it] = trkErr[13*N+it] - newErr[13*N+it];
-      newErr[14*N+it] = trkErr[14*N+it] - newErr[14*N+it];
-      newErr[15*N+it] = trkErr[15*N+it] - newErr[15*N+it];
-      newErr[16*N+it] = trkErr[16*N+it] - newErr[16*N+it];
-      newErr[17*N+it] = trkErr[17*N+it] - newErr[17*N+it];
-      newErr[18*N+it] = trkErr[18*N+it] - newErr[18*N+it];
-      newErr[19*N+it] = trkErr[19*N+it] - newErr[19*N+it];
-      newErr[20*N+it] = trkErr[20*N+it] - newErr[20*N+it];
    }
 
   {
@@ -1063,7 +1040,7 @@ int main (int argc, char* argv[]) {
      printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
    }
 
-   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   printf("produce nevts=%i ntrks=%i smearing by=%2.1e \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
 
    long setup_start, setup_stop;
@@ -1189,22 +1166,22 @@ int main (int argc, char* argv[]) {
    double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       float pt_ = 1./ipt(outtrk,ie,it);
-       float phi_ = phi(outtrk,ie,it);
-       float theta_ = theta(outtrk,ie,it);
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (isnan(x_) ||
-       isnan(y_) ||
-       isnan(z_) ||
-       isnan(pt_) ||
-       isnan(phi_) ||
-       isnan(theta_)
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = x(hit,ie,it);
+       double hy_ = y(hit,ie,it);
+       double hz_ = z(hit,ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+       std::isfinite(y_)==false ||
+       std::isfinite(z_)==false ||
+       std::isfinite(pt_)==false ||
+       std::isfinite(phi_)==false ||
+       std::isfinite(theta_)==false
        ) {
      nnans++;
      continue;
@@ -1212,7 +1189,9 @@ int main (int argc, char* argv[]) {
        if (fabs( (x_-hx_)/hx_ )>1. ||
            fabs( (y_-hy_)/hy_ )>1. ||
            fabs( (z_-hz_)/hz_ )>1. ||
-           fabs( (pt_-12.)/12.)>1.
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
            ) {
      nfail++;
      continue;
@@ -1242,24 +1221,31 @@ int main (int argc, char* argv[]) {
    double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       float hx_ = x(hit,ie,it);
-       float hy_ = y(hit,ie,it);
-       float hz_ = z(hit,ie,it);
-       float pt_ = 1./ipt(outtrk,ie,it);
-       float hr_ = sqrtf(hx_*hx_ + hy_*hy_);
-       if (isnan(x_) ||
-       isnan(y_) ||
-       isnan(z_)
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = x(hit,ie,it);
+       double hy_ = y(hit,ie,it);
+       double hz_ = z(hit,ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+       std::isfinite(y_)==false ||
+       std::isfinite(z_)==false ||
+       std::isfinite(pt_)==false ||
+       std::isfinite(phi_)==false ||
+       std::isfinite(theta_)==false
        ) {
      continue;
        }
        if (fabs( (x_-hx_)/hx_ )>1. ||
            fabs( (y_-hy_)/hy_ )>1. ||
            fabs( (z_-hz_)/hz_ )>1. ||
-           fabs( (pt_-12.)/12.)>1.
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
            ) {
          continue;
        }
