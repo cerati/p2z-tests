@@ -106,11 +106,11 @@ Version 1 (cudav1) has the same computation and communication patterns as versio
 
 Version 2 (cudav2) uses explicit memory transfers, and each device thread has a local copy of each batched temporary track data (e.g., struct MP6x6F errorProp), even though each thread needs to accesse only assigned part of the batched track data, which is inefficient in terms of device memory usage.
 
-Version 3 has the same computation and communiation patterns as version 2 (cudav2), but device threads in the same thread block share the batched temporary track data by allocating the batched data in the CUDA shared memory (e.g., __shared__ struct MP6x6F errorProp).
-Version 3 has the same computation and communiation patterns as OpenACC async version (acccv3).
+Version 3 has the same computation and communication patterns as version 2 (cudav2), but device threads in the same thread block share the batched temporary track data by allocating the batched data in the CUDA shared memory (e.g., __shared__ struct MP6x6F errorProp).
+Version 3 has the same computation and communication patterns as OpenACC async version (acccv3).
 
-Version 4 has the same computation and communiation patterns as version 2 (cudav2), but each device threads stores only assigned temporary track data in its thread-private memory (i.e., CUDA local memory), instead of using CUDA shared memory.
-Version 4 has the same computation and communiation patterns as OpenACC async version (acccv4).
+Version 4 has the same computation and communication patterns as version 2 (cudav2), but each device threads stores only assigned temporary track data in its thread-private memory (i.e., CUDA local memory), instead of using CUDA shared memory.
+Version 4 has the same computation and communication patterns as OpenACC async version (acccv4).
 
 ```shell
 $ make COMPILER=nvcc MODE=cuda #default behaviors: asynchronous execution; measure both memory transfer times and compute times
