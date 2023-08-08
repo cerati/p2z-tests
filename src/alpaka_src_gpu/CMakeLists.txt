@@ -48,8 +48,8 @@ ENDIF()
 #add_compile_options(--use_fast_math)
 
 #add_compile_options(-ffast-math)
-add_compile_options(-march=native)
-#add_compile_options(-O3)
+#add_compile_options(-march=native)
+add_compile_options(-O3)
 #add_compile_options(-fopenmp-simd)
 
 set(INCLUDE_DIR

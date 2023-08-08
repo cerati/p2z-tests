@@ -100,11 +100,17 @@ $ make COMPILER=icc MODE=tbb
 
 ## CUDA
 #### Compilers: nvcc
-Version 1 uses unified memory. Version 2 and 3 use explicit memory transfers.
+Version 0 (cuda) has the same computation and communication patterns as version 3 (cudav3) but uses unified memory.
 
-Version 3 has the same computation and communiation patterns as OpenACC async version (v3).
+Version 1 (cudav1) has the same computation and communication patterns as version 4 (cudav4) but uses unified memory.
 
-Version 4 has the same computation and communiation patterns as OpenACC async version (v4).
+Version 2 (cudav2) uses explicit memory transfers, and each device thread has a local copy of each batched temporary track data (e.g., struct MP6x6F errorProp), even though each thread needs to accesse only assigned part of the batched track data, which is inefficient in terms of device memory usage.
+
+Version 3 has the same computation and communiation patterns as version 2 (cudav2), but device threads in the same thread block share the batched temporary track data by allocating the batched data in the CUDA shared memory (e.g., __shared__ struct MP6x6F errorProp).
+Version 3 has the same computation and communiation patterns as OpenACC async version (acccv3).
+
+Version 4 has the same computation and communiation patterns as version 2 (cudav2), but each device threads stores only assigned temporary track data in its thread-private memory (i.e., CUDA local memory), instead of using CUDA shared memory.
+Version 4 has the same computation and communiation patterns as OpenACC async version (acccv4).
 
 ```shell
 $ make COMPILER=nvcc MODE=cuda #default behaviors: asynchronous execution; measure both memory transfer times and compute times
@@ -124,6 +130,8 @@ $ make COMPILER=nvcc MODE=cudauvm INCLUDE_DATA=1 USE_FMAD=1 #default
 #### Compilers: nvc++
 GCC_ROOT option has to be set properly to use a specific GCC version
 
+The computation and communication patterns of this hybrid version (cudahyb) is logically equivalent to CUDA version 4 (cudav4).
+
 ```shell
 $ make COMPILER=nvhpc MODE=cudahyb INCLUDE_DATA=1 USE_FMAD=1 #defaul
 $ make COMPILER=nvhpc MODE=cudahyb USE_FMAD=0 #disable the fmad optimization
@@ -134,6 +142,8 @@ $ make COMPILER=nvhpc MODE=cudahyb INCLUDE_DATA=0 #measure compute times only
 #### Compilers: nvc++
 GCC_ROOT option has to be set properly to use a specific GCC version
 
+The computation and communication patterns of this PSTL version (pstl) is logically equivalent to CUDA version 4 (cudav4).
+
 ```shell
 $ make COMPILER=nvhpc MODE=pstl INCLUDE_DATA=1 USE_FMAD=1 #default
 $ make COMPILER=nvhpc MODE=pstl USE_FMAD=0 #disable the fmad optimization
@@ -142,6 +152,9 @@ $ make COMPILER=nvhpc MODE=pstl INCLUDE_DATA=0 #measure compute times only
 
 ## Eigen
 #### Compilers: gcc, icc, nvcc
+The Eigen version is outdated (e.g., KalmanUpdate() should be updated.)
+
+The computation and communication patterns of this Eigen version (eigen) is logically similar to CUDA version 2 (cudav2).
 
 ```shell
 $ make COMPILER=gcc MODE=eigen
@@ -153,6 +166,8 @@ $ make COMPILER=nvcc MODE=eigen
 #### Compilers: gcc, nvcc 
 ALPAKA_INSTALL_ROOT should be set to the Alpaka install root directory.
 (Refer to ./src/alpaka_src_gpu/Readme.md to install Alpaka.)
+
+The computation and communication patterns of this Alpaka version (alpaka) is logically equivalent to CUDA version 3 (cudav3).
 
 ```shell
 $ make COMPILER=nvcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp for GPU using nvcc
@@ -179,7 +194,7 @@ Here is the brief information on each version:
 
 `src/kokkos_src_v3`: target CUDA GPU without unified memory; has the same 
                   user data layouts and memory transfer patterns as the manual
-                  CUDA_v3 version (`propagate-toz-test_CUDA_v3.cu`) but using 
+                  CUDA version 3 (cudav3)(`propagate-toz-test_CUDA_v3.cu`) but using 
                   a single device instance.
 
 `src/kokkos_src_v4`: has the same user data layouts and compute patterns 
@@ -188,7 +203,7 @@ Here is the brief information on each version:
 
 `src/kokkos_src_v5`: target CUDA GPU without unified memory; has the same 
                   user data layouts and memory transfer patterns as the manual
-                  CUDA_v4 version (`propagate-toz-test_CUDA_v4.cu`) but using 
+                  CUDA version 4 (cudav4)(`propagate-toz-test_CUDA_v4.cu`) but using 
                   a single device instance.
 
 `src/kokkos_src_v6`: has the same user data layouts and compute patterns 
@@ -215,10 +230,10 @@ $ make COMPILER=nvcc MODE=kokkosv2 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1
 $ make COMPILER=gcc MODE=kokkosv2 INCLUDE_DATA=0 USE_GPU=0 KOKKOS_ARCH=BDW
 $ make COMPILER=nvcc MODE=kokkosv3 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1
 $ make COMPILER=gcc MODE=kokkosv3 INCLUDE_DATA=0 USE_GPU=0 KOKKOS_ARCH=BDW
-$ make COMPILER=nvcc MODE=kokkosv4 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1 #work only for NVIDIA GPUs
-$ make COMPILER=nvcc MODE=kokkosv5 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1
+$ make COMPILER=nvcc MODE=kokkosv4 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 #work only for NVIDIA GPUs
+$ make COMPILER=nvcc MODE=kokkosv5 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1
 $ make COMPILER=gcc MODE=kokkosv5 INCLUDE_DATA=0 USE_GPU=0 KOKKOS_ARCH=BDW
-$ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1 #work only for NVIDIA GPUs
+$ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 #work only for NVIDIA GPUs
 $ make MODE=kokkosv6 clean
 ```
 
