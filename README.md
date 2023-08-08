@@ -104,7 +104,7 @@ Version 0 (cuda) has the same computation and communication patterns as version 
 
 Version 1 (cudav1) has the same computation and communication patterns as version 4 (cudav4) but uses unified memory.
 
-Version 2 (cudav2) uses explicit memory transfers, and each device thread has a local copy of each batched temporary track data (e.g., struct MP6x6F errorProp), even though each thread needs to accesse only assigned part of the batched track data, which is inefficient in terms of device memory usage.
+Version 2 (cudav2) uses explicit memory transfers, and each device thread has a local copy of each batched temporary track data (e.g., struct MP6x6F errorProp), even though each thread needs to access only assigned part of the batched track data, which is inefficient in terms of device memory usage.
 
 Version 3 has the same computation and communication patterns as version 2 (cudav2), but device threads in the same thread block share the batched temporary track data by allocating the batched data in the CUDA shared memory (e.g., __shared__ struct MP6x6F errorProp).
 Version 3 has the same computation and communication patterns as OpenACC async version (acccv3).
@@ -215,7 +215,7 @@ Here we have basic instructions.
 #### Getting started
 1. clone https://github.com/kokkos/kokkos to ${KOKKOS_ROOT}
 2. compile option 1:
-	a. in the `src/kokkos_src_v6` direcory edit the Makefile setting to match your needs
+	a. in the `src/kokkos_src_v6` directory edit the Makefile setting to match your needs
 	b. run `make` to build
 	c. The executable can be found under `bin` with the others
 3. compile option 2:
