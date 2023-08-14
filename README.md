@@ -112,6 +112,8 @@ Version 3 has the same computation and communication patterns as OpenACC async v
 Version 4 has the same computation and communication patterns as version 2 (cudav2), but each device threads stores only assigned temporary track data in its thread-private memory (i.e., CUDA local memory), instead of using CUDA shared memory.
 Version 4 has the same computation and communication patterns as OpenACC async version (acccv4).
 
+The computation and communication patterns of the CUDAUVM version (cudauvm) is logically equivalent to CUDA version 4 (cudav4); the main difference between cudauvm and cudav4 is that cudauvm is written in a typical C++ style (e.g., use C++ template struct) while cudav4 is written in a C style (e.g., use C struct).
+
 ```shell
 $ make COMPILER=nvcc MODE=cuda #default behaviors: asynchronous execution; measure both memory transfer times and compute times
 $ make COMPILER=nvcc MODE=cuda INCLUDE_DATA=0 #measure compute times only
@@ -130,6 +132,8 @@ $ make COMPILER=nvcc MODE=cudauvm INCLUDE_DATA=1 USE_FMAD=1 #default
 #### Compilers: nvc++
 GCC_ROOT option has to be set properly to use a specific GCC version
 
+The hybrid version (cudahyb) mixes CUDA and C++ parallel algorithm for GPU offloading.
+
 The computation and communication patterns of this hybrid version (cudahyb) is logically equivalent to CUDA version 4 (cudav4).
 
 ```shell
@@ -141,6 +145,8 @@ $ make COMPILER=nvhpc MODE=cudahyb INCLUDE_DATA=0 #measure compute times only
 ## PSTL
 #### Compilers: nvc++
 GCC_ROOT option has to be set properly to use a specific GCC version
+
+The PSTL version (pstl) uses C++ parallel algorithm for GPU offloading.
 
 The computation and communication patterns of this PSTL version (pstl) is logically equivalent to CUDA version 4 (cudav4).
 
