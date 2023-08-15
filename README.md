@@ -15,6 +15,12 @@ $ make COMPILER=nvhpc MODE=omp
 Compile the OpenACC C sync version, which may use CUDA shared memory for temporary data.
 (In OpenACC, different OpenACC compilers may allocate the temporary data on different memory spaces.)
 
+The computation and communication patterns of the acccv3 version is logically equivalent to CUDA version 3 (cudav3).
+
+The accc version is a synchronous version of the acccv3 version.
+
+The computation and communication patterns of the acccv4 version is logically equivalent to CUDA version 4 (cudav4).
+
 ```shell
 $ make COMPILER=nvhpc MODE=accc INCLUDE_DATA=1 USE_FMAD=1 #NVHPC V22.11 compiles correctly.
 $ make COMPILER=openarc MODE=accc INCLUDE_DATA=1 USE_FMAD=1
@@ -61,6 +67,12 @@ $ make COMPILER=gcc MODE=acccv4cpu
 ## OpenMP4 C
 #### Compile with openarc, llvm, ibm, and gcc
 Compile the OpenMP4 C sync version
+
+The computation and communication patterns of the omp4cv3 version is logically equivalent to CUDA version 3 (cudav3).
+
+The omp4c version is a synchronous version of the omp4cv3 version.
+
+The computation and communication patterns of the omp4cv4 version is logically equivalent to CUDA version 4 (cudav4).
 
 ```shell
 $ make COMPILER=openarc MODE=omp4c INCLUDE_DATA=1 USE_FMAD=1
