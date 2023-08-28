@@ -186,11 +186,13 @@ ALPAKA_INSTALL_ROOT should be set to the Alpaka install root directory.
 (Refer to ./src/alpaka_src_gpu/Readme.md to install Alpaka.)
 
 The computation and communication patterns of this Alpaka version (alpaka) is logically equivalent to CUDA version 3 (cudav3).
+The computation and communication patterns of this Alpaka version 4 (alpakav4) is logically equivalent to CUDA version 4 (cudav4).
 
 ```shell
 $ make COMPILER=nvcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp for GPU using nvcc
 $ make COMPILER=nvcc MODE=alpaka USE_FMAD=0 #disable fmad optimization
 $ make COMPILER=nvcc MODE=alpaka USE_FMAD=1 INCLUDE_DATA=1 
+$ make COMPILER=nvcc MODE=alpakav4 USE_FMAD=1 INCLUDE_DATA=1 
 $ make COMPILER=gcc MODE=alpaka #compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp for CPU using gcc
 $ make COMPILER=gcc MODE=alpaka ALPAKASRC=. #compile src/propagate-toz-test_alpaka.cpp for CPU using gcc
 ```
