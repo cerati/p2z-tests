@@ -91,6 +91,24 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define blockspergridx nb
 #endif
 
+#define loadData(dst, src, tid, itrsize) \
+  _Pragma("unroll")                      \
+  for(int ip=0; ip<itrsize; ++ip) {      \
+    dst[ip] = src[ip*bsize + tid];       \
+  }                               
+
+#define saveData(dst, src, tid, itrsize) \
+  _Pragma("unroll")                      \
+  for(int ip=0; ip<itrsize; ++ip) {      \
+    dst[ip*bsize + tid] = src[ip];       \
+  }         
+
+#define iparX     0
+#define iparY     1
+#define iparZ     2
+#define iparIpt   3
+#define iparPhi   4
+#define iparTheta 5
 
 ALPAKA_FN_ACC size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -175,6 +193,65 @@ struct MPTRK {
 struct MPHIT {
   MP3F    pos;
   MP3x3SF cov;
+};
+
+struct MP1I_ {
+  int data[1];
+};
+
+struct MP22I_ {
+  int data[22];
+};
+
+struct MP3F_ {
+  float data[3];
+};
+
+struct MP6F_ {
+  float data[6];
+};
+
+struct MP3x3_ {
+  float data[9];
+};
+struct MP3x6_ {
+  float data[18];
+};
+
+struct MP3x3SF_ {
+  float data[6];
+};
+
+struct MP6x6SF_ {
+  float data[21];
+};
+
+struct MP6x6F_ {
+  float data[36];
+};
+
+struct MP2x2SF_ {
+  float data[3];
+};
+
+struct MP2x6_ {
+  float data[12];
+};
+
+struct MP2F_ {
+  float data[2];
+};
+        
+struct MPTRK_ {
+  MP6F_    par;
+  MP6x6SF_ cov;
+  MP1I_    q;        
+//  MP22I_   hitidx;
+};
+
+struct MPHIT_ {
+  MP3F_    pos;
+  MP3x3SF_ cov;
 };
 
 float randn(float mu, float sigma) {
@@ -346,7 +423,7 @@ MPHIT* prepareHits(std::vector<AHIT>& inputhits) {
 
 #define N bsize
 template< typename TAcc>
-inline void ALPAKA_FN_ACC MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x6F* C, TAcc const & acc) {
+inline void ALPAKA_FN_ACC MultHelixPropEndcap(const MP6x6F_* A, const MP6x6SF_* B, MP6x6F_* C, TAcc const & acc) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
@@ -358,53 +435,48 @@ inline void ALPAKA_FN_ACC MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B,
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-#if DEVICE_TYPE == 1
-  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ // for gpu
-#else
-  #pragma omp simd
-  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
-#endif
-    c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
-    c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
-    c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
-    c[ 3*N+n] = b[ 6*N+n] + a[ 2*N+n]*b[ 8*N+n] + a[ 3*N+n]*b[ 9*N+n] + a[ 4*N+n]*b[13*N+n] + a[ 5*N+n]*b[18*N+n];
-    c[ 4*N+n] = b[10*N+n] + a[ 2*N+n]*b[12*N+n] + a[ 3*N+n]*b[13*N+n] + a[ 4*N+n]*b[14*N+n] + a[ 5*N+n]*b[19*N+n];
-    c[ 5*N+n] = b[15*N+n] + a[ 2*N+n]*b[17*N+n] + a[ 3*N+n]*b[18*N+n] + a[ 4*N+n]*b[19*N+n] + a[ 5*N+n]*b[20*N+n];
-    c[ 6*N+n] = b[ 1*N+n] + a[ 8*N+n]*b[ 3*N+n] + a[ 9*N+n]*b[ 6*N+n] + a[10*N+n]*b[10*N+n] + a[11*N+n]*b[15*N+n];
-    c[ 7*N+n] = b[ 2*N+n] + a[ 8*N+n]*b[ 4*N+n] + a[ 9*N+n]*b[ 7*N+n] + a[10*N+n]*b[11*N+n] + a[11*N+n]*b[16*N+n];
-    c[ 8*N+n] = b[ 4*N+n] + a[ 8*N+n]*b[ 5*N+n] + a[ 9*N+n]*b[ 8*N+n] + a[10*N+n]*b[12*N+n] + a[11*N+n]*b[17*N+n];
-    c[ 9*N+n] = b[ 7*N+n] + a[ 8*N+n]*b[ 8*N+n] + a[ 9*N+n]*b[ 9*N+n] + a[10*N+n]*b[13*N+n] + a[11*N+n]*b[18*N+n];
-    c[10*N+n] = b[11*N+n] + a[ 8*N+n]*b[12*N+n] + a[ 9*N+n]*b[13*N+n] + a[10*N+n]*b[14*N+n] + a[11*N+n]*b[19*N+n];
-    c[11*N+n] = b[16*N+n] + a[ 8*N+n]*b[17*N+n] + a[ 9*N+n]*b[18*N+n] + a[10*N+n]*b[19*N+n] + a[11*N+n]*b[20*N+n];
-    c[12*N+n] = 0;
-    c[13*N+n] = 0;
-    c[14*N+n] = 0;
-    c[15*N+n] = 0;
-    c[16*N+n] = 0;
-    c[17*N+n] = 0;
-    c[18*N+n] = b[ 6*N+n];
-    c[19*N+n] = b[ 7*N+n];
-    c[20*N+n] = b[ 8*N+n];
-    c[21*N+n] = b[ 9*N+n];
-    c[22*N+n] = b[13*N+n];
-    c[23*N+n] = b[18*N+n];
-    c[24*N+n] = a[26*N+n]*b[ 3*N+n] + a[27*N+n]*b[ 6*N+n] + b[10*N+n] + a[29*N+n]*b[15*N+n];
-    c[25*N+n] = a[26*N+n]*b[ 4*N+n] + a[27*N+n]*b[ 7*N+n] + b[11*N+n] + a[29*N+n]*b[16*N+n];
-    c[26*N+n] = a[26*N+n]*b[ 5*N+n] + a[27*N+n]*b[ 8*N+n] + b[12*N+n] + a[29*N+n]*b[17*N+n];
-    c[27*N+n] = a[26*N+n]*b[ 8*N+n] + a[27*N+n]*b[ 9*N+n] + b[13*N+n] + a[29*N+n]*b[18*N+n];
-    c[28*N+n] = a[26*N+n]*b[12*N+n] + a[27*N+n]*b[13*N+n] + b[14*N+n] + a[29*N+n]*b[19*N+n];
-    c[29*N+n] = a[26*N+n]*b[17*N+n] + a[27*N+n]*b[18*N+n] + b[19*N+n] + a[29*N+n]*b[20*N+n];
-    c[30*N+n] = b[15*N+n];
-    c[31*N+n] = b[16*N+n];
-    c[32*N+n] = b[17*N+n];
-    c[33*N+n] = b[18*N+n];
-    c[34*N+n] = b[19*N+n];
-    c[35*N+n] = b[20*N+n];
+  {
+    c[ 0] = b[ 0] + a[ 2]*b[ 3] + a[ 3]*b[ 6] + a[ 4]*b[10] + a[ 5]*b[15];
+    c[ 1] = b[ 1] + a[ 2]*b[ 4] + a[ 3]*b[ 7] + a[ 4]*b[11] + a[ 5]*b[16];
+    c[ 2] = b[ 3] + a[ 2]*b[ 5] + a[ 3]*b[ 8] + a[ 4]*b[12] + a[ 5]*b[17];
+    c[ 3] = b[ 6] + a[ 2]*b[ 8] + a[ 3]*b[ 9] + a[ 4]*b[13] + a[ 5]*b[18];
+    c[ 4] = b[10] + a[ 2]*b[12] + a[ 3]*b[13] + a[ 4]*b[14] + a[ 5]*b[19];
+    c[ 5] = b[15] + a[ 2]*b[17] + a[ 3]*b[18] + a[ 4]*b[19] + a[ 5]*b[20];
+    c[ 6] = b[ 1] + a[ 8]*b[ 3] + a[ 9]*b[ 6] + a[10]*b[10] + a[11]*b[15];
+    c[ 7] = b[ 2] + a[ 8]*b[ 4] + a[ 9]*b[ 7] + a[10]*b[11] + a[11]*b[16];
+    c[ 8] = b[ 4] + a[ 8]*b[ 5] + a[ 9]*b[ 8] + a[10]*b[12] + a[11]*b[17];
+    c[ 9] = b[ 7] + a[ 8]*b[ 8] + a[ 9]*b[ 9] + a[10]*b[13] + a[11]*b[18];
+    c[10] = b[11] + a[ 8]*b[12] + a[ 9]*b[13] + a[10]*b[14] + a[11]*b[19];
+    c[11] = b[16] + a[ 8]*b[17] + a[ 9]*b[18] + a[10]*b[19] + a[11]*b[20];
+    c[12] = 0;
+    c[13] = 0;
+    c[14] = 0;
+    c[15] = 0;
+    c[16] = 0;
+    c[17] = 0;
+    c[18] = b[ 6];
+    c[19] = b[ 7];
+    c[20] = b[ 8];
+    c[21] = b[ 9];
+    c[22] = b[13];
+    c[23] = b[18];
+    c[24] = a[26]*b[ 3] + a[27]*b[ 6] + b[10] + a[29]*b[15];
+    c[25] = a[26]*b[ 4] + a[27]*b[ 7] + b[11] + a[29]*b[16];
+    c[26] = a[26]*b[ 5] + a[27]*b[ 8] + b[12] + a[29]*b[17];
+    c[27] = a[26]*b[ 8] + a[27]*b[ 9] + b[13] + a[29]*b[18];
+    c[28] = a[26]*b[12] + a[27]*b[13] + b[14] + a[29]*b[19];
+    c[29] = a[26]*b[17] + a[27]*b[18] + b[19] + a[29]*b[20];
+    c[30] = b[15];
+    c[31] = b[16];
+    c[32] = b[17];
+    c[33] = b[18];
+    c[34] = b[19];
+    c[35] = b[20];
   }
 }
 
 template< typename TAcc>
-inline void ALPAKA_FN_ACC MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B, MP6x6SF* C, TAcc const & acc) {
+inline void ALPAKA_FN_ACC MultHelixPropTranspEndcap(const MP6x6F_* A, const MP6x6F_* B, MP6x6SF_* C, TAcc const & acc) {
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
@@ -416,38 +488,33 @@ inline void ALPAKA_FN_ACC MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-#if DEVICE_TYPE == 1
-  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ // for gpu
-#else
-  #pragma omp simd
-  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
-#endif
-    c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
-    c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
-    c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
-    c[ 3*N+n] = b[12*N+n] + b[14*N+n]*a[ 2*N+n] + b[15*N+n]*a[ 3*N+n] + b[16*N+n]*a[ 4*N+n] + b[17*N+n]*a[ 5*N+n];
-    c[ 4*N+n] = b[13*N+n] + b[14*N+n]*a[ 8*N+n] + b[15*N+n]*a[ 9*N+n] + b[16*N+n]*a[10*N+n] + b[17*N+n]*a[11*N+n];
-    c[ 5*N+n] = 0;
-    c[ 6*N+n] = b[18*N+n] + b[20*N+n]*a[ 2*N+n] + b[21*N+n]*a[ 3*N+n] + b[22*N+n]*a[ 4*N+n] + b[23*N+n]*a[ 5*N+n];
-    c[ 7*N+n] = b[19*N+n] + b[20*N+n]*a[ 8*N+n] + b[21*N+n]*a[ 9*N+n] + b[22*N+n]*a[10*N+n] + b[23*N+n]*a[11*N+n];
-    c[ 8*N+n] = 0;
-    c[ 9*N+n] = b[21*N+n];
-    c[10*N+n] = b[24*N+n] + b[26*N+n]*a[ 2*N+n] + b[27*N+n]*a[ 3*N+n] + b[28*N+n]*a[ 4*N+n] + b[29*N+n]*a[ 5*N+n];
-    c[11*N+n] = b[25*N+n] + b[26*N+n]*a[ 8*N+n] + b[27*N+n]*a[ 9*N+n] + b[28*N+n]*a[10*N+n] + b[29*N+n]*a[11*N+n];
-    c[12*N+n] = 0;
-    c[13*N+n] = b[27*N+n];
-    c[14*N+n] = b[26*N+n]*a[26*N+n] + b[27*N+n]*a[27*N+n] + b[28*N+n] + b[29*N+n]*a[29*N+n];
-    c[15*N+n] = b[30*N+n] + b[32*N+n]*a[ 2*N+n] + b[33*N+n]*a[ 3*N+n] + b[34*N+n]*a[ 4*N+n] + b[35*N+n]*a[ 5*N+n];
-    c[16*N+n] = b[31*N+n] + b[32*N+n]*a[ 8*N+n] + b[33*N+n]*a[ 9*N+n] + b[34*N+n]*a[10*N+n] + b[35*N+n]*a[11*N+n];
-    c[17*N+n] = 0;
-    c[18*N+n] = b[33*N+n];
-    c[19*N+n] = b[32*N+n]*a[26*N+n] + b[33*N+n]*a[27*N+n] + b[34*N+n] + b[35*N+n]*a[29*N+n];
-    c[20*N+n] = b[35*N+n];
+  {
+    c[ 0] = b[ 0] + b[ 2]*a[ 2] + b[ 3]*a[ 3] + b[ 4]*a[ 4] + b[ 5]*a[ 5];
+    c[ 1] = b[ 6] + b[ 8]*a[ 2] + b[ 9]*a[ 3] + b[10]*a[ 4] + b[11]*a[ 5];
+    c[ 2] = b[ 7] + b[ 8]*a[ 8] + b[ 9]*a[ 9] + b[10]*a[10] + b[11]*a[11];
+    c[ 3] = b[12] + b[14]*a[ 2] + b[15]*a[ 3] + b[16]*a[ 4] + b[17]*a[ 5];
+    c[ 4] = b[13] + b[14]*a[ 8] + b[15]*a[ 9] + b[16]*a[10] + b[17]*a[11];
+    c[ 5] = 0;
+    c[ 6] = b[18] + b[20]*a[ 2] + b[21]*a[ 3] + b[22]*a[ 4] + b[23]*a[ 5];
+    c[ 7] = b[19] + b[20]*a[ 8] + b[21]*a[ 9] + b[22]*a[10] + b[23]*a[11];
+    c[ 8] = 0;
+    c[ 9] = b[21];
+    c[10] = b[24] + b[26]*a[ 2] + b[27]*a[ 3] + b[28]*a[ 4] + b[29]*a[ 5];
+    c[11] = b[25] + b[26]*a[ 8] + b[27]*a[ 9] + b[28]*a[10] + b[29]*a[11];
+    c[12] = 0;
+    c[13] = b[27];
+    c[14] = b[26]*a[26] + b[27]*a[27] + b[28] + b[29]*a[29];
+    c[15] = b[30] + b[32]*a[ 2] + b[33]*a[ 3] + b[34]*a[ 4] + b[35]*a[ 5];
+    c[16] = b[31] + b[32]*a[ 8] + b[33]*a[ 9] + b[34]*a[10] + b[35]*a[11];
+    c[17] = 0;
+    c[18] = b[33];
+    c[19] = b[32]*a[26] + b[33]*a[27] + b[34] + b[35]*a[29];
+    c[20] = b[35];
   }
 }
 
 template< typename TAcc>
-inline void ALPAKA_FN_ACC KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C, TAcc const & acc) {
+inline void ALPAKA_FN_ACC KalmanGainInv(const MP6x6SF_* A, const MP3x3SF_* B, MP3x3_* C, TAcc const & acc) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
@@ -459,32 +526,27 @@ inline void ALPAKA_FN_ACC KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-#if DEVICE_TYPE == 1
-  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ //for gpu
-#else
-  #pragma omp simd
-  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
-#endif
+  {
     double det =
-      ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
-      ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
-      ((a[2*N+n]+b[2*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n]))));
+      ((a[0]+b[0])*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])))) -
+      ((a[1]+b[1])*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])))) +
+      ((a[2]+b[2])*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3]))));
     double invdet = 1.0/det;
 
-    c[ 0*N+n] =  invdet*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])));
-    c[ 1*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
-    c[ 2*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[7*N+n]+b[4*N+n])));
-    c[ 3*N+n] =  -1*invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])));
-    c[ 4*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[2*N+n]+b[2*N+n])));
-    c[ 5*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
-    c[ 6*N+n] =  invdet*(((a[ 1*N+n]+b[ 1*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[6*N+n]+b[3*N+n])));
-    c[ 7*N+n] =  -1*invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[7*N+n]+b[4*N+n])) - ((a[2*N+n]+b[2*N+n]) *(a[1*N+n]+b[1*N+n])));
-    c[ 8*N+n] =  invdet*(((a[ 0*N+n]+b[ 0*N+n]) *(a[6*N+n]+b[3*N+n])) - ((a[1*N+n]+b[1*N+n]) *(a[1*N+n]+b[1*N+n])));
+    c[ 0] =  invdet*(((a[ 6]+b[ 3]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[7]+b[4])));
+    c[ 1] =  -1*invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[7]+b[4])));
+    c[ 2] =  invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[7]+b[4])));
+    c[ 3] =  -1*invdet*(((a[ 1]+b[ 1]) *(a[11]+b[5])) - ((a[7]+b[4]) *(a[2]+b[2])));
+    c[ 4] =  invdet*(((a[ 0]+b[ 0]) *(a[11]+b[5])) - ((a[2]+b[2]) *(a[2]+b[2])));
+    c[ 5] =  -1*invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+    c[ 6] =  invdet*(((a[ 1]+b[ 1]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[6]+b[3])));
+    c[ 7] =  -1*invdet*(((a[ 0]+b[ 0]) *(a[7]+b[4])) - ((a[2]+b[2]) *(a[1]+b[1])));
+    c[ 8] =  invdet*(((a[ 0]+b[ 0]) *(a[6]+b[3])) - ((a[1]+b[1]) *(a[1]+b[1])));
   }
 }
 
 template< typename TAcc>
-inline void ALPAKA_FN_ACC KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C, TAcc const & acc) {
+inline void ALPAKA_FN_ACC KalmanGain(const MP6x6SF_* A, const MP3x3_* B, MP3x6_* C, TAcc const & acc) {
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
@@ -496,38 +558,36 @@ inline void ALPAKA_FN_ACC KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C,
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-#if DEVICE_TYPE == 1
-  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ // for gpu
-#else
-  #pragma omp simd
-  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
-#endif
-    c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
-    c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
-    c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
-    c[ 3*N+n] = a[1*N+n]*b[0*N+n] + a[6*N+n]*b[3*N+n] + a[7*N+n]*b[6*N+n];
-    c[ 4*N+n] = a[1*N+n]*b[1*N+n] + a[6*N+n]*b[4*N+n] + a[7*N+n]*b[7*N+n];
-    c[ 5*N+n] = a[1*N+n]*b[2*N+n] + a[6*N+n]*b[5*N+n] + a[7*N+n]*b[8*N+n];
-    c[ 6*N+n] = a[2*N+n]*b[0*N+n] + a[7*N+n]*b[3*N+n] + a[11*N+n]*b[6*N+n];
-    c[ 7*N+n] = a[2*N+n]*b[1*N+n] + a[7*N+n]*b[4*N+n] + a[11*N+n]*b[7*N+n];
-    c[ 8*N+n] = a[2*N+n]*b[2*N+n] + a[7*N+n]*b[5*N+n] + a[11*N+n]*b[8*N+n];
-    c[ 9*N+n] = a[3*N+n]*b[0*N+n] + a[8*N+n]*b[3*N+n] + a[12*N+n]*b[6*N+n];
-    c[ 10*N+n] = a[3*N+n]*b[1*N+n] + a[8*N+n]*b[4*N+n] + a[12*N+n]*b[7*N+n];
-    c[ 11*N+n] = a[3*N+n]*b[2*N+n] + a[8*N+n]*b[5*N+n] + a[12*N+n]*b[8*N+n];
-    c[ 12*N+n] = a[4*N+n]*b[0*N+n] + a[9*N+n]*b[3*N+n] + a[13*N+n]*b[6*N+n];
-    c[ 13*N+n] = a[4*N+n]*b[1*N+n] + a[9*N+n]*b[4*N+n] + a[13*N+n]*b[7*N+n];
-    c[ 14*N+n] = a[4*N+n]*b[2*N+n] + a[9*N+n]*b[5*N+n] + a[13*N+n]*b[8*N+n];
-    c[ 15*N+n] = a[5*N+n]*b[0*N+n] + a[10*N+n]*b[3*N+n] + a[14*N+n]*b[6*N+n];
-    c[ 16*N+n] = a[5*N+n]*b[1*N+n] + a[10*N+n]*b[4*N+n] + a[14*N+n]*b[7*N+n];
-    c[ 17*N+n] = a[5*N+n]*b[2*N+n] + a[10*N+n]*b[5*N+n] + a[14*N+n]*b[8*N+n];
+  {
+    c[ 0] = a[0]*b[0] + a[1]*b[3] + a[2]*b[6];
+    c[ 1] = a[0]*b[1] + a[1]*b[4] + a[2]*b[7];
+    c[ 2] = a[0]*b[2] + a[1]*b[5] + a[2]*b[8];
+    c[ 3] = a[1]*b[0] + a[6]*b[3] + a[7]*b[6];
+    c[ 4] = a[1]*b[1] + a[6]*b[4] + a[7]*b[7];
+    c[ 5] = a[1]*b[2] + a[6]*b[5] + a[7]*b[8];
+    c[ 6] = a[2]*b[0] + a[7]*b[3] + a[11]*b[6];
+    c[ 7] = a[2]*b[1] + a[7]*b[4] + a[11]*b[7];
+    c[ 8] = a[2]*b[2] + a[7]*b[5] + a[11]*b[8];
+    c[ 9] = a[3]*b[0] + a[8]*b[3] + a[12]*b[6];
+    c[ 10] = a[3]*b[1] + a[8]*b[4] + a[12]*b[7];
+    c[ 11] = a[3]*b[2] + a[8]*b[5] + a[12]*b[8];
+    c[ 12] = a[4]*b[0] + a[9]*b[3] + a[13]*b[6];
+    c[ 13] = a[4]*b[1] + a[9]*b[4] + a[13]*b[7];
+    c[ 14] = a[4]*b[2] + a[9]*b[5] + a[13]*b[8];
+    c[ 15] = a[5]*b[0] + a[10]*b[3] + a[14]*b[6];
+    c[ 16] = a[5]*b[1] + a[10]*b[4] + a[14]*b[7];
+    c[ 17] = a[5]*b[2] + a[10]*b[5] + a[14]*b[8];
   }
 }
 
 template< typename TAcc>
-inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP3x3 *inverse_temp, MP3x6 *kGain, MP6x6SF *newErr, TAcc const & acc){
+inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF_* trkErr, MP6F_* inPar, const MP3x3SF_* hitErr, const MP3F_* msP, TAcc const & acc){
+  MP3x3_ inverse_temp;
+  MP3x6_ kGain;
+  MP6x6SF_ newErr;
 
-  KalmanGainInv(trkErr,hitErr,inverse_temp,acc);
-  KalmanGain(trkErr,inverse_temp,kGain,acc);
+  KalmanGainInv(trkErr,hitErr,&inverse_temp,acc);
+  KalmanGain(trkErr,&inverse_temp,&kGain,acc);
 
   using Dim = alpaka::Dim<TAcc>;
   using Idx = alpaka::Idx<TAcc>;
@@ -536,68 +596,77 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-#if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1]) { // for gpu
-#else
-  #pragma omp simd
-  for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
-#endif
-    const float xin = x(inPar,it);
-    const float yin = y(inPar,it);
-    const float zin = z(inPar,it);
-    const float ptin = 1./ipt(inPar,it);
-    const float phiin = phi(inPar,it);
-    const float thetain = theta(inPar,it);
-    const float xout = x(msP,it);
-    const float yout = y(msP,it);
-    const float zout = z(msP,it);
+  {
+    float *inParData = inPar->data;
+    float *trkErrData = trkErr->data;
+    const float xin = inParData[iparX];
+    const float yin = inParData[iparY];
+    const float zin = inParData[iparZ];
+    const float ptin = 1.0f/inParData[iparIpt]; // is this pt or ipt? 
+    const float phiin = inParData[iparPhi];
+    const float thetain = inParData[iparTheta];
+    const float xout = msP->data[iparX];
+    const float yout = msP->data[iparY];
+    //const float zout = msP->data[iparZ];
 
-    float xnew = xin + (kGain->data[0*bsize+it]*(xout-xin)) +(kGain->data[1*bsize+it]*(yout-yin));
-    float ynew = yin + (kGain->data[3*bsize+it]*(xout-xin)) +(kGain->data[4*bsize+it]*(yout-yin));
-    float znew = zin + (kGain->data[6*bsize+it]*(xout-xin)) +(kGain->data[7*bsize+it]*(yout-yin));
-    float ptnew = ptin + (kGain->data[9*bsize+it]*(xout-xin)) +(kGain->data[10*bsize+it]*(yout-yin));
-    float phinew = phiin + (kGain->data[12*bsize+it]*(xout-xin)) +(kGain->data[13*bsize+it]*(yout-yin));
-    float thetanew = thetain + (kGain->data[15*bsize+it]*(xout-xin)) +(kGain->data[16*bsize+it]*(yout-yin));
 
-    newErr->data[0*bsize+it] = trkErr->data[0*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[0*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[2*bsize+it]);
-    newErr->data[1*bsize+it] = trkErr->data[1*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[7*bsize+it]);
-    newErr->data[2*bsize+it] = trkErr->data[2*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr->data[3*bsize+it] = trkErr->data[3*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr->data[4*bsize+it] = trkErr->data[4*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[5*bsize+it] = trkErr->data[5*bsize+it] - (kGain->data[0*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[1*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[2*bsize+it]*trkErr->data[14*bsize+it]);
+    float xnew = xin + (kGain.data[0]*(xout-xin)) +(kGain.data[1]*(yout-yin));
+    float ynew = yin + (kGain.data[3]*(xout-xin)) +(kGain.data[4]*(yout-yin));
+    float znew = zin + (kGain.data[6]*(xout-xin)) +(kGain.data[7]*(yout-yin));
+    float ptnew = ptin + (kGain.data[9]*(xout-xin)) +(kGain.data[10]*(yout-yin));
+    float phinew = phiin + (kGain.data[12]*(xout-xin)) +(kGain.data[13]*(yout-yin));
+    float thetanew = thetain + (kGain.data[15]*(xout-xin)) +(kGain.data[16]*(yout-yin));
 
-    newErr->data[6*bsize+it] = trkErr->data[6*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[1*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[6*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[7*bsize+it]);
-    newErr->data[7*bsize+it] = trkErr->data[7*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr->data[8*bsize+it] = trkErr->data[8*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr->data[9*bsize+it] = trkErr->data[9*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[10*bsize+it] = trkErr->data[10*bsize+it] - (kGain->data[3*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[4*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[5*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[0] = trkErrData[0] - (kGain.data[0]*trkErrData[0]+kGain.data[1]*trkErrData[1]+kGain.data[2]*trkErrData[2]);
+    newErr.data[1] = trkErrData[1] - (kGain.data[0]*trkErrData[1]+kGain.data[1]*trkErrData[6]+kGain.data[2]*trkErrData[7]);
+    newErr.data[2] = trkErrData[2] - (kGain.data[0]*trkErrData[2]+kGain.data[1]*trkErrData[7]+kGain.data[2]*trkErrData[11]);
+    newErr.data[3] = trkErrData[3] - (kGain.data[0]*trkErrData[3]+kGain.data[1]*trkErrData[8]+kGain.data[2]*trkErrData[12]);
+    newErr.data[4] = trkErrData[4] - (kGain.data[0]*trkErrData[4]+kGain.data[1]*trkErrData[9]+kGain.data[2]*trkErrData[13]);
+    newErr.data[5] = trkErrData[5] - (kGain.data[0]*trkErrData[5]+kGain.data[1]*trkErrData[10]+kGain.data[2]*trkErrData[14]);
 
-    newErr->data[11*bsize+it] = trkErr->data[11*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[2*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[7*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[11*bsize+it]);
-    newErr->data[12*bsize+it] = trkErr->data[12*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr->data[13*bsize+it] = trkErr->data[13*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[14*bsize+it] = trkErr->data[14*bsize+it] - (kGain->data[6*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[7*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[8*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[6] = trkErrData[6] - (kGain.data[3]*trkErrData[1]+kGain.data[4]*trkErrData[6]+kGain.data[5]*trkErrData[7]);
+    newErr.data[7] = trkErrData[7] - (kGain.data[3]*trkErrData[2]+kGain.data[4]*trkErrData[7]+kGain.data[5]*trkErrData[11]);
+    newErr.data[8] = trkErrData[8] - (kGain.data[3]*trkErrData[3]+kGain.data[4]*trkErrData[8]+kGain.data[5]*trkErrData[12]);
+    newErr.data[9] = trkErrData[9] - (kGain.data[3]*trkErrData[4]+kGain.data[4]*trkErrData[9]+kGain.data[5]*trkErrData[13]);
+    newErr.data[10] = trkErrData[10] - (kGain.data[3]*trkErrData[5]+kGain.data[4]*trkErrData[10]+kGain.data[5]*trkErrData[14]);
 
-    newErr->data[15*bsize+it] = trkErr->data[15*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[3*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[8*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[12*bsize+it]);
-    newErr->data[16*bsize+it] = trkErr->data[16*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[17*bsize+it] = trkErr->data[17*bsize+it] - (kGain->data[9*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[10*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[11*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[11] = trkErrData[11] - (kGain.data[6]*trkErrData[2]+kGain.data[7]*trkErrData[7]+kGain.data[8]*trkErrData[11]);
+    newErr.data[12] = trkErrData[12] - (kGain.data[6]*trkErrData[3]+kGain.data[7]*trkErrData[8]+kGain.data[8]*trkErrData[12]);
+    newErr.data[13] = trkErrData[13] - (kGain.data[6]*trkErrData[4]+kGain.data[7]*trkErrData[9]+kGain.data[8]*trkErrData[13]);
+    newErr.data[14] = trkErrData[14] - (kGain.data[6]*trkErrData[5]+kGain.data[7]*trkErrData[10]+kGain.data[8]*trkErrData[14]);
 
-    newErr->data[18*bsize+it] = trkErr->data[18*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[4*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[9*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[13*bsize+it]);
-    newErr->data[19*bsize+it] = trkErr->data[19*bsize+it] - (kGain->data[12*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[13*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[14*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[15] = trkErrData[15] - (kGain.data[9]*trkErrData[3]+kGain.data[10]*trkErrData[8]+kGain.data[11]*trkErrData[12]);
+    newErr.data[16] = trkErrData[16] - (kGain.data[9]*trkErrData[4]+kGain.data[10]*trkErrData[9]+kGain.data[11]*trkErrData[13]);
+    newErr.data[17] = trkErrData[17] - (kGain.data[9]*trkErrData[5]+kGain.data[10]*trkErrData[10]+kGain.data[11]*trkErrData[14]);
 
-    newErr->data[20*bsize+it] = trkErr->data[20*bsize+it] - (kGain->data[15*bsize+it]*trkErr->data[5*bsize+it]+kGain->data[16*bsize+it]*trkErr->data[10*bsize+it]+kGain->data[17*bsize+it]*trkErr->data[14*bsize+it]);
+    newErr.data[18] = trkErrData[18] - (kGain.data[12]*trkErrData[4]+kGain.data[13]*trkErrData[9]+kGain.data[14]*trkErrData[13]);
+    newErr.data[19] = trkErrData[19] - (kGain.data[12]*trkErrData[5]+kGain.data[13]*trkErrData[10]+kGain.data[14]*trkErrData[14]);
 
-    setx(inPar,it,xnew );
-    sety(inPar,it,ynew );
-    setz(inPar,it,znew);
-    setipt(inPar,it,ptnew);
-    setphi(inPar,it,phinew);
-    settheta(inPar,it,thetanew);
+    newErr.data[20] = trkErrData[20] - (kGain.data[15]*trkErrData[5]+kGain.data[16]*trkErrData[10]+kGain.data[17]*trkErrData[14]);
+
+    inParData[iparX] = xnew;
+    inParData[iparY] = ynew;
+    inParData[iparZ] = znew;
+    inParData[iparIpt] = ptnew;
+    inParData[iparPhi] = phinew;
+    inParData[iparTheta] = thetanew;
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErrData[ i] = trkErrData[ i] - newErr.data[ i];
+    }
   }
-  (*trkErr) = *newErr;
  }
 
 template< typename TAcc>
-inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP2x2SF & resErr_loc, MP2x6 & kGain, MP2F &res_loc, MP6x6SF &newErr, TAcc const & acc){
+inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF_* trkErr, MP6F_* inPar, const MP3x3SF_* hitErr, const MP3F_* msP, TAcc const & acc){
+ MP2x2SF_ resErr_loc;
+ MP2x6_ kGain;
+ MP2F_ res_loc;
+ MP6x6SF_ newErr;
+
+  float *inParData = inPar->data;
+  float *trkErrData = trkErr->data;
+  const float *hitErrData = hitErr->data;
 
   //printf("kalman in: x=%7f, y=%7f, z=%7f, ipt=%7f, phi=%7f, theta=%7f \n", x    (inPar, 0), y    (inPar, 0), z    (inPar, 0), ipt  (inPar, 0), phi  (inPar, 0), theta(inPar, 0));
 
@@ -609,75 +678,52 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 
-#if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
-#else
-  #pragma omp simd
-  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
-#endif
   {
-    resErr_loc.data[0*bsize+it] = trkErr->data[0*bsize+it] + hitErr->data[0*bsize+it];
-    resErr_loc.data[1*bsize+it] = trkErr->data[1*bsize+it] + hitErr->data[1*bsize+it];
-    resErr_loc.data[2*bsize+it] = trkErr->data[2*bsize+it] + hitErr->data[2*bsize+it];
+    resErr_loc.data[0] = trkErrData[0] + hitErrData[0];
+    resErr_loc.data[1] = trkErrData[1] + hitErrData[1];
+    resErr_loc.data[2] = trkErrData[2] + hitErrData[2];
   }
 
   // Matriplex::InvertCramerSym(resErr);
-#if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
-#else
-  #pragma omp simd
-  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
-#endif
   {
-    const double det = (double)resErr_loc.data[0*bsize+it] * resErr_loc.data[2*bsize+it] -
-                       (double)resErr_loc.data[1*bsize+it] * resErr_loc.data[1*bsize+it];
+    const double det = (double)resErr_loc.data[0] * resErr_loc.data[2] -
+                       (double)resErr_loc.data[1] * resErr_loc.data[1];
     const float s   = 1.f / det;
-    const float tmp = s * resErr_loc.data[2*bsize+it];
-    resErr_loc.data[1*bsize+it] *= -s;
-    resErr_loc.data[2*bsize+it]  = s * resErr_loc.data[0*bsize+it];
-    resErr_loc.data[0*bsize+it]  = tmp;
+    const float tmp = s * resErr_loc.data[2];
+    resErr_loc.data[1] *= -s;
+    resErr_loc.data[2]  = s * resErr_loc.data[0];
+    resErr_loc.data[0]  = tmp;
   }
 
   // KalmanGain(psErr, resErr, K);
-#if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
-#else
-  #pragma omp simd
-  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
-#endif
   {
-     kGain.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it];
-     kGain.data[ 1*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 2*bsize+it];
-     kGain.data[ 2*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc.data[ 1*bsize+it];
-     kGain.data[ 3*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc.data[ 2*bsize+it];
-     kGain.data[ 4*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc.data[ 1*bsize+it];
-     kGain.data[ 5*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc.data[ 2*bsize+it];
-     kGain.data[ 6*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc.data[ 1*bsize+it];
-     kGain.data[ 7*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc.data[ 2*bsize+it];
-     kGain.data[ 8*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc.data[ 1*bsize+it];
-     kGain.data[ 9*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc.data[ 2*bsize+it];
-     kGain.data[10*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc.data[ 1*bsize+it];
-     kGain.data[11*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[ 0] = trkErrData[ 0]*resErr_loc.data[ 0] + trkErrData[ 1]*resErr_loc.data[ 1];
+     kGain.data[ 1] = trkErrData[ 0]*resErr_loc.data[ 1] + trkErrData[ 1]*resErr_loc.data[ 2];
+     kGain.data[ 2] = trkErrData[ 1]*resErr_loc.data[ 0] + trkErrData[ 2]*resErr_loc.data[ 1];
+     kGain.data[ 3] = trkErrData[ 1]*resErr_loc.data[ 1] + trkErrData[ 2]*resErr_loc.data[ 2];
+     kGain.data[ 4] = trkErrData[ 3]*resErr_loc.data[ 0] + trkErrData[ 4]*resErr_loc.data[ 1];
+     kGain.data[ 5] = trkErrData[ 3]*resErr_loc.data[ 1] + trkErrData[ 4]*resErr_loc.data[ 2];
+     kGain.data[ 6] = trkErrData[ 6]*resErr_loc.data[ 0] + trkErrData[ 7]*resErr_loc.data[ 1];
+     kGain.data[ 7] = trkErrData[ 6]*resErr_loc.data[ 1] + trkErrData[ 7]*resErr_loc.data[ 2];
+     kGain.data[ 8] = trkErrData[10]*resErr_loc.data[ 0] + trkErrData[11]*resErr_loc.data[ 1];
+     kGain.data[ 9] = trkErrData[10]*resErr_loc.data[ 1] + trkErrData[11]*resErr_loc.data[ 2];
+     kGain.data[10] = trkErrData[15]*resErr_loc.data[ 0] + trkErrData[16]*resErr_loc.data[ 1];
+     kGain.data[11] = trkErrData[15]*resErr_loc.data[ 1] + trkErrData[16]*resErr_loc.data[ 2];
   }
 
   // SubtractFirst2(msPar, psPar, res);
   // MultResidualsAdd(K, psPar, res, outPar);
-#if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
-#else
-  #pragma omp simd
-  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
-#endif
   {
-    res_loc.data[0*bsize+it] =  x(msP,it) - x(inPar,it);
-    res_loc.data[1*bsize+it] =  y(msP,it) - y(inPar,it);
+    const float *msPData = msP->data;
+    res_loc.data[0] =  msPData[iparX] - inParData[iparX];
+    res_loc.data[1] =  msPData[iparY] - inParData[iparY];
 
-    setx    (inPar, it, x    (inPar, it) + kGain.data[ 0*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 1*bsize+it] * res_loc.data[ 1*bsize+it]);
-    sety    (inPar, it, y    (inPar, it) + kGain.data[ 2*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 3*bsize+it] * res_loc.data[ 1*bsize+it]);
-    setz    (inPar, it, z    (inPar, it) + kGain.data[ 4*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 5*bsize+it] * res_loc.data[ 1*bsize+it]);
-    setipt  (inPar, it, ipt  (inPar, it) + kGain.data[ 6*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 7*bsize+it] * res_loc.data[ 1*bsize+it]);
-    setphi  (inPar, it, phi  (inPar, it) + kGain.data[ 8*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 9*bsize+it] * res_loc.data[ 1*bsize+it]);
-    settheta(inPar, it, theta(inPar, it) + kGain.data[10*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[11*bsize+it] * res_loc.data[ 1*bsize+it]);
+    inParData[iparX] = inParData[iparX] + kGain.data[ 0] * res_loc.data[ 0] + kGain.data[ 1] * res_loc.data[ 1];
+    inParData[iparY] = inParData[iparY] + kGain.data[ 2] * res_loc.data[ 0] + kGain.data[ 3] * res_loc.data[ 1];
+    inParData[iparZ] = inParData[iparZ] + kGain.data[ 4] * res_loc.data[ 0] + kGain.data[ 5] * res_loc.data[ 1];
+    inParData[iparIpt] = inParData[iparIpt] + kGain.data[ 6] * res_loc.data[ 0] + kGain.data[ 7] * res_loc.data[ 1];
+    inParData[iparPhi] = inParData[iparPhi] + kGain.data[ 8] * res_loc.data[ 0] + kGain.data[ 9] * res_loc.data[ 1];
+    inParData[iparTheta] = inParData[iparTheta] + kGain.data[10] * res_loc.data[ 0] + kGain.data[11] * res_loc.data[ 1];
     //note: if ipt changes sign we should update the charge, or we should get rid of the charge altogether and just use the sign of ipt
   }
 
@@ -685,119 +731,126 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
   // missing
   // KHC(K, psErr, outErr);
   // outErr.Subtract(psErr, outErr);
-#if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
-#else
-  #pragma omp simd
-  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
-#endif
   {
-     newErr.data[ 0*bsize+it] = kGain.data[ 0*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 1*bsize+it]*trkErr->data[ 1*bsize+it];
-     newErr.data[ 1*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 1*bsize+it];
-     newErr.data[ 2*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 2*bsize+it];
-     newErr.data[ 3*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 1*bsize+it];
-     newErr.data[ 4*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 2*bsize+it];
-     newErr.data[ 5*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 4*bsize+it];
-     newErr.data[ 6*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 1*bsize+it];
-     newErr.data[ 7*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 2*bsize+it];
-     newErr.data[ 8*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 4*bsize+it];
-     newErr.data[ 9*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 7*bsize+it];
-     newErr.data[10*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 1*bsize+it];
-     newErr.data[11*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 2*bsize+it];
-     newErr.data[12*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 4*bsize+it];
-     newErr.data[13*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 7*bsize+it];
-     newErr.data[14*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[10*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[11*bsize+it];
-     newErr.data[15*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 1*bsize+it];
-     newErr.data[16*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 2*bsize+it];
-     newErr.data[17*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 4*bsize+it];
-     newErr.data[18*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 7*bsize+it];
-     newErr.data[19*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[10*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[11*bsize+it];
-     newErr.data[20*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[15*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[16*bsize+it];
+     newErr.data[ 0] = kGain.data[ 0]*trkErrData[ 0] + kGain.data[ 1]*trkErrData[ 1];
+     newErr.data[ 1] = kGain.data[ 2]*trkErrData[ 0] + kGain.data[ 3]*trkErrData[ 1];
+     newErr.data[ 2] = kGain.data[ 2]*trkErrData[ 1] + kGain.data[ 3]*trkErrData[ 2];
+     newErr.data[ 3] = kGain.data[ 4]*trkErrData[ 0] + kGain.data[ 5]*trkErrData[ 1];
+     newErr.data[ 4] = kGain.data[ 4]*trkErrData[ 1] + kGain.data[ 5]*trkErrData[ 2];
+     newErr.data[ 5] = kGain.data[ 4]*trkErrData[ 3] + kGain.data[ 5]*trkErrData[ 4];
+     newErr.data[ 6] = kGain.data[ 6]*trkErrData[ 0] + kGain.data[ 7]*trkErrData[ 1];
+     newErr.data[ 7] = kGain.data[ 6]*trkErrData[ 1] + kGain.data[ 7]*trkErrData[ 2];
+     newErr.data[ 8] = kGain.data[ 6]*trkErrData[ 3] + kGain.data[ 7]*trkErrData[ 4];
+     newErr.data[ 9] = kGain.data[ 6]*trkErrData[ 6] + kGain.data[ 7]*trkErrData[ 7];
+     newErr.data[10] = kGain.data[ 8]*trkErrData[ 0] + kGain.data[ 9]*trkErrData[ 1];
+     newErr.data[11] = kGain.data[ 8]*trkErrData[ 1] + kGain.data[ 9]*trkErrData[ 2];
+     newErr.data[12] = kGain.data[ 8]*trkErrData[ 3] + kGain.data[ 9]*trkErrData[ 4];
+     newErr.data[13] = kGain.data[ 8]*trkErrData[ 6] + kGain.data[ 9]*trkErrData[ 7];
+     newErr.data[14] = kGain.data[ 8]*trkErrData[10] + kGain.data[ 9]*trkErrData[11];
+     newErr.data[15] = kGain.data[10]*trkErrData[ 0] + kGain.data[11]*trkErrData[ 1];
+     newErr.data[16] = kGain.data[10]*trkErrData[ 1] + kGain.data[11]*trkErrData[ 2];
+     newErr.data[17] = kGain.data[10]*trkErrData[ 3] + kGain.data[11]*trkErrData[ 4];
+     newErr.data[18] = kGain.data[10]*trkErrData[ 6] + kGain.data[11]*trkErrData[ 7];
+     newErr.data[19] = kGain.data[10]*trkErrData[10] + kGain.data[11]*trkErrData[11];
+     newErr.data[20] = kGain.data[10]*trkErrData[15] + kGain.data[11]*trkErrData[16];
 
-     newErr.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it] - newErr.data[ 0*bsize+it];
-     newErr.data[ 1*bsize+it] = trkErr->data[ 1*bsize+it] - newErr.data[ 1*bsize+it];
-     newErr.data[ 2*bsize+it] = trkErr->data[ 2*bsize+it] - newErr.data[ 2*bsize+it];
-     newErr.data[ 3*bsize+it] = trkErr->data[ 3*bsize+it] - newErr.data[ 3*bsize+it];
-     newErr.data[ 4*bsize+it] = trkErr->data[ 4*bsize+it] - newErr.data[ 4*bsize+it];
-     newErr.data[ 5*bsize+it] = trkErr->data[ 5*bsize+it] - newErr.data[ 5*bsize+it];
-     newErr.data[ 6*bsize+it] = trkErr->data[ 6*bsize+it] - newErr.data[ 6*bsize+it];
-     newErr.data[ 7*bsize+it] = trkErr->data[ 7*bsize+it] - newErr.data[ 7*bsize+it];
-     newErr.data[ 8*bsize+it] = trkErr->data[ 8*bsize+it] - newErr.data[ 8*bsize+it];
-     newErr.data[ 9*bsize+it] = trkErr->data[ 9*bsize+it] - newErr.data[ 9*bsize+it];
-     newErr.data[10*bsize+it] = trkErr->data[10*bsize+it] - newErr.data[10*bsize+it];
-     newErr.data[11*bsize+it] = trkErr->data[11*bsize+it] - newErr.data[11*bsize+it];
-     newErr.data[12*bsize+it] = trkErr->data[12*bsize+it] - newErr.data[12*bsize+it];
-     newErr.data[13*bsize+it] = trkErr->data[13*bsize+it] - newErr.data[13*bsize+it];
-     newErr.data[14*bsize+it] = trkErr->data[14*bsize+it] - newErr.data[14*bsize+it];
-     newErr.data[15*bsize+it] = trkErr->data[15*bsize+it] - newErr.data[15*bsize+it];
-     newErr.data[16*bsize+it] = trkErr->data[16*bsize+it] - newErr.data[16*bsize+it];
-     newErr.data[17*bsize+it] = trkErr->data[17*bsize+it] - newErr.data[17*bsize+it];
-     newErr.data[18*bsize+it] = trkErr->data[18*bsize+it] - newErr.data[18*bsize+it];
-     newErr.data[19*bsize+it] = trkErr->data[19*bsize+it] - newErr.data[19*bsize+it];
-     newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - newErr.data[20*bsize+it];
+     newErr.data[ 0] = trkErrData[ 0] - newErr.data[ 0];
+     newErr.data[ 1] = trkErrData[ 1] - newErr.data[ 1];
+     newErr.data[ 2] = trkErrData[ 2] - newErr.data[ 2];
+     newErr.data[ 3] = trkErrData[ 3] - newErr.data[ 3];
+     newErr.data[ 4] = trkErrData[ 4] - newErr.data[ 4];
+     newErr.data[ 5] = trkErrData[ 5] - newErr.data[ 5];
+     newErr.data[ 6] = trkErrData[ 6] - newErr.data[ 6];
+     newErr.data[ 7] = trkErrData[ 7] - newErr.data[ 7];
+     newErr.data[ 8] = trkErrData[ 8] - newErr.data[ 8];
+     newErr.data[ 9] = trkErrData[ 9] - newErr.data[ 9];
+     newErr.data[10] = trkErrData[10] - newErr.data[10];
+     newErr.data[11] = trkErrData[11] - newErr.data[11];
+     newErr.data[12] = trkErrData[12] - newErr.data[12];
+     newErr.data[13] = trkErrData[13] - newErr.data[13];
+     newErr.data[14] = trkErrData[14] - newErr.data[14];
+     newErr.data[15] = trkErrData[15] - newErr.data[15];
+     newErr.data[16] = trkErrData[16] - newErr.data[16];
+     newErr.data[17] = trkErrData[17] - newErr.data[17];
+     newErr.data[18] = trkErrData[18] - newErr.data[18];
+     newErr.data[19] = trkErrData[19] - newErr.data[19];
+     newErr.data[20] = trkErrData[20] - newErr.data[20];
   }
-
-  (*trkErr) = newErr;
+  {
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErrData[ i] = trkErrData[ i] - newErr.data[ i];
+    }    
+  }
 }
 
 const float kfact= 100./(-0.299792458*3.8112);
 template< typename TAcc>
-inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg, const MP3F* msP, MP6x6SF* outErr, MP6F* outPar, MP6x6F* errorProp, MP6x6F* temp, TAcc const & acc) {
+inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF_* inErr, const MP6F_* inPar, const MP1I_* inChg, const MP3F_* msP, MP6x6SF_* outErr, MP6F_* outPar, TAcc const & acc) {
   using Dim = alpaka::Dim<TAcc>;
   using Idx = alpaka::Idx<TAcc>;
   using Vec = alpaka::Vec<Dim, Idx>;
+
+  MP6x6F_ errorProp;
+  MP6x6F_ temp;
   
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
-#if DEVICE_TYPE == 1
-  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1]) {	 //for gpu
-#else
-  #pragma omp simd
-  for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
-#endif
-    const float zout = z(msP,it);
-    const float k = q(inChg,it)*kfact;//100/3.8;
-    const float deltaZ = zout - z(inPar,it);
-    const float pt = 1./ipt(inPar,it);
-    const float cosP = cosf(phi(inPar,it));
-    const float sinP = sinf(phi(inPar,it));
-    const float cosT = cosf(theta(inPar,it));
-    const float sinT = sinf(theta(inPar,it));
+  {
+    const float *inParData = inPar->data;
+    float *outParData = outPar->data;
+    const float zout = msP->data[iparZ];
+    const float k = inChg->data[0]*kfact;//*100/3.8;
+    const float deltaZ = zout - inParData[iparZ];
+    const float ipt_ = inParData[iparIpt];
+    const float pt = 1.0f/ipt_;
+    const float phi_ = inParData[iparPhi];
+    const float cosP = cosf(phi_);
+    const float sinP = sinf(phi_);
+    const float theta_ = inParData[iparTheta];
+    const float cosT = cosf(theta_);
+    const float sinT = sinf(theta_);
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float icosT = 1.0/cosT;
+    const float icosT = 1.0f/cosT;
     const float icosTk = icosT/k;
-    const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
+    const float alpha = deltaZ*sinT*ipt_*icosTk;
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
-    setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
-    sety(outPar,it, y(inPar,it) + k*(pyin*sina + pxin*(1.-cosa)) );
-    setz(outPar,it,zout);
-    setipt(outPar,it, ipt(inPar,it));
-    setphi(outPar,it, phi(inPar,it)+alpha );
-    settheta(outPar,it, theta(inPar,it) );
+    outParData[iparX] = inParData[iparX] + k*(pxin*sina - pyin*(1.0f-cosa));
+    outParData[iparY] = inParData[iparY] + k*(pyin*sina + pxin*(1.0f-cosa));
+    outParData[iparZ] = zout;
+    outParData[iparIpt] = ipt_;
+    outParData[iparPhi] = phi_+alpha;
+    outParData[iparTheta] = theta_;
     
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
+   //for (size_t i=0;i<6;++i) errorProp.data[PosInMtrx(i,i,6) + it] = 1.f;
+    errorProp.data[PosInMtrx(0,0,6)] = 1.0f;
+    errorProp.data[PosInMtrx(1,1,6)] = 1.0f;
+    errorProp.data[PosInMtrx(2,2,6)] = 1.0f;
+    errorProp.data[PosInMtrx(3,3,6)] = 1.0f;
+    errorProp.data[PosInMtrx(4,4,6)] = 1.0f;
+    errorProp.data[PosInMtrx(5,5,6)] = 1.0f;
     //[Dec. 21, 2022] Added to have the same pattern as the cudauvm version.
-    errorProp->data[bsize*PosInMtrx(0,1,6) + it] = 0.0f;
-    errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
-    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
-    errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
-    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
-    errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT*(icosTk);
-    errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
-    errorProp->data[bsize*PosInMtrx(4,5,6) + it] = ipt(inPar,it)*deltaZ*(icosT*icosTk);
+    errorProp.data[PosInMtrx(0,1,6)] = 0.0f;
+    errorProp.data[PosInMtrx(0,2,6)] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
+    errorProp.data[PosInMtrx(0,3,6)] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp.data[PosInMtrx(0,4,6)] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
+    errorProp.data[PosInMtrx(0,5,6)] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
+    errorProp.data[PosInMtrx(1,2,6)] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
+    errorProp.data[PosInMtrx(1,3,6)] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp.data[PosInMtrx(1,4,6)] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp.data[PosInMtrx(1,5,6)] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
+    errorProp.data[PosInMtrx(4,2,6)] = -ipt_*sinT*(icosTk);
+    errorProp.data[PosInMtrx(4,3,6)] = sinT*deltaZ*(icosTk);
+    errorProp.data[PosInMtrx(4,5,6)] = ipt_*deltaZ*(icosT*icosTk);
   }
-  MultHelixPropEndcap(errorProp, inErr, temp,acc);
-  MultHelixPropTranspEndcap(errorProp, temp, outErr,acc);
+  MultHelixPropEndcap(&errorProp, inErr, &temp, acc);
+  MultHelixPropTranspEndcap(&errorProp, &temp, outErr, acc);
 }
 
 
@@ -822,15 +875,15 @@ public:
        Vec const blockIdx    = alpaka::getIdx<alpaka::Grid, alpaka::Blocks>(acc);
        Vec const blockExtent = alpaka::getWorkDiv<alpaka::Grid, alpaka::Blocks>(acc);
         
-       auto & errorProp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
-       auto & temp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
-       // auto & inverse_temp = alpaka::declareSharedVar<MP3x3,__COUNTER__>(acc);
-       // auto & kGain = alpaka::declareSharedVar<MP3x6,__COUNTER__>(acc);
-       // auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
-       auto & resErr_loc = alpaka::declareSharedVar<MP2x2SF,__COUNTER__>(acc);
-       auto & kGain = alpaka::declareSharedVar<MP2x6,__COUNTER__>(acc);
-       auto & res_loc = alpaka::declareSharedVar<MP2F,__COUNTER__>(acc);
-       auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
+       //auto & errorProp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
+       //auto & temp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
+       //// auto & inverse_temp = alpaka::declareSharedVar<MP3x3,__COUNTER__>(acc);
+       //// auto & kGain = alpaka::declareSharedVar<MP3x6,__COUNTER__>(acc);
+       //// auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
+       //auto & resErr_loc = alpaka::declareSharedVar<MP2x2SF,__COUNTER__>(acc);
+       //auto & kGain = alpaka::declareSharedVar<MP2x6,__COUNTER__>(acc);
+       //auto & res_loc = alpaka::declareSharedVar<MP2F,__COUNTER__>(acc);
+       //auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
 
       int ie_range;  
       if(stream == num_streams){ ie_range = (int)(nevts%num_streams);}
@@ -838,16 +891,42 @@ public:
 
    for (size_t ie=blockIdx[0];ie<ie_range;ie+=blockExtent[0]) { //loop for TbbBlocks & Omp2Blocks & GPU
      for (size_t ib=blockIdx[1];ib<nb;ib+=blockExtent[1]) { //loop for TbbBlocks & Omp2Blocks & GPU
-           const MPTRK* btracks = bTk(trk, ie, ib);
-           MPTRK* obtracks = bTk(outtrk, ie, ib);
-           (*obtracks) = (*btracks);
+           size_t ti = ie*nb + ib;
+           struct MPTRK_ obtracks;
+           struct MPTRK_ btracks;
+           float *dstPtr = btracks.par.data;
+           float *srcPtr = trk[ti].par.data;
+           loadData(dstPtr,srcPtr,threadIdx[1],6);
+           dstPtr = btracks.cov.data;
+           srcPtr = trk[ti].cov.data;
+           loadData(dstPtr,srcPtr,threadIdx[1],21);
+           int *dstPtrI = btracks.q.data;
+           int *srcPtrI = trk[ti].q.data;
+           loadData(dstPtrI,srcPtrI,threadIdx[1],1);
+           obtracks = btracks;
+
+			#pragma unroll 
            for( size_t layer=0; layer<nlayer;++layer){
-              const MPHIT* bhits = bHit(hit, ie, ib,layer);
-               //struct MP6x6F errorProp, temp;
-              propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp, acc); // vectorized function
-              //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,&inverse_temp, &kGain, &(newErr), acc);
-	      KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos, resErr_loc, kGain, res_loc, newErr, acc);
-       }
+              struct MPHIT_ bhits;
+              float *dstPtr2 = bhits.pos.data;
+              float *srcPtr2 = hit[layer+ti*nlayer].pos.data;
+              loadData(dstPtr2,srcPtr2,threadIdx[1],3);
+              dstPtr2 = bhits.cov.data;
+              srcPtr2 = hit[layer+ti*nlayer].cov.data;
+              loadData(dstPtr2,srcPtr2,threadIdx[1],6);
+              propagateToZ(&(obtracks.cov), &(obtracks.par), &(obtracks.q), &(bhits.pos), &(obtracks.cov), &(obtracks.par), acc);
+              //KalmanUpdate(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos), acc);
+              KalmanUpdate_v2(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos), acc);
+           }
+           float *dstPtr2 = outtrk[ti].par.data;
+           float *srcPtr2 = obtracks.par.data;
+           saveData(dstPtr2,srcPtr2,threadIdx[1],6);
+           dstPtr2 = outtrk[ti].cov.data;
+           srcPtr2 = obtracks.cov.data;
+           saveData(dstPtr2,srcPtr2,threadIdx[1],21);
+           int *dstPtrI2 = outtrk[ti].q.data;
+           int *srcPtrI2 = obtracks.q.data;
+           saveData(dstPtrI2,srcPtrI2,threadIdx[1],1);
      }
    }
  }

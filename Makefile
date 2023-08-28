@@ -8,7 +8,7 @@
 ##########################################################
 # COMPILER options: gcc, openarc, nvcc, icc, llvm        #
 #                   ibm, nvhpc, dpcpp                    #
-# MODE options: omp, seq, tbb, eigen, alpaka,            #
+# MODE options: omp, seq, tbb, eigen, alpaka, alpakav4,  #
 #               cuda, cudav1, cudav2, cudav3, cudav4,    #
 #               cudauvm, cudahyb, pstl, accc, acccv3,    #
 #               acccv4, omp4c, omp4cv3, omp4cv4, accccpu,#
@@ -481,15 +481,26 @@ endif
 ###################
 COMPILE_CMAKE = 0
 CMAKECMD = pwd #dummy command 
+COMPILE_ALPAKA = 0
 
 ifeq ($(ALPAKASRC),alpaka_src_gpu)
 ########################################################################################
 # New commands to compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp #
 ########################################################################################
 ifeq ($(MODE),alpaka)
-COMPILE_CMAKE = 1
 CSRCSDIR = alpaka_src_gpu/src
 CSRCS = ${CSRCSDIR}/propagate-toz-test_alpaka_cpu_gpu.cpp
+COMPILE_ALPAKA = 1
+endif
+ifeq ($(MODE),alpakav4)
+CSRCSDIR = alpaka_src_gpu/src
+CSRCS = ${CSRCSDIR}/propagate-toz-test_alpaka_cpu_gpu_v4.cpp
+COMPILE_ALPAKA = 1
+endif
+
+ifneq ($(COMPILE_ALPAKA),0)
+COMPILE_CMAKE = 1
+CMAKE_FLAGS += -DMODE=$(MODE)
 CMAKEDIR = alpaka_src_gpu
 CMAKEOUTPUT = alpaka_gpu_src
 ifneq ($(NITER),0)
@@ -504,7 +515,7 @@ endif
 ifneq ($(NLAYER),0)
 CMAKE_FLAGS += -DNLAYER=$(NLAYER)
 endif
-ifeq ($(INCLUDE_DATA),0)
+ifneq ($(INCLUDE_DATA),0)
 CMAKE_FLAGS += -DINCLUDE_DATA=$(INCLUDE_DATA)
 endif
 CMAKE_FLAGS += -DUSE_FMAD=$(USE_FMAD)
@@ -521,6 +532,7 @@ ifeq ($(COMPILER),nvcc)
 CMAKECMD = cmake -DCMAKE_BUILD_TYPE=Release -Dalpaka_ROOT=$(ALPAKA_INSTALL_ROOT) -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DCMAKE_CUDA_COMPILER=nvcc -DALPAKA_CXX_STANDARD=17 -DALPAKA_ACC_GPU_CUDA_ENABLE=on -DCMAKE_CUDA_ARCHITECTURES=$(CUDA_ARCH) -DDEVICE_TYPE=1 $(CMAKE_FLAGS) ..
 endif
 endif
+
 else
 ###########################################################
 # Old commands to compile src/propagate-toz-test_alpaka.* #

@@ -57,9 +57,15 @@ set(INCLUDE_DIR
 )
 #
 include_directories(${INCLUDE_DIR})
+IF(MODE STREQUAL alpakav4)
+alpaka_add_executable(
+    ${_TARGET_NAME}
+    src/propagate-toz-test_alpaka_cpu_gpu_v4.cpp)
+ELSE()
 alpaka_add_executable(
     ${_TARGET_NAME}
     src/propagate-toz-test_alpaka_cpu_gpu.cpp)
+ENDIF()
 
 #target_link_directories(${_TARGET_NAME} PUBLIC ~/fermi/p2r-tests/alpaka/install/lib64/)
 #target_compile_options(${_TARGET_NAME} PRIVATE -maxrregcount=64)
