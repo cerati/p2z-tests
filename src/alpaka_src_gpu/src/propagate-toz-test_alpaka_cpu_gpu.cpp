@@ -545,7 +545,7 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
     const float xin = x(inPar,it);
     const float yin = y(inPar,it);
     const float zin = z(inPar,it);
-    const float ptin = 1./ipt(inPar,it);
+    const float ptin = 1.0f/ipt(inPar,it);
     const float phiin = phi(inPar,it);
     const float thetain = theta(inPar,it);
     const float xout = x(msP,it);
@@ -593,7 +593,17 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
     setphi(inPar,it,phinew);
     settheta(inPar,it,thetanew);
   }
-  (*trkErr) = *newErr;
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1]) { // for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+#endif
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr->data[ i*bsize+it];
+    }
+  }
  }
 
 template< typename TAcc>
@@ -713,31 +723,19 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP
      newErr.data[18*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 7*bsize+it];
      newErr.data[19*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[10*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[11*bsize+it];
      newErr.data[20*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[15*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[16*bsize+it];
-
-     newErr.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it] - newErr.data[ 0*bsize+it];
-     newErr.data[ 1*bsize+it] = trkErr->data[ 1*bsize+it] - newErr.data[ 1*bsize+it];
-     newErr.data[ 2*bsize+it] = trkErr->data[ 2*bsize+it] - newErr.data[ 2*bsize+it];
-     newErr.data[ 3*bsize+it] = trkErr->data[ 3*bsize+it] - newErr.data[ 3*bsize+it];
-     newErr.data[ 4*bsize+it] = trkErr->data[ 4*bsize+it] - newErr.data[ 4*bsize+it];
-     newErr.data[ 5*bsize+it] = trkErr->data[ 5*bsize+it] - newErr.data[ 5*bsize+it];
-     newErr.data[ 6*bsize+it] = trkErr->data[ 6*bsize+it] - newErr.data[ 6*bsize+it];
-     newErr.data[ 7*bsize+it] = trkErr->data[ 7*bsize+it] - newErr.data[ 7*bsize+it];
-     newErr.data[ 8*bsize+it] = trkErr->data[ 8*bsize+it] - newErr.data[ 8*bsize+it];
-     newErr.data[ 9*bsize+it] = trkErr->data[ 9*bsize+it] - newErr.data[ 9*bsize+it];
-     newErr.data[10*bsize+it] = trkErr->data[10*bsize+it] - newErr.data[10*bsize+it];
-     newErr.data[11*bsize+it] = trkErr->data[11*bsize+it] - newErr.data[11*bsize+it];
-     newErr.data[12*bsize+it] = trkErr->data[12*bsize+it] - newErr.data[12*bsize+it];
-     newErr.data[13*bsize+it] = trkErr->data[13*bsize+it] - newErr.data[13*bsize+it];
-     newErr.data[14*bsize+it] = trkErr->data[14*bsize+it] - newErr.data[14*bsize+it];
-     newErr.data[15*bsize+it] = trkErr->data[15*bsize+it] - newErr.data[15*bsize+it];
-     newErr.data[16*bsize+it] = trkErr->data[16*bsize+it] - newErr.data[16*bsize+it];
-     newErr.data[17*bsize+it] = trkErr->data[17*bsize+it] - newErr.data[17*bsize+it];
-     newErr.data[18*bsize+it] = trkErr->data[18*bsize+it] - newErr.data[18*bsize+it];
-     newErr.data[19*bsize+it] = trkErr->data[19*bsize+it] - newErr.data[19*bsize+it];
-     newErr.data[20*bsize+it] = trkErr->data[20*bsize+it] - newErr.data[20*bsize+it];
   }
-
-  (*trkErr) = newErr;
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
+  {
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr.data[ i*bsize+it];
+    }    
+  }
 }
 
 const float kfact= 100./(-0.299792458*3.8112);
@@ -759,20 +757,20 @@ inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, 
     const float zout = z(msP,it);
     const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z(inPar,it);
-    const float pt = 1./ipt(inPar,it);
+    const float pt = 1.0f/ipt(inPar,it);
     const float cosP = cosf(phi(inPar,it));
     const float sinP = sinf(phi(inPar,it));
     const float cosT = cosf(theta(inPar,it));
     const float sinT = sinf(theta(inPar,it));
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float icosT = 1.0/cosT;
+    const float icosT = 1.0f/cosT;
     const float icosTk = icosT/k;
     const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
-    setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
-    sety(outPar,it, y(inPar,it) + k*(pyin*sina + pxin*(1.-cosa)) );
+    setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.0f-cosa)) );
+    sety(outPar,it, y(inPar,it) + k*(pyin*sina + pxin*(1.0f-cosa)) );
     setz(outPar,it,zout);
     setipt(outPar,it, ipt(inPar,it));
     setphi(outPar,it, phi(inPar,it)+alpha );
@@ -781,16 +779,16 @@ inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, 
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
+    for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.f;
     //[Dec. 21, 2022] Added to have the same pattern as the cudauvm version.
     errorProp->data[bsize*PosInMtrx(0,1,6) + it] = 0.0f;
     errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
-    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
+    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
+    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
     errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
-    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
     errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
     errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT*(icosTk);
     errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);

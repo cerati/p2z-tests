@@ -596,9 +596,9 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF_* trkErr, MP6F_* inPar, const MP3
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+  float *trkErrData = trkErr->data;
   {
     float *inParData = inPar->data;
-    float *trkErrData = trkErr->data;
     const float xin = inParData[iparX];
     const float yin = inParData[iparY];
     const float zin = inParData[iparZ];
@@ -650,10 +650,10 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF_* trkErr, MP6F_* inPar, const MP3
     inParData[iparIpt] = ptnew;
     inParData[iparPhi] = phinew;
     inParData[iparTheta] = thetanew;
-    #pragma unroll
-    for (int i = 0; i < 21; i++){
-      trkErrData[ i] = trkErrData[ i] - newErr.data[ i];
-    }
+  }
+  #pragma unroll
+  for (int i = 0; i < 21; i++){
+    trkErrData[ i] = trkErrData[ i] - newErr.data[ i];
   }
  }
 
@@ -753,28 +753,6 @@ inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF_* trkErr, MP6F_* inPar, const 
      newErr.data[18] = kGain.data[10]*trkErrData[ 6] + kGain.data[11]*trkErrData[ 7];
      newErr.data[19] = kGain.data[10]*trkErrData[10] + kGain.data[11]*trkErrData[11];
      newErr.data[20] = kGain.data[10]*trkErrData[15] + kGain.data[11]*trkErrData[16];
-
-     newErr.data[ 0] = trkErrData[ 0] - newErr.data[ 0];
-     newErr.data[ 1] = trkErrData[ 1] - newErr.data[ 1];
-     newErr.data[ 2] = trkErrData[ 2] - newErr.data[ 2];
-     newErr.data[ 3] = trkErrData[ 3] - newErr.data[ 3];
-     newErr.data[ 4] = trkErrData[ 4] - newErr.data[ 4];
-     newErr.data[ 5] = trkErrData[ 5] - newErr.data[ 5];
-     newErr.data[ 6] = trkErrData[ 6] - newErr.data[ 6];
-     newErr.data[ 7] = trkErrData[ 7] - newErr.data[ 7];
-     newErr.data[ 8] = trkErrData[ 8] - newErr.data[ 8];
-     newErr.data[ 9] = trkErrData[ 9] - newErr.data[ 9];
-     newErr.data[10] = trkErrData[10] - newErr.data[10];
-     newErr.data[11] = trkErrData[11] - newErr.data[11];
-     newErr.data[12] = trkErrData[12] - newErr.data[12];
-     newErr.data[13] = trkErrData[13] - newErr.data[13];
-     newErr.data[14] = trkErrData[14] - newErr.data[14];
-     newErr.data[15] = trkErrData[15] - newErr.data[15];
-     newErr.data[16] = trkErrData[16] - newErr.data[16];
-     newErr.data[17] = trkErrData[17] - newErr.data[17];
-     newErr.data[18] = trkErrData[18] - newErr.data[18];
-     newErr.data[19] = trkErrData[19] - newErr.data[19];
-     newErr.data[20] = trkErrData[20] - newErr.data[20];
   }
   {
     #pragma unroll
