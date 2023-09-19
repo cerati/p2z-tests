@@ -1086,12 +1086,12 @@ int main (int argc, char* argv[]) {
      return wall_time;
    };
 
-   doWork("Warming up", NWARMUP);
+   //doWork("Warming up", NWARMUP);
    auto wall_time = doWork("Launching", NITER);
 
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
-   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER), nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, 1);
+   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER), nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, num_streams);
 
    int offset_trk = 0;
    for(int s=0;s<num_streams;s++){

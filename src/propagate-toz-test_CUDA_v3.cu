@@ -17,6 +17,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef USE_ASYNC
 #define num_streams 1
 #endif
+//#define USE_DEVICE_SYNC
 
 #ifndef nevts
 #define nevts 100
@@ -791,7 +792,11 @@ void memcpy_dev2host(MPTRK* outtrk, MPTRK* outtrk_dev, cudaStream_t* streams, in
 int main (int argc, char* argv[]) {
 
 #ifdef USE_ASYNC
-  printf("RUNNING CUDA Async Version!!\n");
+#ifdef USE_DEVICE_SYNC
+  printf("RUNNING CUDA Async Version with cudaDeviceSynchronize!!\n");
+#else
+  printf("RUNNING CUDA Async Version with cuStreamSynchronize!!\n");
+#endif
 #else
   printf("RUNNING CUDA Sync Version!!\n");
 #endif
@@ -863,7 +868,13 @@ int main (int argc, char* argv[]) {
 #ifndef include_data
 	memcpy_host2dev(trk_dev, trk, hit_dev, hit, streams, stream_chunk, stream_remainder);
 #ifdef USE_ASYNC
+#ifdef USE_DEVICE_SYNC
 	cudaDeviceSynchronize(); 
+#else
+  for (int s = 0; s<stream_range;s++){
+    cudaStreamSynchronize(streams[s]);
+  }
+#endif 
 #endif
 #endif
 
@@ -905,13 +916,25 @@ int main (int argc, char* argv[]) {
   } //end itr loop
   
 #ifdef USE_ASYNC
-	cudaDeviceSynchronize(); 
+#ifdef USE_DEVICE_SYNC
+  cudaDeviceSynchronize(); 
+#else
+  for (int s = 0; s<stream_range;s++){
+    cudaStreamSynchronize(streams[s]);
+  }
+#endif
 #endif
   auto wall_stop = std::chrono::high_resolution_clock::now();
 #ifndef include_data
 	memcpy_dev2host(outtrk, outtrk_dev, streams, stream_chunk, stream_remainder);
 #ifdef USE_ASYNC
+#ifdef USE_DEVICE_SYNC
 	cudaDeviceSynchronize(); 
+#else
+  for (int s = 0; s<stream_range;s++){
+    cudaStreamSynchronize(streams[s]);
+  }
+#endif
 #endif
 #endif
 
