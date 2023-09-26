@@ -1074,7 +1074,7 @@ int main (int argc, char* argv[]) {
    printf("number of tracks with nans=%i\n", nnans);
    printf("number of tracks failed=%i\n", nfail);
 
-#pragma acc exit data delete(trk[0:nevts*nb], hit[0:nlayer*nevts*nb], outtrk[0:nevts*nb])
+#pragma omp target exit data map(delete: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
    free(trk);
    free(hit);
    free(outtrk);
