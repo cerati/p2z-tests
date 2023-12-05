@@ -14,6 +14,14 @@ endif
 ifndef NLAYER
 NLAYER=20
 endif
+ifndef prepin_hostmem
+prepin_hostmem=0
+endif
+ifeq ($(prepin_hostmem),1)
+EXE_S = "_prepin_host"
+else
+EXE_S = ""
+endif
 INCLUDE_DATA ?= 1
 ifneq ($(INCLUDE_DATA),0)
 TUNE += -Dinclude_data=$(INCLUDE_DATA)
@@ -26,12 +34,12 @@ ifeq ($(USE_FMAD),0)
 #Disable fmad optimization
 TUNE += --fmad false
 endif
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} ${TUNE}
+CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dprepin_hostmem=${prepin_hostmem} ${TUNE}
 # KOKKOS_ARCH = "HSW,Kepler35"
 #KOKKOS_ARCH = "SKX,Volta70"
 KOKKOS_ARCH = "Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
-EXE = "../../bin/propagate_nvcc_kokkosv3"
+EXE = "../../bin/propagate_nvcc_kokkosv3${EXE_S}"
 USE_GPU=1
 else
 # -9 needed on apollo

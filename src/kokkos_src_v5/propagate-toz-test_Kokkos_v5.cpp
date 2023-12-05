@@ -48,6 +48,28 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define num_streams 1
 #endif
 
+#ifndef prepin_hostmem
+#define prepin_hostmem 0
+#endif
+
+#ifdef KOKKOS_ENABLE_CUDA
+   #define MemSpace Kokkos::CudaSpace
+   #define ExecSpace Kokkos::Cuda
+#endif
+#ifdef KOKKOS_ENABLE_HIP
+   #define MemSpace Kokkos::Experimental::HIPSpace
+   #define ExecSpace Kokkos::Experimental::HIP
+#endif
+#ifdef KOKKOS_ENABLE_OPENMPTARGET
+   #define MemSpace Kokkos::OpenMPTargetSpace
+   #define ExecSpace Kokkos::OpenMPTarget
+#endif
+
+#ifndef MemSpace
+   #define MemSpace Kokkos::HostSpace
+   #define ExecSpace Kokkos::Host
+#endif
+
 #define loadData(dst, src, tid, itrsize) \
   _Pragma("unroll")                      \
   for(int ip=0; ip<itrsize; ++ip) {      \
@@ -365,8 +387,11 @@ KOKKOS_FUNCTION float x(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk) 
 KOKKOS_FUNCTION float y(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
 KOKKOS_FUNCTION float z(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
-Kokkos::View<MPTRK*>::HostMirror prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK*> &trk) {
-  auto result = Kokkos::create_mirror_view(trk);
+#if prepin_hostmem == 1
+void prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> &result) {
+#else
+void prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK*>::HostMirror &result) {
+#endif
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -384,11 +409,13 @@ Kokkos::View<MPTRK*>::HostMirror prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK
       }
     }
   }
-  return result;
 }
 
-Kokkos::View<MPHIT*>::HostMirror prepareHits(AHIT* inputhits, Kokkos::View<MPHIT*> &hit) {
-  auto result = Kokkos::create_mirror_view(hit);
+#if prepin_hostmem == 1
+void prepareHits(AHIT* inputhits, Kokkos::View<MPHIT*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> &result) {
+#else
+void prepareHits(AHIT* inputhits, Kokkos::View<MPHIT*>::HostMirror &result) {
+#endif
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
 
@@ -409,7 +436,6 @@ Kokkos::View<MPHIT*>::HostMirror prepareHits(AHIT* inputhits, Kokkos::View<MPHIT
       }
     }
   }
-  return result;
 }
 
 #define N bsize
@@ -823,35 +849,37 @@ int main (int argc, char* argv[]) {
    Kokkos::initialize(argc, argv);
    {
 
-   #ifdef KOKKOS_ENABLE_CUDA
-   #define MemSpace Kokkos::CudaSpace
-   #endif
-   #ifdef KOKKOS_ENABLE_HIP
-   #define MemSpace Kokkos::Experimental::HIPSpace
-   #endif
-   #ifdef KOKKOS_ENABLE_OPENMPTARGET
-   #define MemSpace Kokkos::OpenMPTargetSpace
-   #endif
-
-   #ifndef MemSpace
-   #define MemSpace Kokkos::HostSpace
-   #endif
 
    printf("After kokkos::init\n");
-   using ExecSpace = MemSpace::execution_space;
    ExecSpace e;
    e.print_configuration(std::cout, true);
 
    Kokkos::View<MPTRK*> trk("trk", nevts*nb);
-   Kokkos::View<MPTRK*>::HostMirror h_trk = prepareTracks(inputtrk, trk);
+#if prepin_hostmem == 1
+   Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_trk("h_trk", nevts*nb);
+   prepareTracks(inputtrk, h_trk);
+#else
+   Kokkos::View<MPTRK*>::HostMirror h_trk = Kokkos::create_mirror_view(trk);
+   prepareTracks(inputtrk, h_trk);
+#endif
    //Kokkos::deep_copy(trk, h_trk);
  
    Kokkos::View<MPHIT*> hit("hit", nevts*nb*nlayer);
-   Kokkos::View<MPHIT*>::HostMirror h_hit = prepareHits(inputhits, hit);
+#if prepin_hostmem == 1
+   Kokkos::View<MPHIT*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_hit("h_hit", nevts*nb*nlayer);
+   prepareHits(inputhits, h_hit);
+#else
+   Kokkos::View<MPHIT*>::HostMirror h_hit = Kokkos::create_mirror_view(hit);
+   prepareHits(inputhits, h_hit);
+#endif
    //Kokkos::deep_copy(hit, h_hit);
 
    Kokkos::View<MPTRK*> outtrk("outtrk", nevts*nb);
+#if prepin_hostmem == 1
+   Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_outtrk("h_outtrk", nevts*nb);
+#else
    Kokkos::View<MPTRK*>::HostMirror h_outtrk = Kokkos::create_mirror_view(outtrk);
+#endif
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;

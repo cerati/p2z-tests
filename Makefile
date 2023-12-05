@@ -580,7 +580,13 @@ endif
 ifeq ($(MODE),kokkosv3)
 CSRCSDIR = kokkos_src_v3
 CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v3.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
 COMPILE_KOKKOS = 1
 endif
 ifeq ($(MODE),kokkosv4)
@@ -590,6 +596,7 @@ ifneq ($(PREPIN_HOSTMEM),1)
 KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
 else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
 endif
 COMPILE_KOKKOS = 1
@@ -597,7 +604,13 @@ endif
 ifeq ($(MODE),kokkosv5)
 CSRCSDIR = kokkos_src_v5
 CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v5.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
 COMPILE_KOKKOS = 1
 endif
 ifeq ($(MODE),kokkosv6)
@@ -607,6 +620,7 @@ ifneq ($(PREPIN_HOSTMEM),1)
 KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
 else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
 endif
 COMPILE_KOKKOS = 1
@@ -627,6 +641,9 @@ KOKKOS_FLAGS += NLAYER=$(NLAYER)
 endif
 ifneq ($(INCLUDE_DATA),0)
 KOKKOS_FLAGS += INCLUDE_DATA=$(INCLUDE_DATA)
+endif
+ifneq ($(STREAMS),0)
+KOKKOS_FLAGS += num_streams=$(STREAMS)
 endif
 KOKKOS_FLAGS += USE_FMAD=$(USE_FMAD)
 KOKKOS_FLAGS += USE_GPU=$(USE_GPU)
