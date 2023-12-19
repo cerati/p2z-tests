@@ -228,7 +228,10 @@ Here is the brief information on each version:
 
 `src/kokkos_src_v6`: has the same user data layouts and compute patterns 
                   as `src/kokkos_src_v5, but use multiple asynchronous device 
-                  instances (multiple CUDA streams); the best performing version.
+                  instances (multiple CUDA streams).
+
+`src/kokkos_src_v6_2`: is a variant of `src/kokkos_src_v6`, where inner parallel_for
+                  constructs are manually fused; the new best performing version.
 
 Here we have basic instructions.
 
