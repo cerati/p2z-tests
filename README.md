@@ -258,6 +258,7 @@ $ make COMPILER=nvcc MODE=kokkosv4 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 #work onl
 $ make COMPILER=nvcc MODE=kokkosv4 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 PREPIN_HOSTMEM=1 STREAMS=1 #work only for NVIDIA GPUs
 $ make COMPILER=nvcc MODE=kokkosv5 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1
 $ make COMPILER=gcc MODE=kokkosv5 INCLUDE_DATA=0 USE_GPU=0 KOKKOS_ARCH=BDW
+$ make COMPILER=gcc MODE=kokkosv5 INCLUDE_DATA=0 USE_GPU=0 KOKKOS_ARCH=HSW
 $ make COMPILER=nvcc MODE=kokkosv5 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 PREPIN_HOSTMEM=1 #work only for NVIDIA GPUs
 $ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 #work only for NVIDIA GPUs
 $ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 PREPIN_HOSTMEM=1 STREAMS=1 #work only for NVIDIA GPUs
@@ -265,6 +266,6 @@ $ make MODE=kokkosv6 clean
 ```
 
 #### Makefile setting
-- KOKKOS_DEVICES = OpenMP or OpenMP,Cuda
+- KOKKOS_DEVICES = Cuda or OpenMP or OpenMP,Cuda
 - KOKKOS_ARCH = [GPU arch],[CPU arch] i.e. "BDW,Volta70"
 

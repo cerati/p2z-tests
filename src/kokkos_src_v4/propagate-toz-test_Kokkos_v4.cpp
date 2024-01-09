@@ -55,6 +55,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifdef KOKKOS_ENABLE_CUDA
 #define MemSpace Kokkos::CudaSpace
 #define ExecSpace Kokkos::Cuda
+#else
+static_assert(false, "This version works only with the CUDA backend; exit!\n");
 #endif
 
 KOKKOS_FUNCTION size_t PosInMtrx(size_t i, size_t j, size_t D) {

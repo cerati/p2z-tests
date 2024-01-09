@@ -35,9 +35,9 @@ ifeq ($(USE_FMAD),0)
 TUNE += --fmad false
 endif
 CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dprepin_hostmem=${prepin_hostmem} ${TUNE}
-# KOKKOS_ARCH = "HSW,Kepler35"
-#KOKKOS_ARCH = "SKX,Volta70"
-KOKKOS_ARCH = "Volta70"
+# KOKKOS_ARCH ?= "HSW,Kepler35"
+#KOKKOS_ARCH ?= "SKX,Volta70"
+KOKKOS_ARCH ?= "Volta70"
 KOKKOS_CUDA_OPTIONS = "enable_lambda"
 EXE = "../../bin/propagate_nvcc_kokkosv5${EXE_S}"
 USE_GPU=1
@@ -49,8 +49,8 @@ CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} ${TUNE}
 # CXX = icpc
 EXE = "../../bin/propagate_gcc_kokkosv5"
 USE_GPU=0
-KOKKOS_ARCH = "SKX"
-#KOKKOS_ARCH = "POWER9"
+KOKKOS_ARCH ?= "SKX"
+#KOKKOS_ARCH ?= "POWER9"
 endif
 
 LINK = ${CXX}

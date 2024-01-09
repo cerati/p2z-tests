@@ -89,7 +89,7 @@ endif
 KOKKOS_PATH ?= $(KOKKOS_ROOT)
 KOKKOS_DEVICES ?= Cuda
 KOKKOS_ARCH ?= None
-PREPIN_HOSTMEM ?= 1
+PREPIN_HOSTMEM ?= 0
 
 ##########ALPAKA Make Options########################
 # Assume that ALPAKA_INSTALL_ROOT is set to the Alpaka install root directory

@@ -59,7 +59,7 @@ typedef Kokkos::CudaUVMSpace  MemSpace_CB;  // What type of memory to use
 #else
 // CPU options
 typedef Kokkos::OpenMP   ExecSpace;
-typedef Kokkos::OpenMP   MemSpace_CB;
+typedef Kokkos::OpenMP::memory_space   MemSpace_CB;
 #endif
 
 

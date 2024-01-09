@@ -52,23 +52,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define prepin_hostmem 0
 #endif
 
-#ifdef KOKKOS_ENABLE_CUDA
-	#define MemSpace Kokkos::CudaSpace
-	#define ExecSpace Kokkos::Cuda
-#endif
-#ifdef KOKKOS_ENABLE_HIP
-	#define MemSpace Kokkos::Experimental::HIPSpace
-	#define ExecSpace Kokkos::Experimental::HIP
-#endif
-#ifdef KOKKOS_ENABLE_OPENMPTARGET
-   #define MemSpace Kokkos::OpenMPTargetSpace
-   #define ExecSpace Kokkos::OpenMPTarget
-#endif
-
-#ifndef MemSpace
-   #define MemSpace Kokkos::HostSpace
-   #define ExecSpace Kokkos::Host
-#endif
+#define ExecSpace Kokkos::DefaultExecutionSpace
+#define MemSpace ExecSpace::memory_space
 
 KOKKOS_FUNCTION size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;

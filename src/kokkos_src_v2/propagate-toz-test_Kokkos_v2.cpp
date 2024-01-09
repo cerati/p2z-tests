@@ -636,19 +636,8 @@ int main (int argc, char* argv[]) {
    Kokkos::initialize(argc, argv);
    {
 
-   #ifdef KOKKOS_ENABLE_CUDA
-   #define MemSpace Kokkos::CudaSpace
-   #endif
-   #ifdef KOKKOS_ENABLE_HIP
-   #define MemSpace Kokkos::Experimental::HIPSpace
-   #endif
-   #ifdef KOKKOS_ENABLE_OPENMPTARGET
-   #define MemSpace Kokkos::OpenMPTargetSpace
-   #endif
-
-   #ifndef MemSpace
-   #define MemSpace Kokkos::HostSpace
-   #endif
+#define ExecSpace Kokkos::DefaultExecutionSpace
+#define MemSpace ExecSpace::memory_space
 
    printf("After kokkos::init\n");
    using ExecSpace = MemSpace::execution_space;
