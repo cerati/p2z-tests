@@ -14,6 +14,7 @@
 #               acccv4, omp4c, omp4cv3, omp4cv4, accccpu,#
 #               acccv3cpu, acccv4cpu, kokkosv1, kokkosv2,#
 #               kokkosv3, kokkosv4, kokkosv5, kokkosv6,  #
+#               kokkosv3_2, kokkosv4_2, kokkosv5_2,      #
 #               kokkosv6_2                               #
 ##########################################################
 COMPILER ?= nvcc
@@ -22,7 +23,7 @@ OS ?= linux
 DEBUG ?= 0
 CUDA_ARCH ?= 70
 #GCC_ROOT ?= /sw/summit/gcc/11.1.0-2
-GCC_ROOT ?= g++
+GCC_ROOT ?= /auto/software/gcc/ppc64le/gcc-10.2.0
 INCLUDE_DATA ?= 1
 ifneq ($(INCLUDE_DATA),0)
 TUNE += -Dinclude_data=$(INCLUDE_DATA)
@@ -590,6 +591,18 @@ BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
 endif
 COMPILE_KOKKOS = 1
 endif
+ifeq ($(MODE),kokkosv3_2)
+CSRCSDIR = kokkos_src_v3_2
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v3_2.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
 ifeq ($(MODE),kokkosv4)
 CSRCSDIR = kokkos_src_v4
 CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v4.cpp
@@ -602,9 +615,33 @@ BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
 endif
 COMPILE_KOKKOS = 1
 endif
+ifeq ($(MODE),kokkosv4_2)
+CSRCSDIR = kokkos_src_v4_2
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v4_2.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
 ifeq ($(MODE),kokkosv5)
 CSRCSDIR = kokkos_src_v5
 CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v5.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv5_2)
+CSRCSDIR = kokkos_src_v5_2
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v5_2.cpp
 ifneq ($(PREPIN_HOSTMEM),1)
 KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)

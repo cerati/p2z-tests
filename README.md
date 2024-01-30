@@ -217,14 +217,23 @@ Here is the brief information on each version:
                   CUDA version 3 (cudav3)(`propagate-toz-test_CUDA_v3.cu`) but using 
                   a single device instance.
 
+`src/kokkos_src_v3_2`: is a variant of `src/kokkos_src_v3`, where inner parallel_for
+                  constructs are manually fused.
+
 `src/kokkos_src_v4`: has the same user data layouts and compute patterns 
                   as `src/kokkos_src_v3, but use multiple asynchronous device 
                   instances (multiple CUDA streams)
+
+`src/kokkos_src_v4_2`: is a variant of `src/kokkos_src_v4`, where inner parallel_for
+                  constructs are manually fused.
 
 `src/kokkos_src_v5`: target CUDA GPU without unified memory; has the same 
                   user data layouts and memory transfer patterns as the manual
                   CUDA version 4 (cudav4)(`propagate-toz-test_CUDA_v4.cu`) but using 
                   a single device instance.
+
+`src/kokkos_src_v5_2`: is a variant of `src/kokkos_src_v5`, where inner parallel_for
+                  constructs are manually fused.
 
 `src/kokkos_src_v6`: has the same user data layouts and compute patterns 
                   as `src/kokkos_src_v5, but use multiple asynchronous device 
@@ -262,6 +271,9 @@ $ make COMPILER=gcc MODE=kokkosv5 INCLUDE_DATA=0 USE_GPU=0 KOKKOS_ARCH=HSW
 $ make COMPILER=nvcc MODE=kokkosv5 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 PREPIN_HOSTMEM=1 #work only for NVIDIA GPUs
 $ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 #work only for NVIDIA GPUs
 $ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 PREPIN_HOSTMEM=1 STREAMS=1 #work only for NVIDIA GPUs
+$ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1 PREPIN_HOSTMEM=1 #work only for NVIDIA GPUs
+$ make COMPILER=nvcc MODE=kokkosv6_2 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1 PREPIN_HOSTMEM=1 #work only for NVIDIA GPUs
+$ make COMPILER=nvcc MODE=kokkosv5_2 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1 KOKKOS_ARCH=AMPERE86
 $ make MODE=kokkosv6 clean
 ```
 
