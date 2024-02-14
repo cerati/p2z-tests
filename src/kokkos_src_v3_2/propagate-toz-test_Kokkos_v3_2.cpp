@@ -846,7 +846,6 @@ int main (int argc, char* argv[]) {
      {
      Kokkos::parallel_for("Kernel", team_policy(team_policy_range,team_size,vector_size).set_scratch_size( 0, Kokkos::PerTeam( total_shared_bytes )),
                                     KOKKOS_LAMBDA( const member_type &teamMember){
-		Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&](const size_t it) {
         int ie = teamMember.league_rank()/nb;
         int ib = teamMember.league_rank()% nb;
 
@@ -859,6 +858,7 @@ int main (int argc, char* argv[]) {
          const MPTRK* btracks = bTk(trk, ie, ib);
          MPTRK* obtracks = bTk(outtrk, ie, ib);
          (*obtracks) = (*btracks);
+		Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&](const size_t it) {
          for(size_t layer=0; layer<nlayer; ++layer) {
             const MPHIT* bhits = bHit(hit, ie, ib,layer);
             propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, (errorProp.data()), (temp.data()), it); // vectorized function
