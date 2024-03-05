@@ -22,8 +22,12 @@ MODE ?= eigen
 OS ?= linux
 DEBUG ?= 0
 CUDA_ARCH ?= 70
+#For Summit
 #GCC_ROOT ?= /sw/summit/gcc/11.1.0-2
-GCC_ROOT ?= /auto/software/gcc/ppc64le/gcc-10.2.0
+#For Leconte 
+#GCC_ROOT ?= /auto/software/gcc/ppc64le/gcc-10.2.0
+#Use default GCC.
+GCC_ROOT ?= /usr
 INCLUDE_DATA ?= 1
 ifneq ($(INCLUDE_DATA),0)
 TUNE += -Dinclude_data=$(INCLUDE_DATA)
@@ -136,13 +140,19 @@ ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1 += -O3 -I. -fopenmp 
 CLIBS1 += -lm -lgomp -L/opt/intel/tbb-gnu9.3/lib -ltbb
+#Below is for Equinox
+#CLIBS1 += -lm -lgomp -L/opt/intel/oneapi/tbb/latest/lib -ltbb
 endif
 ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
 ifeq ($(USE_FMAD),1)
 CFLAGS1 += -O3 -stdpar -gpu=cc$(CUDA_ARCH) --gcc-toolchain=$(GCC_ROOT) -Mfma
+#For multicore CPU
+#CFLAGS1 += -O3 -stdpar=multicore --gcc-toolchain=$(GCC_ROOT) -Mfma
 else
 CFLAGS1 += -O3 -stdpar -gpu=cc$(CUDA_ARCH) --gcc-toolchain=$(GCC_ROOT) -Mnofma
+#For multicore CPU
+#CFLAGS1 += -O3 -stdpar=multicore --gcc-toolchain=$(GCC_ROOT) -Mnofma
 endif
 endif
 ifeq ($(COMPILER),icc)

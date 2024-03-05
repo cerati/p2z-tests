@@ -29,7 +29,9 @@ g++ -O3 -I. -fopenmp -mavx512f -std=c++17 src/propagate-tor-test_pstl.cpp -lm -l
 #if defined(__NVCOMPILER_CUDA__)
 constexpr bool use_cuda = true;
 #else
-constexpr bool use_cuda = false;
+//FIXME: thread configuration setting for CPU seems to be inconsistent; 
+//       use the same configuration as the CUDA thread configuration.
+constexpr bool use_cuda = true;
 #endif//__NVCOMPILER_CUDA__
 
 #ifndef ntrks
