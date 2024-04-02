@@ -37,11 +37,11 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef elementsperthread 
-#define elementsperthread bsize
+#define elementsperthread 1
 #endif
 
 #ifndef threadsperblockx  
-#define threadsperblockx 1
+#define threadsperblockx bsize
 #endif
 
 #ifndef num_streams
@@ -54,6 +54,34 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 
 #define ExecSpace Kokkos::DefaultExecutionSpace
 #define MemSpace ExecSpace::memory_space
+
+#ifdef KOKKOS_ENABLE_CUDA
+constexpr bool use_gpu = true;
+#else
+#ifdef KOKKOS_ENABLE_HIP
+constexpr bool use_gpu = true;
+#else
+#ifdef KOKKOS_ENABLE_OPENMPTARGET
+constexpr bool use_gpu = true;
+#else
+#ifdef KOKKOS_ENABLE_OPENMP
+constexpr bool use_gpu = false;
+#else
+#ifdef KOKKOS_ENABLE_SYCL
+constexpr bool use_gpu = true;
+#else
+#ifdef KOKKOS_ENABLE_THREADS
+constexpr bool use_gpu = false;
+#else
+#ifdef KOKKOS_ENABLE_SERIAL
+constexpr bool use_gpu = false;
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
 
 KOKKOS_FUNCTION size_t PosInMtrx(size_t i, size_t j, size_t D) {
   return i*D+j;
@@ -348,7 +376,7 @@ KOKKOS_FUNCTION void MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B, MP6x
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
-  //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&] (const size_t n)
+  //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize), [&] (const size_t n)
   //{
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
@@ -393,7 +421,7 @@ KOKKOS_FUNCTION void MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6F* B,
   const float* a = A->data; //ASSUME_ALIGNED(a, 64);
   const float* b = B->data; //ASSUME_ALIGNED(b, 64);
   float* c = C->data;       //ASSUME_ALIGNED(c, 64);
-  //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&] (const size_t n)
+  //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize), [&] (const size_t n)
   //{
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
@@ -423,7 +451,7 @@ KOKKOS_FUNCTION void KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x3* C,
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember,bsize), [&] (const size_t n)
+  //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember,bsize), [&] (const size_t n)
   //{
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
@@ -446,7 +474,7 @@ KOKKOS_FUNCTION void KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C, cons
   const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
   const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
   float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
-  //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&](const size_t n)
+  //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize), [&](const size_t n)
   //{
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
@@ -473,7 +501,7 @@ KOKKOS_FUNCTION void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* h
   KalmanGainInv(trkErr,hitErr,inverse_temp, it);
   KalmanGain(trkErr,inverse_temp,kGain, it);
 
-  //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) {
+  //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it) {
     const float xin = x(inPar,it);
     const float yin = y(inPar,it);
     const float zin = z(inPar,it);
@@ -525,7 +553,7 @@ KOKKOS_FUNCTION void KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* h
     setphi(inPar,it, phinew);
     settheta(inPar,it, thetanew);
   //});
-  //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) {
+  //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it) {
     #pragma unroll
     for (int i = 0; i < 21; i++){
       trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr->data[ i*bsize+it]; 
@@ -543,7 +571,7 @@ KOKKOS_FUNCTION void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF
   // //printf("\n");
 
    // AddIntoUpperLeft2x2(psErr, msErr, resErr);
-   //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) 
+   //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it) 
    //{
      resErr_loc->data[0*bsize+it] = trkErr->data[0*bsize+it] + hitErr->data[0*bsize+it];
      resErr_loc->data[1*bsize+it] = trkErr->data[1*bsize+it] + hitErr->data[1*bsize+it];
@@ -551,7 +579,7 @@ KOKKOS_FUNCTION void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF
    //});
 
    // Matriplex::InvertCramerSym(resErr);
-   //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) 
+   //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it) 
    //{
      const double det = (double)resErr_loc->data[0*bsize+it] * resErr_loc->data[2*bsize+it] -
                         (double)resErr_loc->data[1*bsize+it] * resErr_loc->data[1*bsize+it];
@@ -568,7 +596,7 @@ KOKKOS_FUNCTION void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF
   // }
 
    // KalmanGain(psErr, resErr, K);
-   //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) 
+   //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it) 
    //{
       kGain->data[ 0*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc->data[ 0*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc->data[ 1*bsize+it];
       kGain->data[ 1*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc->data[ 1*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc->data[ 2*bsize+it];
@@ -592,7 +620,7 @@ KOKKOS_FUNCTION void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF
 
   // SubtractFirst2(msPar, psPar, res);
    // MultResidualsAdd(K, psPar, res, outPar);
-   //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) 
+   //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it) 
    //{
      res_loc->data[0*bsize+it] =  x(msP,it) - x(inPar,it);
      res_loc->data[1*bsize+it] =  y(msP,it) - y(inPar,it);
@@ -619,7 +647,7 @@ KOKKOS_FUNCTION void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF
 
    // KHC(K, psErr, outErr);
    // outErr.Subtract(psErr, outErr);
-   //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) 
+   //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it) 
    //{
       newErr->data[ 0*bsize+it] = kGain->data[ 0*bsize+it]*trkErr->data[ 0*bsize+it] + kGain->data[ 1*bsize+it]*trkErr->data[ 1*bsize+it];
       newErr->data[ 1*bsize+it] = kGain->data[ 2*bsize+it]*trkErr->data[ 0*bsize+it] + kGain->data[ 3*bsize+it]*trkErr->data[ 1*bsize+it];
@@ -650,7 +678,7 @@ KOKKOS_FUNCTION void KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF
   // printf("\n");      
    //});
 
-  //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize),[&](const size_t it) 
+  //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it) 
   //{
     #pragma unroll
     for (int i = 0; i < 21; i++){
@@ -671,7 +699,7 @@ KOKKOS_FUNCTION void propagateToZ(const MP6x6SF* inErr, const MP6F* inPar,
 	                MP6x6SF* outErr, MP6F* outPar,
  		struct MP6x6F* errorProp, struct MP6x6F* temp, const size_t it) {
   //
-  //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&](const size_t it) {
+  //Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize), [&](const size_t it) {
     const float zout = z(msP,it);
     const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z(inPar,it);
@@ -858,7 +886,7 @@ int main (int argc, char* argv[]) {
          const MPTRK* btracks = bTk(trk, ie, ib);
          MPTRK* obtracks = bTk(outtrk, ie, ib);
          (*obtracks) = (*btracks);
-		Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, bsize), [&](const size_t it) {
+		Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize), [&](const size_t it) {
          for(size_t layer=0; layer<nlayer; ++layer) {
             const MPHIT* bhits = bHit(hit, ie, ib,layer);
             propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, (errorProp.data()), (temp.data()), it); // vectorized function
