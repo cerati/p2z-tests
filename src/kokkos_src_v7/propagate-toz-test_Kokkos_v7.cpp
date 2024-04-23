@@ -75,10 +75,6 @@ constexpr bool use_gpu = false;
 #endif
 #endif
 
-KOKKOS_FUNCTION size_t PosInMtrx(size_t i, size_t j, size_t D) {
-  return i*D+j;
-}
-
 size_t SymOffsets33(size_t i) {
   const size_t offs[9] = {0, 1, 3, 1, 2, 4, 3, 4, 5};
   return offs[i];
@@ -696,6 +692,7 @@ KOKKOS_FUNCTION void propagateToZ(const MP6x6SF_<N> &inErr_, const MP6F_<N> &inP
 	                MP6x6SF_<N> outErr_, MP6F_<N> outPar_) {
   MP6x6F_<N> errorProp;
   MP6x6F_<N> temp;
+  auto PosInMtrx = [=](const size_t &&i, const size_t &&j, const size_t &&D, const size_t block_size = 1) constexpr {return block_size*(i*D+j);};
   //
   //Kokkos::parallel_for( Kokkos::TeamVectorRange(teamMember, N), [&](const size_t it) {
     #pragma omp simd
@@ -725,26 +722,26 @@ KOKKOS_FUNCTION void propagateToZ(const MP6x6SF_<N> &inErr_, const MP6F_<N> &inP
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
 
-    //for (size_t i=0;i<6;++i) errorProp[N*PosInMtrx(i,i,6) + it] = 1.0f;
-    errorProp[N*PosInMtrx(0,0,6) + it] = 1.0f;
-    errorProp[N*PosInMtrx(1,1,6) + it] = 1.0f;
-    errorProp[N*PosInMtrx(2,2,6) + it] = 1.0f;
-    errorProp[N*PosInMtrx(3,3,6) + it] = 1.0f;
-    errorProp[N*PosInMtrx(4,4,6) + it] = 1.0f;
-    errorProp[N*PosInMtrx(5,5,6) + it] = 1.0f;
+    //for (size_t i=0;i<6;++i) errorProp[N*PosInMtrx(i,i,6,N) + it] = 1.0f;
+    errorProp[N*PosInMtrx(0,0,6,N) + it] = 1.0f;
+    errorProp[N*PosInMtrx(1,1,6,N) + it] = 1.0f;
+    errorProp[N*PosInMtrx(2,2,6,N) + it] = 1.0f;
+    errorProp[N*PosInMtrx(3,3,6,N) + it] = 1.0f;
+    errorProp[N*PosInMtrx(4,4,6,N) + it] = 1.0f;
+    errorProp[N*PosInMtrx(5,5,6,N) + it] = 1.0f;
     //[Dec. 21, 2022] Added to have the same pattern as the cudauvm version.
-    errorProp[N*PosInMtrx(0,1,6) + it] = 0.0f;
-    errorProp[N*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
-    errorProp[N*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
-    errorProp[N*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
-    errorProp[N*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
-    errorProp[N*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
-    errorProp[N*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
-    errorProp[N*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp[N*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
-    errorProp[N*PosInMtrx(4,2,6) + it] = -inPar_(iparIpt,it)*sinT*(icosTk);
-    errorProp[N*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
-    errorProp[N*PosInMtrx(4,5,6) + it] = inPar_(iparIpt,it)*deltaZ*(icosT*icosTk);
+    errorProp[N*PosInMtrx(0,1,6,N) + it] = 0.0f;
+    errorProp[N*PosInMtrx(0,2,6,N) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
+    errorProp[N*PosInMtrx(0,3,6,N) + it] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp[N*PosInMtrx(0,4,6,N) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
+    errorProp[N*PosInMtrx(0,5,6,N) + it] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
+    errorProp[N*PosInMtrx(1,2,6,N) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
+    errorProp[N*PosInMtrx(1,3,6,N) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp[N*PosInMtrx(1,4,6,N) + it] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp[N*PosInMtrx(1,5,6,N) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
+    errorProp[N*PosInMtrx(4,2,6,N) + it] = -inPar_(iparIpt,it)*sinT*(icosTk);
+    errorProp[N*PosInMtrx(4,3,6,N) + it] = sinT*deltaZ*(icosTk);
+    errorProp[N*PosInMtrx(4,5,6,N) + it] = inPar_(iparIpt,it)*deltaZ*(icosT*icosTk);
     }
   //});
   //
@@ -770,9 +767,9 @@ int main (int argc, char* argv[]) {
 	  sqrtf(inputtrk.par[0]*inputtrk.par[0] + inputtrk.par[1]*inputtrk.par[1]),
 	  1./inputtrk.par[3], inputtrk.par[4], inputtrk.par[5]);
 
-   printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
-                                               inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
-	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
+   printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(0)],
+                                               inputtrk.cov[SymOffsets66(1*6+1)],
+	                                       inputtrk.cov[SymOffsets66(2*6+2)]);
    for (size_t lay=0; lay<nlayer; lay++){
      printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
    }
@@ -859,7 +856,7 @@ int main (int argc, char* argv[]) {
      {
      Kokkos::parallel_for("Kernel", team_policy(team_policy_range,team_size,vector_size),
                                     KOKKOS_LAMBDA( const member_type &teamMember){
-		Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize), [&](const size_t it) {
+		Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, teamMember.team_size()), [&](const size_t it) {
          int i = teamMember.league_rank () * teamMember.team_size () + it;
          constexpr int  N             = use_gpu ? 1 : bsize;
          const int tid        = use_gpu ? i / bsize : i;

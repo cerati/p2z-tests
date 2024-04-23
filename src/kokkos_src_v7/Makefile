@@ -34,7 +34,7 @@ ifeq ($(USE_FMAD),0)
 #Disable fmad optimization
 TUNE += --fmad false
 endif
-CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dprepin_hostmem=${prepin_hostmem} ${TUNE}
+CXXFLAGS = -O3 -DNITER=${NITER} -Dnlayers=${NLAYER} -Dprepin_hostmem=${prepin_hostmem} ${TUNE} --expt-relaxed-constexpr
 # KOKKOS_ARCH ?= "HSW,Kepler35"
 #KOKKOS_ARCH ?= "SKX,Volta70"
 KOKKOS_ARCH ?= "Volta70"
