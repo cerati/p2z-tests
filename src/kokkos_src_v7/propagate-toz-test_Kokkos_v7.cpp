@@ -689,7 +689,7 @@ constexpr float kfact = 100./(-0.299792458*3.8112);
 template <int N = 1>
 KOKKOS_FUNCTION void propagateToZ(const MP6x6SF_<N> &inErr_, const MP6F_<N> &inPar_,
 		  const MP1I_<N> &inChg_, const MP3F_<N> &msP_,
-	                MP6x6SF_<N> outErr_, MP6F_<N> outPar_) {
+	                MP6x6SF_<N> &outErr_, MP6F_<N> &outPar_) {
   MP6x6F_<N> errorProp;
   MP6x6F_<N> temp;
   auto PosInMtrx = [=](const size_t &&i, const size_t &&j, const size_t &&D, const size_t block_size = 1) constexpr {return block_size*(i*D+j);};
