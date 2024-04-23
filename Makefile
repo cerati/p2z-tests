@@ -15,7 +15,7 @@
 #               acccv3cpu, acccv4cpu, kokkosv1, kokkosv2,#
 #               kokkosv3, kokkosv4, kokkosv5, kokkosv6,  #
 #               kokkosv3_2, kokkosv4_2, kokkosv5_2,      #
-#               kokkosv6_2                               #
+#               kokkosv6_2, kokkosv7                     #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
@@ -676,6 +676,18 @@ endif
 ifeq ($(MODE),kokkosv6_2)
 CSRCSDIR = kokkos_src_v6_2
 CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v6_2.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv7)
+CSRCSDIR = kokkos_src_v7
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v7.cpp
 ifneq ($(PREPIN_HOSTMEM),1)
 KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
