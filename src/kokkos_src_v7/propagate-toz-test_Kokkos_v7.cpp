@@ -866,10 +866,11 @@ int main (int argc, char* argv[]) {
          const MPHIT* bhits_ = hit.data();
          MPTRK_<N> obtracks;
          const auto& btracks = btracks_[tid].load_component<N>(batch_id);
+         obtracks = btracks;
          #pragma unroll
          for(size_t layer=0; layer<nlayer; ++layer) {
             const auto& bhits = bhits_[layer+nlayer*tid].load_component<N>(batch_id);
-            propagateToZ<N>(btracks.cov, btracks.par, btracks.q, bhits.pos, obtracks.cov, obtracks.par); // vectorized function
+            propagateToZ<N>(obtracks.cov, obtracks.par, obtracks.q, bhits.pos, obtracks.cov, obtracks.par); // vectorized function
             KalmanUpdate_v2<N>(obtracks.cov,obtracks.par,bhits.cov,bhits.pos);
          }
          obtracks_[tid].save_component<N>(obtracks, batch_id);
