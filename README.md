@@ -242,6 +242,8 @@ Here is the brief information on each version:
 `src/kokkos_src_v6_2`: is a variant of `src/kokkos_src_v6`, where inner parallel_for
                   constructs are manually fused; the new best performing version.
 
+`src/kokkos_src_v7`: has the same user data layouts and compute patterns as the P2R Kokkos version.
+
 Here we have basic instructions.
 
 #### Getting started
@@ -274,6 +276,9 @@ $ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=1 USE_FMAD=1 USE_GPU=1 PREPIN_HO
 $ make COMPILER=nvcc MODE=kokkosv6 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1 PREPIN_HOSTMEM=1 #work only for NVIDIA GPUs
 $ make COMPILER=nvcc MODE=kokkosv6_2 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1 PREPIN_HOSTMEM=1 #work only for NVIDIA GPUs
 $ make COMPILER=nvcc MODE=kokkosv5_2 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1 KOKKOS_ARCH=AMPERE86
+$ make COMPILER=nvcc MODE=kokkosv7 INCLUDE_DATA=0 USE_FMAD=1 USE_GPU=1 
+$ make COMPILER=gcc MODE=kokkosv7 USE_GPU=0 KOKKOS_ARCH=POWER9
+
 $ make MODE=kokkosv6 clean
 ```
 

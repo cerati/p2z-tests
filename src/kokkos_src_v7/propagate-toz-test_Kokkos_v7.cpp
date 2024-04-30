@@ -722,26 +722,26 @@ KOKKOS_FUNCTION void propagateToZ(const MP6x6SF_<N> &inErr_, const MP6F_<N> &inP
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
 
-    //for (size_t i=0;i<6;++i) errorProp[N*PosInMtrx(i,i,6,N) + it] = 1.0f;
-    errorProp[N*PosInMtrx(0,0,6,N) + it] = 1.0f;
-    errorProp[N*PosInMtrx(1,1,6,N) + it] = 1.0f;
-    errorProp[N*PosInMtrx(2,2,6,N) + it] = 1.0f;
-    errorProp[N*PosInMtrx(3,3,6,N) + it] = 1.0f;
-    errorProp[N*PosInMtrx(4,4,6,N) + it] = 1.0f;
-    errorProp[N*PosInMtrx(5,5,6,N) + it] = 1.0f;
+    //for (size_t i=0;i<6;++i) errorProp[PosInMtrx(i,i,6,N) + it] = 1.0f;
+    errorProp[PosInMtrx(0,0,6,N) + it] = 1.0f;
+    errorProp[PosInMtrx(1,1,6,N) + it] = 1.0f;
+    errorProp[PosInMtrx(2,2,6,N) + it] = 1.0f;
+    errorProp[PosInMtrx(3,3,6,N) + it] = 1.0f;
+    errorProp[PosInMtrx(4,4,6,N) + it] = 1.0f;
+    errorProp[PosInMtrx(5,5,6,N) + it] = 1.0f;
     //[Dec. 21, 2022] Added to have the same pattern as the cudauvm version.
-    errorProp[N*PosInMtrx(0,1,6,N) + it] = 0.0f;
-    errorProp[N*PosInMtrx(0,2,6,N) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
-    errorProp[N*PosInMtrx(0,3,6,N) + it] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
-    errorProp[N*PosInMtrx(0,4,6,N) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
-    errorProp[N*PosInMtrx(0,5,6,N) + it] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
-    errorProp[N*PosInMtrx(1,2,6,N) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
-    errorProp[N*PosInMtrx(1,3,6,N) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
-    errorProp[N*PosInMtrx(1,4,6,N) + it] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
-    errorProp[N*PosInMtrx(1,5,6,N) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
-    errorProp[N*PosInMtrx(4,2,6,N) + it] = -inPar_(iparIpt,it)*sinT*(icosTk);
-    errorProp[N*PosInMtrx(4,3,6,N) + it] = sinT*deltaZ*(icosTk);
-    errorProp[N*PosInMtrx(4,5,6,N) + it] = inPar_(iparIpt,it)*deltaZ*(icosT*icosTk);
+    errorProp[PosInMtrx(0,1,6,N) + it] = 0.0f;
+    errorProp[PosInMtrx(0,2,6,N) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
+    errorProp[PosInMtrx(0,3,6,N) + it] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp[PosInMtrx(0,4,6,N) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
+    errorProp[PosInMtrx(0,5,6,N) + it] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
+    errorProp[PosInMtrx(1,2,6,N) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
+    errorProp[PosInMtrx(1,3,6,N) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp[PosInMtrx(1,4,6,N) + it] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp[PosInMtrx(1,5,6,N) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
+    errorProp[PosInMtrx(4,2,6,N) + it] = -inPar_(iparIpt,it)*sinT*(icosTk);
+    errorProp[PosInMtrx(4,3,6,N) + it] = sinT*deltaZ*(icosTk);
+    errorProp[PosInMtrx(4,5,6,N) + it] = inPar_(iparIpt,it)*deltaZ*(icosT*icosTk);
     }
   //});
   //
