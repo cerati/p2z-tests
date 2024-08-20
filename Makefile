@@ -6,22 +6,28 @@
 ##########################################################
 #       Set macros used for the input program            #
 ##########################################################
-# COMPILER options: pgi, gcc, openarc, nvcc, icc, llvm   #
-#                   ibm, nvcpp, dpcpp                    #
-# MODE options: acc, omp, seq, cuda, tbb, eigen, alpaka, #
-#               omp4, cudav1, cudav2, cudav3, cudav4,    #
+# COMPILER options: gcc, openarc, nvcc, icc, llvm        #
+#                   ibm, nvhpc, dpcpp                    #
+# MODE options: omp, seq, tbb, eigen, alpaka, alpakav4,  #
+#               cuda, cudav1, cudav2, cudav3, cudav4,    #
 #               cudauvm, cudahyb, pstl, accc, acccv3,    #
 #               acccv4, omp4c, omp4cv3, omp4cv4, accccpu,#
 #               acccv3cpu, acccv4cpu, kokkosv1, kokkosv2,#
-#               kokkosv3, kokkosv4, kokkosv5, kokkosv6   #
+#               kokkosv3, kokkosv4, kokkosv5, kokkosv6,  #
+#               kokkosv3_2, kokkosv4_2, kokkosv5_2,      #
+#               kokkosv6_2, kokkosv7                     #
 ##########################################################
 COMPILER ?= nvcc
 MODE ?= eigen
 OS ?= linux
 DEBUG ?= 0
-CUDA_ARCH ?= sm_70
-CUDA_CC ?= cc70
-GCC_ROOT ?= /sw/summit/gcc/11.1.0-2
+CUDA_ARCH ?= 70
+#For Summit
+#GCC_ROOT ?= /sw/summit/gcc/11.1.0-2
+#For Leconte 
+#GCC_ROOT ?= /auto/software/gcc/ppc64le/gcc-10.2.0
+#Use default GCC.
+GCC_ROOT ?= /usr
 INCLUDE_DATA ?= 1
 ifneq ($(INCLUDE_DATA),0)
 TUNE += -Dinclude_data=$(INCLUDE_DATA)
@@ -54,8 +60,10 @@ TUNE += -DNITER=$(NITER)
 else
 ifeq ($(INCLUDE_DATA),0)
 TUNE += -DNITER=100
+NITER = 100
 else
 TUNE += -DNITER=10
+NITER = 10
 endif
 endif
 ifneq ($(NLAYER),0)
@@ -66,6 +74,8 @@ THREADSX ?= 0
 THREADSY ?= 0
 BLOCKS ?= 0
 USE_ASYNC ?= 1
+USE_FMAD ?= 1
+USE_GPU ?= 1
 ifneq ($(THREADSX),0)
 TUNE += -Dthreadsperblockx=$(THREADSX)
 endif
@@ -83,7 +93,14 @@ endif
 # Assume that KOKKOS_ROOT is set to the Kokkos root directory
 KOKKOS_PATH ?= $(KOKKOS_ROOT)
 KOKKOS_DEVICES ?= Cuda
-PREPIN_HOSTMEM ?= 1
+KOKKOS_ARCH ?= None
+PREPIN_HOSTMEM ?= 0
+
+##########ALPAKA Make Options########################
+# Assume that ALPAKA_INSTALL_ROOT is set to the Alpaka install root directory
+ALPAKA_PATH ?= $(ALPAKA_INSTALL_ROOT)
+# Set ALPAKASRC to alpaka_src_gpu to use versions in alpata_src_gpu directory.
+ALPAKASRC ?= alpaka_src_gpu
 
 ################
 #  OMP Setting #
@@ -92,17 +109,16 @@ ifeq ($(MODE),omp)
 CSRCS = propagate-toz-test_OMP.cpp
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1 += -O3 -I. -fopenmp
+CFLAGS1 += -O3 -I. -fopenmp -march=native -mprefer-vector-width=512
 CLIBS1 += -lm -lgomp
 endif
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
-#CXX=pgc++
 CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
-CFLAGS1 += -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
+CFLAGS1 += -Wall -I. -O3 -fopenmp -xHost -qopt-zmm-usage=high
 endif
 ifeq ($(COMPILER),llvm)
 CXX=clang
@@ -119,16 +135,25 @@ endif
 #  PSTL Setting #
 ################
 ifeq ($(MODE),pstl)
-#CSRCS = propagate-toz-test_pstl.cpp
 CSRCS = propagate-toz-test_pstl_v2.cpp
 ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1 += -O3 -I. -fopenmp 
 CLIBS1 += -lm -lgomp -L/opt/intel/tbb-gnu9.3/lib -ltbb
+#Below is for Equinox
+#CLIBS1 += -lm -lgomp -L/opt/intel/oneapi/tbb/latest/lib -ltbb
 endif
-ifeq ($(COMPILER),nvcpp)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
-CFLAGS1 += -O2 -stdpar -gpu=$(CUDA_CC) --gcc-toolchain=$(GCC_ROOT)
+ifeq ($(USE_FMAD),1)
+CFLAGS1 += -O3 -stdpar -gpu=cc$(CUDA_ARCH) --gcc-toolchain=$(GCC_ROOT) -Mfma
+#For multicore CPU
+#CFLAGS1 += -O3 -stdpar=multicore --gcc-toolchain=$(GCC_ROOT) -Mfma
+else
+CFLAGS1 += -O3 -stdpar -gpu=cc$(CUDA_ARCH) --gcc-toolchain=$(GCC_ROOT) -Mnofma
+#For multicore CPU
+#CFLAGS1 += -O3 -stdpar=multicore --gcc-toolchain=$(GCC_ROOT) -Mnofma
+endif
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
@@ -143,37 +168,6 @@ endif
 ifeq ($(COMPILER),ibm)
 CXX=xlc
 CFLAGS1 += -I. -Wall -v -O3 -qarch=pwr9 -qsmp=noauto:omp -qnooffload #host power9
-endif
-endif
-
-
-#################
-#  OMP4 Setting #
-#################
-ifeq ($(MODE),omp4)
-CSRCS = propagate-toz-test_OpenMP4_sync_v1.cpp
-ifeq ($(COMPILER),gcc)
-CXX=g++
-CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
-CLIBS1 += -lm -lgomp 
-else ifeq ($(COMPILER),llvm)
-CXX=clang++
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=$(CUDA_ARCH)
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
-#CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=x86_64-pc-linux-gnu
-#CFLAGS1 = -Wall -O3 -I. -fopenmp 
-CLIBS1 += -lm
-else ifeq ($(COMPILER),ibm)
-CXX=xlc++_r
-CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
-CLIBS1 += -lm
-else ifeq ($(COMPILER),pgi)
-CXX=nvc++
-CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp=gpu -mcmodel=medium -Mlarge_arrays
-CLIBS1 += -lm
-else
-CSRCS = "NotSupported"
 endif
 endif
 
@@ -204,7 +198,7 @@ CFLAGS1 += -O3 -I. -fopenmp -foffload="-lm -O3"
 CLIBS1 += -lm -lgomp 
 else ifeq ($(COMPILER),llvm)
 CXX=clang
-CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=$(CUDA_ARCH)
+CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_$(CUDA_ARCH)
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda
 #CFLAGS1 = -Wall -O3 -I. -fopenmp -fopenmp-targets=ppc64le-unknown-linux-gnu
 CLIBS1 += -lm
@@ -212,7 +206,7 @@ else ifeq ($(COMPILER),ibm)
 CXX=xlc_r
 CFLAGS1 += -I. -Wall -v -O3 -qsmp=omp -qoffload #device V100
 CLIBS1 += -lm
-else ifeq ($(COMPILER),pgi)
+else ifeq ($(COMPILER),nvhpc)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=mp -O3 -Mfprelaxed -mp=gpu -mcmodel=medium -Mlarge_arrays
 CLIBS1 += -lm
@@ -259,38 +253,6 @@ endif
 endif
 
 
-################
-#  ACC Setting #
-################
-ifeq ($(MODE),acc)
-# Synchronous version
-#In the following version (V1), PGI incorrectly allocates gang-private data (errorProp, temp, inverse_temp, kGain, newErr) as gang-shared.
-#With nvc++ V21.11 with -O3 option, this compiles and run correctly.
-#CSRCS = propagate-toz-test_OpenACC_sync_v1.cpp
-#In the following version (V2), temporary data (errorProp, temp, inverse_temp, kGain, newErr) are declared as vector-private, 
-#which is correct but very inefficient.
-#CSRCS = propagate-toz-test_OpenACC_sync_v2.cpp
-#In the following version (V3), PGI correctly privatizes the gang-private data (errorProp, temp, inverse_temp, kGain, newErr) in the global memory 
-#but not in the shared memory; less optimal.
-#CSRCS = propagate-toz-test_OpenACC_sync_v3.cpp
-#In the following version (V4), private data (errorProp, temp, inverse_temp, kGain, newErr) are used as vector private with bsize = 1.
-#Performs best when using nvc++ V21.11 with -O3 option.
-CSRCS = propagate-toz-test_OpenACC_sync_v4.cpp
-ifeq ($(COMPILER),pgi)
-CXX=nvc++
-CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-#CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -mcmodel=medium -Mlarge_arrays
-#CXX=pgc++
-#CFLAGS1 += -I. -Minfo=acc -fast -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
-else ifeq ($(COMPILER),gcc)
-CXX=g++
-CFLAGS1 += -O3 -I. -fopenacc -foffload="-lm -O3"
-CLIBS1 += -lm
-else
-CSRCS = "NotSupported"
-endif
-endif
-
 ##################
 #  ACC C Setting #
 ##################
@@ -314,9 +276,14 @@ endif
 
 ifeq ($(COMPILE_ACC_DEVICE),1)
 CSRCS = $(CSRCSBASE).c
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc
-CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -ta=tesla -mcmodel=medium -Mlarge_arrays
+CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc -mcmodel=medium -Mlarge_arrays
+ifeq ($(USE_FMAD),1)
+CFLAGS1 += -gpu=cc$(CUDA_ARCH) -O3 -Mfma
+else
+CFLAGS1 += -gpu=cc$(CUDA_ARCH) -O3 -Mnofma
+endif
 else ifeq ($(COMPILER),gcc)
 CXX=gcc
 CFLAGS1 += -O3 -I. -fopenacc -foffload="-lm -O3"
@@ -377,7 +344,7 @@ endif
 
 ifeq ($(COMPILE_ACC_HOST),1)
 CSRCS = $(CSRCSBASE).c
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc
 CFLAGS1 += -I. -Minfo=acc -O3 -Mfprelaxed -acc=multicore -mcmodel=medium -Mlarge_arrays
 else ifeq ($(COMPILER),gcc)
@@ -399,20 +366,22 @@ endif
 ################
 ifeq ($(MODE),tbb)
 CSRCS = propagate-toz-test_tbb.cpp
-TBB_PREFIX := /opt/intel/tbb-gnu9.3
-CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
+TBB_PREFIX := /packages/intel/oneapi/tbb/2021.1.1
+#TBB_PREFIX := /packages/intel/oneapi/tbb/2021.1.1 # /opt/intel/tbb-gnu9.3
+CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib/intel64/gcc4.8 -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
 ifeq ($(COMPILER),gcc)
 CXX=g++
-CFLAGS1+=  -fopenmp -O3 -I.
-CLIBS1 += -lm -lgomp -L/opt/intel/compilers_and_libraries/linux/tbb/lib/intel64/gcc4.8
+CFLAGS1+=  -fopenmp -O3 -I. -march=native -mprefer-vector-width=512
+TBB_PREFIX := /packages/intel/oneapi/tbb/2021.1.1
+CLIBS1 += -lm -lgomp -L${TBB_PREFIX}/lib/intel64/gcc4.8 -ltbb
+#-L/opt/intel/compilers_and_libraries/linux/tbb/lib/intel64/gcc4.8
 endif
 ifeq ($(COMPILER),icc)
 CXX=icc
-CFLAGS1+= -Wall -I. -O3 -fopenmp -march=native -xHost -qopt-zmm-usage=high
+CFLAGS1+= -Wall -I. -O3 -fopenmp -xHost -qopt-zmm-usage=high
 endif
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
-#CXX=pgc++
 CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 endif
@@ -423,7 +392,6 @@ endif
 #################
 COMPILE_CUDA = 0
 ifeq ($(MODE),cuda)
-#CSRCS = propagate-toz-test_CUDA.cu
 # CUDA_v0 use USM but has the same computation patterns and communication patterns as CUDA_v3
 CSRCS = propagate-toz-test_CUDA_v0.cu
 COMPILE_CUDA = 1
@@ -451,7 +419,6 @@ COMPILE_CUDA = 1
 endif
 
 ifeq ($(MODE),cudauvm)
-#CSRCS = propagate-toz-test_cuda_uvm.cu
 CSRCS = propagate-toz-test_cuda_uvm_v2.cu
 COMPILE_CUDA = 1
 endif
@@ -459,21 +426,34 @@ endif
 ifeq ($(COMPILE_CUDA),1)
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
-CFLAGS1 += -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr
+ifeq ($(USE_FMAD),1)
+# fmad, which is enabled by default, makes different CUDA versions generate different outputs.
+CFLAGS1 += -arch=sm_$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr 
+else
+CFLAGS1 += -arch=sm_$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -maxrregcount 64 --expt-relaxed-constexpr --fmad false
+endif
 CLIBS1 += -L${CUDALIBDIR} -lcudart 
 endif
-ifeq ($(COMPILER),nvcpp)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
-CFLAGS1 += -gpu=$(CUDA_CC) -O3
+ifeq ($(USE_FMAD),1)
+CFLAGS1 += -gpu=cc$(CUDA_ARCH) -O3 -Mfma
+else
+CFLAGS1 += -gpu=cc$(CUDA_ARCH) -O3 -Mnofma
+endif
 CLIBS1 += -lcudart 
 endif
 endif
 
 ifeq ($(MODE),cudahyb)
 CSRCS = propagate-toz-test_cuda_hybrid.cpp
-ifeq ($(COMPILER),nvcpp)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
-CFLAGS1 += -cuda -stdpar=gpu -gpu=$(CUDA_CC) -O2 --gcc-toolchain=$(GCC_ROOT) -gpu=managed
+ifeq ($(USE_FMAD),1)
+CFLAGS1 += -cuda -stdpar=gpu -gpu=cc$(CUDA_ARCH) -O3 --gcc-toolchain=$(GCC_ROOT) -gpu=managed -Mfma
+else
+CFLAGS1 += -cuda -stdpar=gpu -gpu=cc$(CUDA_ARCH) -O3 --gcc-toolchain=$(GCC_ROOT) -gpu=managed -Mnofma
+endif
 CLIBS1 += -lcudart 
 endif
 endif
@@ -495,29 +475,86 @@ ifeq ($(COMPILER),icc)
 CXX=icc
 CFLAGS1 += -fopenmp -O3 -fopenmp-simd  -mtune=native -march=native -xHost -qopt-zmm-usage=high
 endif
-ifeq ($(COMPILER),pgi)
+ifeq ($(COMPILER),nvhpc)
 CXX=nvc++
-#CXX=pgc++
 CFLAGS1 += -I. -Minfo=mp -fast -mp -Mnouniform -mcmodel=medium -Mlarge_arrays
 endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_Eigen.cu
-#CFLAGS1 += -arch=$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
-#CFLAGS1 += -arch=$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -Ieigen -I/mnt/data1/dsr/cub
-CFLAGS1 += -arch=$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I${EIGEN_ROOT}
+#CFLAGS1 += -arch=sm_$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I/mnt/data1/dsr/mkfit-hackathon/eigen -I/mnt/data1/dsr/cub
+#CFLAGS1 += -arch=sm_$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -Ieigen -I/mnt/data1/dsr/cub
+CFLAGS1 += -arch=sm_$(CUDA_ARCH) --default-stream per-thread -O3 --expt-relaxed-constexpr -I${EIGEN_ROOT}
 endif
 endif
 
 ###################
 #  ALPAKA Setting #
 ###################
+COMPILE_CMAKE = 0
+CMAKECMD = pwd #dummy command 
+COMPILE_ALPAKA = 0
+
+ifeq ($(ALPAKASRC),alpaka_src_gpu)
+########################################################################################
+# New commands to compile src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu.cpp #
+########################################################################################
 ifeq ($(MODE),alpaka)
+CSRCSDIR = alpaka_src_gpu/src
+CSRCS = ${CSRCSDIR}/propagate-toz-test_alpaka_cpu_gpu.cpp
+COMPILE_ALPAKA = 1
+endif
+ifeq ($(MODE),alpakav4)
+CSRCSDIR = alpaka_src_gpu/src
+CSRCS = ${CSRCSDIR}/propagate-toz-test_alpaka_cpu_gpu_v4.cpp
+COMPILE_ALPAKA = 1
+endif
+
+ifneq ($(COMPILE_ALPAKA),0)
+COMPILE_CMAKE = 1
+CMAKE_FLAGS += -DMODE=$(MODE)
+CMAKEDIR = alpaka_src_gpu
+CMAKEOUTPUT = alpaka_gpu_src
+ifneq ($(NITER),0)
+CMAKE_FLAGS += -DNITER=$(NITER)
+else
+ifeq ($(INCLUDE_DATA),0)
+CMAKE_FLAGS += -DNITER=100
+else
+CMAKE_FLAGS += -DNITER=10
+endif
+endif
+ifneq ($(NLAYER),0)
+CMAKE_FLAGS += -DNLAYER=$(NLAYER)
+endif
+ifneq ($(INCLUDE_DATA),0)
+CMAKE_FLAGS += -DINCLUDE_DATA=$(INCLUDE_DATA)
+endif
+CMAKE_FLAGS += -DUSE_FMAD=$(USE_FMAD)
+ifneq ($(STREAMS),0)
+CMAKE_FLAGS += -Dnum_streams=$(STREAMS)
+endif
+ifeq ($(COMPILER),gcc)
+#For serial CPU
+#CMAKECMD = cmake -DCMAKE_BUILD_TYPE=Release -Dalpaka_ROOT=$(ALPAKA_INSTALL_ROOT) -DCMAKE_CXX_COMPILER=g++  -DCMAKE_C_COMPILER=gcc -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLE=on -DALPAKA_CXX_STANDARD=17 -DDEVICE_TYPE=2 $(CMAKE_FLAGS) ..
+#For OpenMP CPU
+CMAKECMD = cmake -DCMAKE_BUILD_TYPE=Release -Dalpaka_ROOT=$(ALPAKA_INSTALL_ROOT) -DCMAKE_CXX_COMPILER=g++  -DCMAKE_C_COMPILER=gcc -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLE=on -DALPAKA_CXX_STANDARD=17 -DDEVICE_TYPE=3 $(CMAKE_FLAGS) ..
+endif
+ifeq ($(COMPILER),nvcc)
+CMAKECMD = cmake -DCMAKE_BUILD_TYPE=Release -Dalpaka_ROOT=$(ALPAKA_INSTALL_ROOT) -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc -DCMAKE_CUDA_COMPILER=nvcc -DALPAKA_CXX_STANDARD=17 -DALPAKA_ACC_GPU_CUDA_ENABLE=on -DCMAKE_CUDA_ARCHITECTURES=$(CUDA_ARCH) -DDEVICE_TYPE=1 $(CMAKE_FLAGS) ..
+endif
+endif
+
+else
+###########################################################
+# Old commands to compile src/propagate-toz-test_alpaka.* #
+###########################################################
+ifeq ($(MODE),alpaka)
+CLIBS1 = -I${ALPAKA_INSTALL_ROOT}/include 
+ifeq ($(COMPILER),gcc)
 CSRCS = propagate-toz-test_alpaka.cpp
 TBB_PREIX := /opt/intel
-CLIBS1 = -I/mnt/data1/mgr85/p2z-tests/alpaka_lib/include 
 CLIBS1+= -I${TBB_PREFIX}/include -L${TBB_PREFIX}/lib -Wl,-rpath,${TBB_PREFIX}/lib -ltbb
-ifeq ($(COMPILER),gcc)
 CXX=g++
 CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED -DALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
 CFLAGS1+= -fopenmp -O3 -I.
@@ -527,10 +564,11 @@ endif
 ifeq ($(COMPILER),nvcc)
 CXX=nvcc
 CSRCS = propagate-toz-test_alpaka.cu
-CFLAGS1+= -arch=$(CUDA_ARCH) -O3 -DUSE_GPU --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda
+CFLAGS1+= -arch=sm_$(CUDA_ARCH) -O3 --default-stream per-thread -DALPAKA_ACC_GPU_CUDA_ENABLED --expt-relaxed-constexpr --expt-extended-lambda
 CFLAGS1+= -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 #CFLAGS1+= -DALPAKA_ACC_CPU_BT_OMP4_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_FIBERS_ENABLED -DALPAKA_ACC_CPU_B_OMP2_T_SEQ_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_OMP2_ENABLED -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 CLIBS1 += -L${CUDALIBDIR} -lcudart -g
+endif
 endif
 endif
 
@@ -541,20 +579,38 @@ COMPILE_KOKKOS = 0
 
 ifeq ($(MODE),kokkosv1)
 CSRCSDIR = kokkos_src_v1
-CSRCS = $(CSRCSDIR)/ptoz_kokkos.cpp
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v1.cpp
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
 COMPILE_KOKKOS = 1
 endif
 ifeq ($(MODE),kokkosv2)
 CSRCSDIR = kokkos_src_v2
-CSRCS = $(CSRCSDIR)/ptoz_kokkos.cpp
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v2.cpp
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
 COMPILE_KOKKOS = 1
 endif
 ifeq ($(MODE),kokkosv3)
 CSRCSDIR = kokkos_src_v3
 CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v3.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv3_2)
+CSRCSDIR = kokkos_src_v3_2
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v3_2.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
 COMPILE_KOKKOS = 1
 endif
 ifeq ($(MODE),kokkosv4)
@@ -564,6 +620,19 @@ ifneq ($(PREPIN_HOSTMEM),1)
 KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
 else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv4_2)
+CSRCSDIR = kokkos_src_v4_2
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v4_2.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
 endif
 COMPILE_KOKKOS = 1
@@ -571,7 +640,25 @@ endif
 ifeq ($(MODE),kokkosv5)
 CSRCSDIR = kokkos_src_v5
 CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v5.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv5_2)
+CSRCSDIR = kokkos_src_v5_2
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v5_2.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
 COMPILE_KOKKOS = 1
 endif
 ifeq ($(MODE),kokkosv6)
@@ -581,6 +668,31 @@ ifneq ($(PREPIN_HOSTMEM),1)
 KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)
 else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv6_2)
+CSRCSDIR = kokkos_src_v6_2
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v6_2.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
+endif
+COMPILE_KOKKOS = 1
+endif
+ifeq ($(MODE),kokkosv7)
+CSRCSDIR = kokkos_src_v7
+CSRCS = $(CSRCSDIR)/propagate-toz-test_Kokkos_v7.cpp
+ifneq ($(PREPIN_HOSTMEM),1)
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
+BENCHMARK = propagate_$(COMPILER)_$(MODE)
+else
+KOKKOS_FLAGS += prepin_hostmem=$(PREPIN_HOSTMEM)
 BENCHMARK = propagate_$(COMPILER)_$(MODE)_prepin_host
 endif
 COMPILE_KOKKOS = 1
@@ -601,6 +713,19 @@ KOKKOS_FLAGS += NLAYER=$(NLAYER)
 endif
 ifneq ($(INCLUDE_DATA),0)
 KOKKOS_FLAGS += INCLUDE_DATA=$(INCLUDE_DATA)
+endif
+ifneq ($(STREAMS),0)
+KOKKOS_FLAGS += num_streams=$(STREAMS)
+endif
+KOKKOS_FLAGS += USE_FMAD=$(USE_FMAD)
+KOKKOS_FLAGS += USE_GPU=$(USE_GPU)
+ifeq ($(USE_GPU),0)
+KOKKOS_FLAGS += KOKKOS_DEVICES=OpenMP
+else
+KOKKOS_FLAGS += KOKKOS_DEVICES=$(KOKKOS_DEVICES)
+endif
+ifneq ($(KOKKOS_ARCH),None)
+KOKKOS_FLAGS += KOKKOS_ARCH=$(KOKKOS_ARCH)
 endif
 endif
 
@@ -672,8 +797,9 @@ endif
 
 $(TARGET)/$(BENCHMARK): precmd src/$(CSRCS)
 	if [ ! -d "$(TARGET)" ]; then mkdir bin; fi
-	if [ $(COMPILE_KOKKOS) -eq 0 ]; then $(CXX) $(CFLAGS1) src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK); fi
-	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd src/$(CSRCSDIR); make -j $(KOKKOS_FLAGS); cd ../../; fi
+	if [ $(COMPILE_CMAKE) -eq 0 ] && [ $(COMPILE_KOKKOS) -eq 0 ]; then $(CXX) $(CFLAGS1) ./src/$(CSRCS) $(CLIBS1) $(TUNE) -o $(TARGET)/$(BENCHMARK); fi
+	if [ $(COMPILE_CMAKE) -eq 0 ] && [ $(COMPILE_KOKKOS) -eq 1 ]; then cd ./src/$(CSRCSDIR); make clean; make -j $(KOKKOS_FLAGS); cd ../../; fi
+	if [ $(COMPILE_CMAKE) -eq 1 ]; then cd src/$(CMAKEDIR); if [ ! -d build ]; then mkdir build; fi; cd build; $(CMAKECMD); make -j32; cd ../../../; mv ./src/$(CMAKEDIR)/build/$(CMAKEOUTPUT) $(TARGET)/$(BENCHMARK); fi
 	if [ -f "./cetus_output/openarc_kernel.cu" ]; then cp ./cetus_output/openarc_kernel.cu ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.cl" ]; then cp ./cetus_output/openarc_kernel.cl ${TARGET}/; fi
 	if [ -f "./cetus_output/openarc_kernel.hip.cpp" ]; then cp ./cetus_output/openarc_kernel.hip.cpp ${TARGET}/; fi
@@ -685,7 +811,9 @@ precmd:
 
 clean:
 	rm -f $(TARGET)/$(BENCHMARK) $(TARGET)/openarc_kernel.* $(TARGET)/*.ptx *.o
-	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd src/$(CSRCSDIR); make clean; cd ../../; fi
+	if [ $(COMPILE_KOKKOS) -eq 1 ]; then cd ./src/$(CSRCSDIR); make clean; cd ../../; fi
+	if [ $(COMPILE_CMAKE) -eq 1 ]; then cd ./src/$(CMAKEDIR); rm -rf build; cd ../../; fi
+	rm -rf ./src/alpaka_src_gpu/build
 
 cleanall: purge
 	rm -f $(TARGET)/* 

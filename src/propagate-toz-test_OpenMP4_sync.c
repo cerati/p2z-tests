@@ -42,7 +42,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 #endif
 
-#define smear 0.1
+#define smear 0.0000001
 
 #ifndef NITER
 #define NITER 5
@@ -118,6 +118,18 @@ struct MP6x6F {
   float data[36*bsize];
 };
 
+struct MP2x2SF {
+  float data[3*bsize];
+};
+
+struct MP2x6 {
+  float data[12*bsize];
+};
+
+struct MP2F {
+  float data[2*bsize];
+};
+
 struct MPTRK {
   struct MP6F    par;
   struct MP6x6SF cov;
@@ -158,7 +170,7 @@ const struct MPTRK* bTkC(const struct MPTRK* tracks, size_t ev, size_t ib) {
   return &(tracks[ib + nb*ev]);
 }
 
-float q(const struct MP1I* bq, size_t it){
+int q(const struct MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 //
@@ -278,19 +290,19 @@ struct MPTRK* prepareTracks(struct ATRK inputtrk) {
     	for (size_t ip=0;ip<6;++ip) {
     	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
     	}
-    	//cov
-    	for (size_t ip=0;ip<21;++ip) {
-    	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+        //cov, scale by factor 100
+	for (size_t ip=0;ip<21;++ip) {
+          result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip]*100;
     	}
     	//q
-    	result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+        result[ib + nb*ie].q.data[it] = inputtrk.q;//can't really smear this or fit will be wrong
       }
     }
   }
   return result;
 }
 
-struct MPHIT* prepareHits(struct AHIT inputhit) {
+struct MPHIT* prepareHits(struct AHIT* inputhits) {
   struct MPHIT* result = (struct MPHIT*) malloc(nlayer*nevts*nb*sizeof(struct MPHIT));  //fixme, align?
 #ifdef PREPIN_HOST_MEMORY
   int lError = mlock((const void *)result, nlayer*nevts*nb*sizeof(struct MPHIT));
@@ -298,6 +310,9 @@ struct MPHIT* prepareHits(struct AHIT inputhit) {
 #endif
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
+
+    struct AHIT inputhit = inputhits[lay];
+
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
         for (size_t it=0;it<bsize;++it) {
@@ -322,12 +337,12 @@ struct MPHIT* prepareHits(struct AHIT inputhit) {
 #endif
 #pragma omp declare target
 void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct MP6x6F* C) {
-  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
-  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
-  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
  #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
+    const float* a = A->data; //ASSUME_ALIGNED(a, 64);
+    const float* b = B->data; //ASSUME_ALIGNED(b, 64);
+    float* c = C->data;       //ASSUME_ALIGNED(c, 64);
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -370,12 +385,12 @@ void MultHelixPropEndcap(const struct MP6x6F* A, const struct MP6x6SF* B, struct
 
 #pragma omp declare target
 void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, struct MP6x6SF* C) {
-  const float* a = A->data; //ASSUME_ALIGNED(a, 64);
-  const float* b = B->data; //ASSUME_ALIGNED(b, 64);
-  float* c = C->data;       //ASSUME_ALIGNED(c, 64);
  #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
+    const float* a = A->data; //ASSUME_ALIGNED(a, 64);
+    const float* b = B->data; //ASSUME_ALIGNED(b, 64);
+    float* c = C->data;       //ASSUME_ALIGNED(c, 64);
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
     c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
@@ -403,12 +418,12 @@ void MultHelixPropTranspEndcap(const struct MP6x6F* A, const struct MP6x6F* B, s
 
 #pragma omp declare target
 void KalmanGainInv(const struct MP6x6SF* A, const struct MP3x3SF* B, struct MP3x3* C) {
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
  #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
+    const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
+    const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
+    float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
@@ -430,12 +445,12 @@ void KalmanGainInv(const struct MP6x6SF* A, const struct MP3x3SF* B, struct MP3x
 
 #pragma omp declare target
 void KalmanGain(const struct MP6x6SF* A, const struct MP3x3* B, struct MP3x6* C) {
-  const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
-  const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
-  float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
  #pragma omp parallel for num_threads(N)
   for (int n = 0; n < N; ++n)
   {
+    const float* a = (*A).data; //ASSUME_ALIGNED(a, 64);
+    const float* b = (*B).data; //ASSUME_ALIGNED(b, 64);
+    float* c = (*C).data;       //ASSUME_ALIGNED(c, 64);
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
     c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
@@ -533,9 +548,109 @@ void KalmanUpdate(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3
 }
 #pragma omp end declare target
 
+#pragma omp declare target
+void KalmanUpdate_v2(struct MP6x6SF* trkErr, struct MP6F* inPar, const struct MP3x3SF* hitErr, const struct MP3F* msP, struct MP2x2SF* resErr_loc, struct MP2x6* kGain, struct MP2F* res_loc, struct MP6x6SF* newErr){
+
+   // AddIntoUpperLeft2x2(psErr, msErr, resErr);
+ #pragma omp parallel for
+   for (size_t it=0;it<bsize;++it)
+   {
+     resErr_loc->data[0*bsize+it] = trkErr->data[0*bsize+it] + hitErr->data[0*bsize+it];
+     resErr_loc->data[1*bsize+it] = trkErr->data[1*bsize+it] + hitErr->data[1*bsize+it];
+     resErr_loc->data[2*bsize+it] = trkErr->data[2*bsize+it] + hitErr->data[2*bsize+it];
+   }
+
+   // Matriplex::InvertCramerSym(resErr);
+ #pragma omp parallel for
+   for (size_t it=0;it<bsize;++it)
+   {
+     const double det = (double)resErr_loc->data[0*bsize+it] * resErr_loc->data[2*bsize+it] -
+                        (double)resErr_loc->data[1*bsize+it] * resErr_loc->data[1*bsize+it];
+     const float s   = 1.f / det;
+     const float tmp = s * resErr_loc->data[2*bsize+it];
+     resErr_loc->data[1*bsize+it] *= -s;
+     resErr_loc->data[2*bsize+it]  = s * resErr_loc->data[0*bsize+it];
+     resErr_loc->data[0*bsize+it]  = tmp;
+   }
+
+   // KalmanGain(psErr, resErr, K);
+ #pragma omp parallel for
+   for (size_t it=0;it<bsize;++it)
+   {
+      kGain->data[ 0*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc->data[ 0*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc->data[ 1*bsize+it];
+      kGain->data[ 1*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc->data[ 1*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc->data[ 2*bsize+it];
+      kGain->data[ 2*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc->data[ 0*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc->data[ 1*bsize+it];
+      kGain->data[ 3*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc->data[ 1*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc->data[ 2*bsize+it];
+      kGain->data[ 4*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc->data[ 0*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc->data[ 1*bsize+it];
+      kGain->data[ 5*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc->data[ 1*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc->data[ 2*bsize+it];
+      kGain->data[ 6*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc->data[ 0*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc->data[ 1*bsize+it];
+      kGain->data[ 7*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc->data[ 1*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc->data[ 2*bsize+it];
+      kGain->data[ 8*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc->data[ 0*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc->data[ 1*bsize+it];
+      kGain->data[ 9*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc->data[ 1*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc->data[ 2*bsize+it];
+      kGain->data[10*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc->data[ 0*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc->data[ 1*bsize+it];
+      kGain->data[11*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc->data[ 1*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc->data[ 2*bsize+it];
+   }
+
+   // SubtractFirst2(msPar, psPar, res);
+   // MultResidualsAdd(K, psPar, res, outPar);
+ #pragma omp parallel for
+   for (size_t it=0;it<bsize;++it)
+   {
+     res_loc->data[0*bsize+it] =  x_pos1(msP,it) - x1(inPar,it);
+     res_loc->data[1*bsize+it] =  y_pos1(msP,it) - _y1(inPar,it);
+
+     setx1    (inPar, it, x1    (inPar, it) + kGain->data[ 0*bsize+it] * res_loc->data[ 0*bsize+it] + kGain->data[ 1*bsize+it] * res_loc->data[ 1*bsize+it]);
+     sety1    (inPar, it, _y1    (inPar, it) + kGain->data[ 2*bsize+it] * res_loc->data[ 0*bsize+it] + kGain->data[ 3*bsize+it] * res_loc->data[ 1*bsize+it]);
+     setz1    (inPar, it, z1    (inPar, it) + kGain->data[ 4*bsize+it] * res_loc->data[ 0*bsize+it] + kGain->data[ 5*bsize+it] * res_loc->data[ 1*bsize+it]);
+     setipt1  (inPar, it, ipt1  (inPar, it) + kGain->data[ 6*bsize+it] * res_loc->data[ 0*bsize+it] + kGain->data[ 7*bsize+it] * res_loc->data[ 1*bsize+it]);
+     setphi1  (inPar, it, phi1  (inPar, it) + kGain->data[ 8*bsize+it] * res_loc->data[ 0*bsize+it] + kGain->data[ 9*bsize+it] * res_loc->data[ 1*bsize+it]);
+     settheta1(inPar, it, theta1(inPar, it) + kGain->data[10*bsize+it] * res_loc->data[ 0*bsize+it] + kGain->data[11*bsize+it] * res_loc->data[ 1*bsize+it]);
+     //note: if ipt changes sign we should update the charge, or we should get rid of the charge altogether and just use the sign of ipt
+   }
+
+   // squashPhiMPlex(outPar,N_proc); // ensure phi is between |pi|
+   // missing
+
+   // KHC(K, psErr, outErr);
+   // outErr.Subtract(psErr, outErr);
+ #pragma omp parallel for
+   for (size_t it=0;it<bsize;++it)
+   {
+      newErr->data[ 0*bsize+it] = kGain->data[ 0*bsize+it]*trkErr->data[ 0*bsize+it] + kGain->data[ 1*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr->data[ 1*bsize+it] = kGain->data[ 2*bsize+it]*trkErr->data[ 0*bsize+it] + kGain->data[ 3*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr->data[ 2*bsize+it] = kGain->data[ 2*bsize+it]*trkErr->data[ 1*bsize+it] + kGain->data[ 3*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr->data[ 3*bsize+it] = kGain->data[ 4*bsize+it]*trkErr->data[ 0*bsize+it] + kGain->data[ 5*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr->data[ 4*bsize+it] = kGain->data[ 4*bsize+it]*trkErr->data[ 1*bsize+it] + kGain->data[ 5*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr->data[ 5*bsize+it] = kGain->data[ 4*bsize+it]*trkErr->data[ 3*bsize+it] + kGain->data[ 5*bsize+it]*trkErr->data[ 4*bsize+it];
+      newErr->data[ 6*bsize+it] = kGain->data[ 6*bsize+it]*trkErr->data[ 0*bsize+it] + kGain->data[ 7*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr->data[ 7*bsize+it] = kGain->data[ 6*bsize+it]*trkErr->data[ 1*bsize+it] + kGain->data[ 7*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr->data[ 8*bsize+it] = kGain->data[ 6*bsize+it]*trkErr->data[ 3*bsize+it] + kGain->data[ 7*bsize+it]*trkErr->data[ 4*bsize+it];
+      newErr->data[ 9*bsize+it] = kGain->data[ 6*bsize+it]*trkErr->data[ 6*bsize+it] + kGain->data[ 7*bsize+it]*trkErr->data[ 7*bsize+it];
+      newErr->data[10*bsize+it] = kGain->data[ 8*bsize+it]*trkErr->data[ 0*bsize+it] + kGain->data[ 9*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr->data[11*bsize+it] = kGain->data[ 8*bsize+it]*trkErr->data[ 1*bsize+it] + kGain->data[ 9*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr->data[12*bsize+it] = kGain->data[ 8*bsize+it]*trkErr->data[ 3*bsize+it] + kGain->data[ 9*bsize+it]*trkErr->data[ 4*bsize+it];
+      newErr->data[13*bsize+it] = kGain->data[ 8*bsize+it]*trkErr->data[ 6*bsize+it] + kGain->data[ 9*bsize+it]*trkErr->data[ 7*bsize+it];
+      newErr->data[14*bsize+it] = kGain->data[ 8*bsize+it]*trkErr->data[10*bsize+it] + kGain->data[ 9*bsize+it]*trkErr->data[11*bsize+it];
+      newErr->data[15*bsize+it] = kGain->data[10*bsize+it]*trkErr->data[ 0*bsize+it] + kGain->data[11*bsize+it]*trkErr->data[ 1*bsize+it];
+      newErr->data[16*bsize+it] = kGain->data[10*bsize+it]*trkErr->data[ 1*bsize+it] + kGain->data[11*bsize+it]*trkErr->data[ 2*bsize+it];
+      newErr->data[17*bsize+it] = kGain->data[10*bsize+it]*trkErr->data[ 3*bsize+it] + kGain->data[11*bsize+it]*trkErr->data[ 4*bsize+it];
+      newErr->data[18*bsize+it] = kGain->data[10*bsize+it]*trkErr->data[ 6*bsize+it] + kGain->data[11*bsize+it]*trkErr->data[ 7*bsize+it];
+      newErr->data[19*bsize+it] = kGain->data[10*bsize+it]*trkErr->data[10*bsize+it] + kGain->data[11*bsize+it]*trkErr->data[11*bsize+it];
+      newErr->data[20*bsize+it] = kGain->data[10*bsize+it]*trkErr->data[15*bsize+it] + kGain->data[11*bsize+it]*trkErr->data[16*bsize+it];
+   }
+
+ #pragma omp parallel for
+  for (size_t it=0;it<bsize;++it) {
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr->data[ i*bsize+it];
+    }
+  }
+}
+#pragma omp end declare target
 
 //const float kfact = 100/3.8;
-#define kfact 100/3.8
+#define kfact 100./(-0.299792458*3.8112)
 #pragma omp declare target
 void propagateToZ(const struct MP6x6SF* inErr, const struct MP6F* inPar,
 		  const struct MP1I* inChg, const struct MP3F* msP,
@@ -605,27 +720,24 @@ int main (int argc, char* argv[]) {
   printf("Measure Compute Times Only!\n");
 #endif
 
-   int itr;
-   struct ATRK inputtrk = {
-     {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
-     {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
-      6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
-      0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348},
-     1
-   };
+#include "input_track.h"
 
-   struct AHIT inputhit = {
-     {-20.7824649810791, -12.24150276184082, 57.8067626953125},
-     {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
-   };
+   struct AHIT inputhits[26] = {inputhit25,inputhit24,inputhit23,inputhit22,inputhit21,inputhit20,inputhit19,inputhit18,inputhit17,
+				inputhit16,inputhit15,inputhit14,inputhit13,inputhit12,inputhit11,inputhit10,inputhit09,inputhit08,
+				inputhit07,inputhit06,inputhit05,inputhit04,inputhit03,inputhit02,inputhit01,inputhit00};
 
-   printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
+   printf("track in pos: x=%f, y=%f, z=%f, r=%f, pt=%f, phi=%f, theta=%f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2],
+	  sqrtf(inputtrk.par[0]*inputtrk.par[0] + inputtrk.par[1]*inputtrk.par[1]),
+	  1./inputtrk.par[3], inputtrk.par[4], inputtrk.par[5]);
+
    printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
-	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
+                                               inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
-   printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
+   for (size_t lay=0; lay<nlayer; lay++){
+     printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
+   }
    
-   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   printf("produce nevts=%i ntrks=%i smearing by=%2.1e \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
    
    long setup_start, setup_stop;
@@ -640,7 +752,7 @@ int main (int argc, char* argv[]) {
    srand(1);
 #endif
    struct MPTRK* trk = prepareTracks(inputtrk);
-   struct MPHIT* hit = prepareHits(inputhit);
+   struct MPHIT* hit = prepareHits(inputhits);
    struct MPTRK* outtrk = (struct MPTRK*) malloc(nevts*nb*sizeof(struct MPTRK));
 #ifdef PREPIN_HOST_MEMORY
   int lError = mlock((const void *)outtrk, nevts*nb*sizeof(struct MPTRK));
@@ -661,12 +773,13 @@ int main (int argc, char* argv[]) {
    
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
-   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
+   printf("Size of struct struct MPHIT hit[] = %ld\n", nlayer*nevts*nb*sizeof(struct MPHIT));
    printf("Size of struct MPTRK = %ld\n", sizeof(struct MPTRK));
 
    gettimeofday(&timecheck, NULL);
    start2 = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
 
+   int itr;
    for(itr=0; itr<NITER; itr++) {
 #if include_data == 1
      #pragma omp target update to(trk[0:nevts*nb], hit[0:nevts*nb*nlayer])
@@ -678,18 +791,20 @@ int main (int argc, char* argv[]) {
          //
 		 //[DEBUG on Dec. 8, 2020] Moved gang-private variable declarations out of the device functions (propagateToZ and KalmanUpdate) to here.
    	     struct MP6x6F errorProp, temp;
-  		 struct MP3x3 inverse_temp;
-  		 struct MP3x6 kGain;
+		 struct MP2x2SF resErr_loc;
+		 struct MP2x6 kGain;
+		 struct MP2F res_loc;
   		 struct MP6x6SF newErr;
          const struct MPTRK* btracks = bTkC(trk, ie, ib);
          struct MPTRK* obtracks = bTk(outtrk, ie, ib);
+		 (*obtracks) = (*btracks);
          for(size_t layer=0; layer<nlayer; ++layer) {
             const struct MPHIT* bhits = bHit4(hit, ie, ib,layer);
          //
-            propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
+            propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par,
   	        &errorProp, &temp); // vectorized function
-            //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos);
-            KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr);
+            //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos, &inverse_temp, &kGain, &newErr);
+            KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov, &(*bhits).pos, &resErr_loc, &kGain, &res_loc, &newErr);
          }
        }
      }
@@ -718,17 +833,42 @@ int main (int argc, char* argv[]) {
    fp_z = fopen("output_z.txt", "w");
 #endif
 
+   int nnans = 0, nfail = 0;
    double avgx = 0, avgy = 0, avgz = 0;
    double avgpt = 0, avgphi = 0, avgtheta = 0;
    double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x3(outtrk,ie,it);
-       float y_ = y3(outtrk,ie,it);
-       float z_ = z3(outtrk,ie,it);
-       float pt_ = 1./ipt3(outtrk,ie,it);
-       float phi_ = phi3(outtrk,ie,it);
-       float theta_ = theta3(outtrk,ie,it);
+       double x_ = x3(outtrk,ie,it);
+       double y_ = y3(outtrk,ie,it);
+       double z_ = z3(outtrk,ie,it);
+       double pt_ = 1./ipt3(outtrk,ie,it);
+       double phi_ = phi3(outtrk,ie,it);
+       double theta_ = theta3(outtrk,ie,it);
+       double hx_ = x_pos3(hit,ie,it);
+       double hy_ = y_pos3(hit,ie,it);
+       double hz_ = z_pos3(hit,ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (isnan(x_) ||
+	   isnan(y_) ||
+	   isnan(z_) ||
+	   isnan(pt_) ||
+	   isnan(phi_) ||
+	   isnan(theta_)
+	   ) {
+	 nnans++;
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+           ) {
+	 nfail++;
+	 continue;
+       }
 #ifdef DUMP_OUTPUT
        fprintf(fp_x, "%f\n", x_);
        fprintf(fp_y, "%f\n", y_);
@@ -740,9 +880,6 @@ int main (int argc, char* argv[]) {
        avgx += x_;
        avgy += y_;
        avgz += z_;
-       float hx_ = x_pos3(hit,ie,it);
-       float hy_ = y_pos3(hit,ie,it);
-       float hz_ = z_pos3(hit,ie,it);
        avgdx += (x_-hx_)/x_;
        avgdy += (y_-hy_)/y_;
        avgdz += (z_-hz_)/z_;
@@ -770,15 +907,37 @@ int main (int argc, char* argv[]) {
    double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x3(outtrk,ie,it);
-       float y_ = y3(outtrk,ie,it);
-       float z_ = z3(outtrk,ie,it);
+       double x_ = x3(outtrk,ie,it);
+       double y_ = y3(outtrk,ie,it);
+       double z_ = z3(outtrk,ie,it);
+       double pt_ = 1./ipt3(outtrk,ie,it);
+       double phi_ = phi3(outtrk,ie,it);
+       double theta_ = theta3(outtrk,ie,it);
+       double hx_ = x_pos3(hit,ie,it);
+       double hy_ = y_pos3(hit,ie,it);
+       double hz_ = z_pos3(hit,ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (isnan(x_) ||
+	   isnan(y_) ||
+	   isnan(z_) ||
+	   isnan(pt_) ||
+	   isnan(phi_) ||
+	   isnan(theta_)
+	   ) {
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+           ) {
+         continue;
+       }
        stdx += (x_-avgx)*(x_-avgx);
        stdy += (y_-avgy)*(y_-avgy);
        stdz += (z_-avgz)*(z_-avgz);
-       float hx_ = x_pos3(hit,ie,it);
-       float hy_ = y_pos3(hit,ie,it);
-       float hz_ = z_pos3(hit,ie,it);
        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
@@ -814,6 +973,8 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
+   printf("number of tracks with nans=%i\n", nnans);
+   printf("number of tracks failed=%i\n", nfail);
 
 #pragma omp target exit data map(delete: trk[0:nevts*nb], hit[0:nevts*nb*nlayer], outtrk[0:nevts*nb])
    free(trk);

@@ -19,12 +19,8 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define NWARMUP 2
 #endif
 
-#ifndef EXCLUDE_H2D_TRANSFER
-#define MEASURE_H2D_TRANSFER
-#endif
-
-#ifndef EXCLUDE_D2H_TRANSFER
-#define MEASURE_D2H_TRANSFER
+#ifndef DEVICE_TYPE
+#define DEVICE_TYPE 1
 #endif
 
 #define FIXED_RSEED
@@ -43,7 +39,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define nevts 100
 #endif
 
-#define smear 0.1
+#define smear 0.0000001
 
 #ifndef NITER
 #define NITER 5 
@@ -54,7 +50,11 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef num_streams
+#if DEVICE_TYPE == 1
 #define num_streams 10 // set to 1 if using cpu
+#else
+#define num_streams 1 // set to 1 if using cpu
+#endif
 #endif
 
 #ifndef elementsperthready
@@ -62,23 +62,33 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #endif
 
 #ifndef elementsperthreadx
+#if DEVICE_TYPE == 1
+#define elementsperthreadx 1 // set to 1 if using gpu
+#else
 #define elementsperthreadx bsize // set to 1 if using gpu
+#endif
+#endif
+
+//how do we set multithreading on CPU in alpaka?
+
+#ifndef threadsperblockx
+#if DEVICE_TYPE == 1
+#define threadsperblockx bsize // set to 1 if using cpu blocks
+#else
+#define threadsperblockx 1 // set to 1 if using cpu blocks
+#endif
 #endif
 
 #ifndef threadsperblocky
-#define threadsperblocky 32 // set to 1 if using cpu blocks
-#endif
-
-#ifndef threadsperblockx
-#define threadsperblockx 1 // set to 1 if using cpu blocks
+#define threadsperblocky 1 // set to 1 if using cpu blocks
 #endif
 
 #ifndef blockspergridy
-#define blockspergridy 20
+#define blockspergridy nevts
 #endif
 
 #ifndef blockspergridx
-#define blockspergridx 15
+#define blockspergridx nb
 #endif
 
 
@@ -143,6 +153,18 @@ struct MP6x6F {
   float data[36*bsize];
 };
 
+struct MP2x2SF {
+  float data[3*bsize];
+};
+
+struct MP2x6 {
+  float data[12*bsize];
+};
+
+struct MP2F {
+  float data[2*bsize];
+};
+
 struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
@@ -183,7 +205,7 @@ ALPAKA_FN_ACC const MPTRK* bTk(const MPTRK* tracks, size_t ev, size_t ib) {
    return &(tracks[ib + nb*ev]);
 }
  
-ALPAKA_FN_ACC float q(const MP1I* bq, size_t it){
+ALPAKA_FN_ACC int q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 
@@ -278,35 +300,43 @@ MPTRK* prepareTracks(ATRK inputtrk) {
     for (size_t ib=0;ib<nb;++ib) {
       for (size_t it=0;it<bsize;++it) {
       	//par
-      	for (size_t ip=0;ip<6;++ip) {
-      	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
-      	}
-      	//cov
-      	for (size_t ip=0;ip<21;++ip) {
-      	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
-      	}
-      	//q
-      	result[ib + nb*ie].q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+	for (size_t ip=0;ip<6;++ip) {
+	  result[ib + nb*ie].par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
+	}
+	//cov, scale by factor 100
+	for (size_t ip=0;ip<21;++ip) {
+	  result[ib + nb*ie].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip]*100;
+	}
+	//q
+	result[ib + nb*ie].q.data[it] = inputtrk.q;//can't really smear this or fit will be wrong
       }
     }
   }
   return result;
 }
-MPHIT* prepareHits(AHIT inputhit) {
-//MPHIT* prepareHits(std::vector<AHIT>& inputhits) {
+
+MPHIT* prepareHits(std::vector<AHIT>& inputhits) {
   MPHIT* result = (MPHIT*) malloc(nlayer*nevts*nb*sizeof(MPHIT));
   for (size_t lay=0;lay<nlayer;++lay) {
+
+    size_t mylay = lay;
+    if (lay>=inputhits.size()) {
+      // int wraplay = inputhits.size()/lay;
+      exit(1);
+    }
+    AHIT& inputhit = inputhits[mylay];
+
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
         for (size_t it=0;it<bsize;++it) {
-        	//pos
-        	for (size_t ip=0;ip<3;++ip) {
-        	  result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
-        	}
-        	//cov
-        	for (size_t ip=0;ip<6;++ip) {
-        	  result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
-        	}
+	  //pos
+	  for (size_t ip=0;ip<3;++ip) {
+	    result[lay+nlayer*(ib + nb*ie)].pos.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.pos[ip];
+	  }
+	  //cov
+	  for (size_t ip=0;ip<6;++ip) {
+	    result[lay+nlayer*(ib + nb*ie)].cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputhit.cov[ip];
+	  }
         }
       }
     }
@@ -328,9 +358,12 @@ inline void ALPAKA_FN_ACC MultHelixPropEndcap(const MP6x6F* A, const MP6x6SF* B,
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+#if DEVICE_TYPE == 1
+  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ // for gpu
+#else
   #pragma omp simd
-  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
+  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#endif
     c[ 0*N+n] = b[ 0*N+n] + a[ 2*N+n]*b[ 3*N+n] + a[ 3*N+n]*b[ 6*N+n] + a[ 4*N+n]*b[10*N+n] + a[ 5*N+n]*b[15*N+n];
     c[ 1*N+n] = b[ 1*N+n] + a[ 2*N+n]*b[ 4*N+n] + a[ 3*N+n]*b[ 7*N+n] + a[ 4*N+n]*b[11*N+n] + a[ 5*N+n]*b[16*N+n];
     c[ 2*N+n] = b[ 3*N+n] + a[ 2*N+n]*b[ 5*N+n] + a[ 3*N+n]*b[ 8*N+n] + a[ 4*N+n]*b[12*N+n] + a[ 5*N+n]*b[17*N+n];
@@ -383,9 +416,12 @@ inline void ALPAKA_FN_ACC MultHelixPropTranspEndcap(const MP6x6F* A, const MP6x6
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+#if DEVICE_TYPE == 1
+  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ // for gpu
+#else
   #pragma omp simd
-  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
+  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#endif
     c[ 0*N+n] = b[ 0*N+n] + b[ 2*N+n]*a[ 2*N+n] + b[ 3*N+n]*a[ 3*N+n] + b[ 4*N+n]*a[ 4*N+n] + b[ 5*N+n]*a[ 5*N+n];
     c[ 1*N+n] = b[ 6*N+n] + b[ 8*N+n]*a[ 2*N+n] + b[ 9*N+n]*a[ 3*N+n] + b[10*N+n]*a[ 4*N+n] + b[11*N+n]*a[ 5*N+n];
     c[ 2*N+n] = b[ 7*N+n] + b[ 8*N+n]*a[ 8*N+n] + b[ 9*N+n]*a[ 9*N+n] + b[10*N+n]*a[10*N+n] + b[11*N+n]*a[11*N+n];
@@ -423,9 +459,12 @@ inline void ALPAKA_FN_ACC KalmanGainInv(const MP6x6SF* A, const MP3x3SF* B, MP3x
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+#if DEVICE_TYPE == 1
+  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ //for gpu
+#else
   #pragma omp simd
-  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ //for gpu
+  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#endif
     double det =
       ((a[0*N+n]+b[0*N+n])*(((a[ 6*N+n]+b[ 3*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[7*N+n]+b[4*N+n])))) -
       ((a[1*N+n]+b[1*N+n])*(((a[ 1*N+n]+b[ 1*N+n]) *(a[11*N+n]+b[5*N+n])) - ((a[7*N+n]+b[4*N+n]) *(a[2*N+n]+b[2*N+n])))) +
@@ -457,9 +496,12 @@ inline void ALPAKA_FN_ACC KalmanGain(const MP6x6SF* A, const MP3x3* B, MP3x6* C,
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+#if DEVICE_TYPE == 1
+  for (int n = threadIdx[1]; n < N; n+=threadExtent[1]){ // for gpu
+#else
   #pragma omp simd
-  //for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
-  for (int n = threadIdx[0]; n < N; n+=threadExtent[0]){ // for gpu
+  for (size_t n=0; n<ElementExtent[1]; n++){ // for cpu
+#endif
     c[ 0*N+n] = a[0*N+n]*b[0*N+n] + a[1*N+n]*b[3*N+n] + a[2*N+n]*b[6*N+n];
     c[ 1*N+n] = a[0*N+n]*b[1*N+n] + a[1*N+n]*b[4*N+n] + a[2*N+n]*b[7*N+n];
     c[ 2*N+n] = a[0*N+n]*b[2*N+n] + a[1*N+n]*b[5*N+n] + a[2*N+n]*b[8*N+n];
@@ -494,13 +536,16 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1]) { // for gpu
+#else
   #pragma omp simd
-  //for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) { // for gpu
+  for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+#endif
     const float xin = x(inPar,it);
     const float yin = y(inPar,it);
     const float zin = z(inPar,it);
-    const float ptin = 1./ipt(inPar,it);
+    const float ptin = 1.0f/ipt(inPar,it);
     const float phiin = phi(inPar,it);
     const float thetain = theta(inPar,it);
     const float xout = x(msP,it);
@@ -548,10 +593,152 @@ inline void ALPAKA_FN_ACC KalmanUpdate(MP6x6SF* trkErr, MP6F* inPar, const MP3x3
     setphi(inPar,it,phinew);
     settheta(inPar,it,thetanew);
   }
-  (*trkErr) = *newErr;
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1]) { // for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+#endif
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr->data[ i*bsize+it];
+    }
+  }
  }
 
-const float kfact= 100/3.8;
+template< typename TAcc>
+inline void ALPAKA_FN_ACC KalmanUpdate_v2(MP6x6SF* trkErr, MP6F* inPar, const MP3x3SF* hitErr, const MP3F* msP, MP2x2SF & resErr_loc, MP2x6 & kGain, MP2F &res_loc, MP6x6SF &newErr, TAcc const & acc){
+
+  //printf("kalman in: x=%7f, y=%7f, z=%7f, ipt=%7f, phi=%7f, theta=%7f \n", x    (inPar, 0), y    (inPar, 0), z    (inPar, 0), ipt  (inPar, 0), phi  (inPar, 0), theta(inPar, 0));
+
+  using Dim = alpaka::Dim<TAcc>;
+  using Idx = alpaka::Idx<TAcc>;
+  using Vec = alpaka::Vec<Dim, Idx>;
+  
+  Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
+  Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+  Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
+  {
+    resErr_loc.data[0*bsize+it] = trkErr->data[0*bsize+it] + hitErr->data[0*bsize+it];
+    resErr_loc.data[1*bsize+it] = trkErr->data[1*bsize+it] + hitErr->data[1*bsize+it];
+    resErr_loc.data[2*bsize+it] = trkErr->data[2*bsize+it] + hitErr->data[2*bsize+it];
+  }
+
+  // Matriplex::InvertCramerSym(resErr);
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
+  {
+    const double det = (double)resErr_loc.data[0*bsize+it] * resErr_loc.data[2*bsize+it] -
+                       (double)resErr_loc.data[1*bsize+it] * resErr_loc.data[1*bsize+it];
+    const float s   = 1.f / det;
+    const float tmp = s * resErr_loc.data[2*bsize+it];
+    resErr_loc.data[1*bsize+it] *= -s;
+    resErr_loc.data[2*bsize+it]  = s * resErr_loc.data[0*bsize+it];
+    resErr_loc.data[0*bsize+it]  = tmp;
+  }
+
+  // KalmanGain(psErr, resErr, K);
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
+  {
+     kGain.data[ 0*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 1*bsize+it] = trkErr->data[ 0*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 1*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[ 2*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 3*bsize+it] = trkErr->data[ 1*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 2*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[ 4*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 5*bsize+it] = trkErr->data[ 3*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 4*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[ 6*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 7*bsize+it] = trkErr->data[ 6*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[ 7*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[ 8*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[ 9*bsize+it] = trkErr->data[10*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[11*bsize+it]*resErr_loc.data[ 2*bsize+it];
+     kGain.data[10*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc.data[ 0*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc.data[ 1*bsize+it];
+     kGain.data[11*bsize+it] = trkErr->data[15*bsize+it]*resErr_loc.data[ 1*bsize+it] + trkErr->data[16*bsize+it]*resErr_loc.data[ 2*bsize+it];
+  }
+
+  // SubtractFirst2(msPar, psPar, res);
+  // MultResidualsAdd(K, psPar, res, outPar);
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
+  {
+    res_loc.data[0*bsize+it] =  x(msP,it) - x(inPar,it);
+    res_loc.data[1*bsize+it] =  y(msP,it) - y(inPar,it);
+
+    setx    (inPar, it, x    (inPar, it) + kGain.data[ 0*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 1*bsize+it] * res_loc.data[ 1*bsize+it]);
+    sety    (inPar, it, y    (inPar, it) + kGain.data[ 2*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 3*bsize+it] * res_loc.data[ 1*bsize+it]);
+    setz    (inPar, it, z    (inPar, it) + kGain.data[ 4*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 5*bsize+it] * res_loc.data[ 1*bsize+it]);
+    setipt  (inPar, it, ipt  (inPar, it) + kGain.data[ 6*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 7*bsize+it] * res_loc.data[ 1*bsize+it]);
+    setphi  (inPar, it, phi  (inPar, it) + kGain.data[ 8*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[ 9*bsize+it] * res_loc.data[ 1*bsize+it]);
+    settheta(inPar, it, theta(inPar, it) + kGain.data[10*bsize+it] * res_loc.data[ 0*bsize+it] + kGain.data[11*bsize+it] * res_loc.data[ 1*bsize+it]);
+    //note: if ipt changes sign we should update the charge, or we should get rid of the charge altogether and just use the sign of ipt
+  }
+
+  // squashPhiMPlex(outPar,N_proc); // ensure phi is between |pi|
+  // missing
+  // KHC(K, psErr, outErr);
+  // outErr.Subtract(psErr, outErr);
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
+  {
+     newErr.data[ 0*bsize+it] = kGain.data[ 0*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 1*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[ 1*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[ 2*bsize+it] = kGain.data[ 2*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 3*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[ 3*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[ 4*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[ 5*bsize+it] = kGain.data[ 4*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 5*bsize+it]*trkErr->data[ 4*bsize+it];
+     newErr.data[ 6*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[ 7*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[ 8*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 4*bsize+it];
+     newErr.data[ 9*bsize+it] = kGain.data[ 6*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[ 7*bsize+it]*trkErr->data[ 7*bsize+it];
+     newErr.data[10*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[11*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[12*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 4*bsize+it];
+     newErr.data[13*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[ 7*bsize+it];
+     newErr.data[14*bsize+it] = kGain.data[ 8*bsize+it]*trkErr->data[10*bsize+it] + kGain.data[ 9*bsize+it]*trkErr->data[11*bsize+it];
+     newErr.data[15*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 0*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 1*bsize+it];
+     newErr.data[16*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 1*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 2*bsize+it];
+     newErr.data[17*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 3*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 4*bsize+it];
+     newErr.data[18*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[ 6*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[ 7*bsize+it];
+     newErr.data[19*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[10*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[11*bsize+it];
+     newErr.data[20*bsize+it] = kGain.data[10*bsize+it]*trkErr->data[15*bsize+it] + kGain.data[11*bsize+it]*trkErr->data[16*bsize+it];
+  }
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1])  //for gpu
+#else
+  #pragma omp simd
+  for (size_t it=0; it<ElementExtent[1]; it++) // for cpu
+#endif
+  {
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErr->data[ i*bsize+it] = trkErr->data[ i*bsize+it] - newErr.data[ i*bsize+it];
+    }    
+  }
+}
+
+const float kfact= 100./(-0.299792458*3.8112);
 template< typename TAcc>
 inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, const MP1I* inChg, const MP3F* msP, MP6x6SF* outErr, MP6F* outPar, MP6x6F* errorProp, MP6x6F* temp, TAcc const & acc) {
   using Dim = alpaka::Dim<TAcc>;
@@ -561,26 +748,29 @@ inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, 
   Vec const ElementExtent = alpaka::getWorkDiv<alpaka::Thread, alpaka::Elems>(acc);
   Vec const threadIdx    = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
   Vec const threadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+#if DEVICE_TYPE == 1
+  for (size_t it=threadIdx[1];it<bsize;it+=threadExtent[1]) {	 //for gpu
+#else
   #pragma omp simd
-  //for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
-  for (size_t it=threadIdx[0];it<bsize;it+=threadExtent[0]) {	 //for gpu
+  for (size_t it=0; it<ElementExtent[1]; it++){ // for cpu
+#endif
     const float zout = z(msP,it);
     const float k = q(inChg,it)*kfact;//100/3.8;
     const float deltaZ = zout - z(inPar,it);
-    const float pt = 1./ipt(inPar,it);
+    const float pt = 1.0f/ipt(inPar,it);
     const float cosP = cosf(phi(inPar,it));
     const float sinP = sinf(phi(inPar,it));
     const float cosT = cosf(theta(inPar,it));
     const float sinT = sinf(theta(inPar,it));
     const float pxin = cosP*pt;
     const float pyin = sinP*pt;
-    const float icosT = 1.0/cosT;
+    const float icosT = 1.0f/cosT;
     const float icosTk = icosT/k;
     const float alpha = deltaZ*sinT*ipt(inPar,it)*icosTk;
     const float sina = sinf(alpha); // this can be approximated;
     const float cosa = cosf(alpha); // this can be approximated;
-    setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.-cosa)) );
-    sety(outPar,it, y(inPar,it) + k*(pyin*sina + pxin*(1.-cosa)) );
+    setx(outPar,it, x(inPar,it) + k*(pxin*sina - pyin*(1.0f-cosa)) );
+    sety(outPar,it, y(inPar,it) + k*(pyin*sina + pxin*(1.0f-cosa)) );
     setz(outPar,it,zout);
     setipt(outPar,it, ipt(inPar,it));
     setphi(outPar,it, phi(inPar,it)+alpha );
@@ -589,14 +779,16 @@ inline void ALPAKA_FN_ACC propagateToZ(const MP6x6SF* inErr, const MP6F* inPar, 
     const float sCosPsina = sinf(cosP*sina);
     const float cCosPsina = cosf(cosP*sina);
     
-    for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.;
+    for (size_t i=0;i<6;++i) errorProp->data[bsize*PosInMtrx(i,i,6) + it] = 1.f;
+    //[Dec. 21, 2022] Added to have the same pattern as the cudauvm version.
+    errorProp->data[bsize*PosInMtrx(0,1,6) + it] = 0.0f;
     errorProp->data[bsize*PosInMtrx(0,2,6) + it] = cosP*sinT*(sinP*cosa*sCosPsina-cosa)*icosT;
-    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.-cCosPsina));
-    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.-sinP*sCosPsina)*(icosT*icosT);
+    errorProp->data[bsize*PosInMtrx(0,3,6) + it] = cosP*sinT*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*pt)-k*(cosP*sina-sinP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(0,4,6) + it] = (k*pt)*(-sinP*sina+sinP*sinP*sina*sCosPsina-cosP*(1.0f-cCosPsina));
+    errorProp->data[bsize*PosInMtrx(0,5,6) + it] = cosP*deltaZ*cosa*(1.0f-sinP*sCosPsina)*(icosT*icosT);
     errorProp->data[bsize*PosInMtrx(1,2,6) + it] = cosa*sinT*(cosP*cosP*sCosPsina-sinP)*icosT;
-    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.-cCosPsina))*(pt*pt);
-    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
+    errorProp->data[bsize*PosInMtrx(1,3,6) + it] = sinT*deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*pt)-k*(sinP*sina+cosP*(1.0f-cCosPsina))*(pt*pt);
+    errorProp->data[bsize*PosInMtrx(1,4,6) + it] = (k*pt)*(-sinP*(1.0f-cCosPsina)-sinP*cosP*sina*sCosPsina+cosP*sina);
     errorProp->data[bsize*PosInMtrx(1,5,6) + it] = deltaZ*cosa*(cosP*cosP*sCosPsina+sinP)*(icosT*icosT);
     errorProp->data[bsize*PosInMtrx(4,2,6) + it] = -ipt(inPar,it)*sinT*(icosTk);
     errorProp->data[bsize*PosInMtrx(4,3,6) + it] = sinT*deltaZ*(icosTk);
@@ -630,8 +822,12 @@ public:
         
        auto & errorProp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
        auto & temp = alpaka::declareSharedVar<MP6x6F,__COUNTER__>(acc);
-       auto & inverse_temp = alpaka::declareSharedVar<MP3x3,__COUNTER__>(acc);
-       auto & kGain = alpaka::declareSharedVar<MP3x6,__COUNTER__>(acc);
+       // auto & inverse_temp = alpaka::declareSharedVar<MP3x3,__COUNTER__>(acc);
+       // auto & kGain = alpaka::declareSharedVar<MP3x6,__COUNTER__>(acc);
+       // auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
+       auto & resErr_loc = alpaka::declareSharedVar<MP2x2SF,__COUNTER__>(acc);
+       auto & kGain = alpaka::declareSharedVar<MP2x6,__COUNTER__>(acc);
+       auto & res_loc = alpaka::declareSharedVar<MP2F,__COUNTER__>(acc);
        auto & newErr = alpaka::declareSharedVar<MP6x6SF,__COUNTER__>(acc);
 
       int ie_range;  
@@ -642,11 +838,13 @@ public:
      for (size_t ib=blockIdx[1];ib<nb;ib+=blockExtent[1]) { //loop for TbbBlocks & Omp2Blocks & GPU
            const MPTRK* btracks = bTk(trk, ie, ib);
            MPTRK* obtracks = bTk(outtrk, ie, ib);
+           (*obtracks) = (*btracks);
            for( size_t layer=0; layer<nlayer;++layer){
               const MPHIT* bhits = bHit(hit, ie, ib,layer);
                //struct MP6x6F errorProp, temp;
-              propagateToZ(&(*btracks).cov, &(*btracks).par, &(*btracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp, acc); // vectorized function
-              KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,&inverse_temp, &kGain, &(newErr), acc);
+              propagateToZ(&(*obtracks).cov, &(*obtracks).par, &(*obtracks).q, &(*bhits).pos, &(*obtracks).cov, &(*obtracks).par, &errorProp, &temp, acc); // vectorized function
+              //KalmanUpdate(&(*obtracks).cov,&(*obtracks).par,&(*bhits).cov,&(*bhits).pos,&inverse_temp, &kGain, &(newErr), acc);
+	      KalmanUpdate_v2(&(*obtracks).cov, &(*obtracks).par, &(*bhits).cov,  &(*bhits).pos, resErr_loc, kGain, res_loc, newErr, acc);
        }
      }
    }
@@ -659,12 +857,23 @@ int main (int argc, char* argv[]) {
    using Dim = alpaka::DimInt<2u>;
    using Idx = std::size_t;
    // using accelerator
+#if DEVICE_TYPE == 1
    using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
-   //using Acc = alpaka::AccCpuSerial<Dim, Idx>;
-   //using Acc = alpaka::AccCpuOmp2Blocks<Dim, Idx>;
-   //using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
+#elif DEVICE_TYPE == 2
+   using Acc = alpaka::AccCpuSerial<Dim, Idx>;
+#elif DEVICE_TYPE == 3
+   using Acc = alpaka::AccCpuOmp2Blocks<Dim, Idx>;
+#elif DEVICE_TYPE == 4
+   using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
+#endif
    using WorkDiv = alpaka::WorkDivMembers<Dim, Idx>;
    using Vec = alpaka::Vec<Dim, Idx>;
+
+#ifdef include_data
+  printf("Measure Both Memory Transfer Times and Compute Times!\n");
+#else
+  printf("Measure Compute Times Only!\n");
+#endif
  
    std::cout << "Using alpaka accelerator: " << alpaka::getAccName<Acc>() << std::endl;
     
@@ -697,26 +906,24 @@ int main (int argc, char* argv[]) {
 
    printf("streams: %d, blockx: %d, blocky: %d, thready: %d, bsize = %i\n",num_streams,blockspergridx,blockspergridy,threadsperblocky,bsize);
     
-   ATRK inputtrk = {
-     {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
-     {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
-      6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
-      0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348},
-     1
-   };
+#include "input_track.h"
+   std::vector<AHIT> inputhits{inputhit25,inputhit24,inputhit23,inputhit22,inputhit21,inputhit20,inputhit19,inputhit18,inputhit17,
+                               inputhit16,inputhit15,inputhit14,inputhit13,inputhit12,inputhit11,inputhit10,inputhit09,inputhit08,
+                               inputhit07,inputhit06,inputhit05,inputhit04,inputhit03,inputhit02,inputhit01,inputhit00};
 
-   AHIT inputhit = {
-     {-20.7824649810791, -12.24150276184082, 57.8067626953125},
-     {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
-   };
-
-   printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
+   printf("track in pos: x=%f, y=%f, z=%f, r=%f, pt=%f, phi=%f, theta=%f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2],
+	  sqrtf(inputtrk.par[0]*inputtrk.par[0] + inputtrk.par[1]*inputtrk.par[1]),
+	  1./inputtrk.par[3], inputtrk.par[4], inputtrk.par[5]);
+  
    printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
-   printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
 
-   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   for (size_t lay=0; lay<nlayer; lay++){
+     printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
+   }
+
+   printf("produce nevts=%i ntrks=%i smearing by=%2.1e \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
 
    long setup_start, setup_stop;
@@ -724,6 +931,10 @@ int main (int argc, char* argv[]) {
 
    gettimeofday(&timecheck, NULL);
    setup_start = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
+#ifdef FIXED_RSEED
+   //[DEBUG by Seyong on Dec. 28, 2020] add an explicit srand(1) call to generate fixed inputs for better debugging.
+   srand(1);
+#endif
 
    auto chunkSize = [&](int s) {
      return s < num_streams ? stream_chunk : stream_remainder;
@@ -769,7 +980,7 @@ int main (int argc, char* argv[]) {
 
    // prepare input data for computations, all on host
    MPTRK* input_trk = prepareTracks(inputtrk);
-   MPHIT* input_hit = prepareHits(inputhit);
+   MPHIT* input_hit = prepareHits(inputhits);
    MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK)); 
 
    MPTRK* trks_host[num_streams];
@@ -805,7 +1016,7 @@ int main (int argc, char* argv[]) {
  
    printf("Number of struct MPTRK trk[] = %d\n", nevts*nb);
    printf("Number of struct MPTRK outtrk[] = %d\n", nevts*nb);
-   printf("Number of struct struct MPHIT hit[] = %d\n", nevts*nb);
+   printf("Number of struct struct MPHIT hit[] = %d\n", nlayer*nevts*nb);
   
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
@@ -823,9 +1034,9 @@ int main (int argc, char* argv[]) {
      std::cout<< msg <<std::endl;
      double wall_time = 0;
 
-#ifdef MEASURE_H2D_TRANSFER
+#ifdef include_data
+     auto wall_start = std::chrono::high_resolution_clock::now();
      for(int itr=0; itr<nIters; itr++) {
-       auto wall_start = std::chrono::high_resolution_clock::now();
        for (int s = 0; s<num_streams;s++) {
          // HtoD
          alpaka::memcpy(queue[s], trk_bufDevs[s], trk_bufHosts[s], extent_trk[s]);
@@ -833,18 +1044,16 @@ int main (int argc, char* argv[]) {
        for (int s = 0; s<num_streams;s++) {
          alpaka::enqueue(queue[s], Kernel(s));
        }
-#ifdef MEASURE_D2H_TRANSFER
        for (int s = 0; s<num_streams;s++) {
          // DtoH
          alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
        }
-#endif
-       for (int s = 0; s<num_streams;s++) {
-        alpaka::wait(queue[s]); 
-        }
-       auto wall_stop = std::chrono::high_resolution_clock::now();
-       wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
      }
+     for (int s = 0; s<num_streams;s++) {
+        alpaka::wait(queue[s]); 
+      }
+     auto wall_stop = std::chrono::high_resolution_clock::now();
+     wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
 #else
      for (int s = 0; s<num_streams;s++) {
          // HtoD
@@ -854,26 +1063,20 @@ int main (int argc, char* argv[]) {
      for (int s = 0; s<num_streams;s++) {
      alpaka::wait(queue[s]); 
      }
+     auto wall_start = std::chrono::high_resolution_clock::now();
      for(int itr=0; itr<nIters; itr++) {
-       auto wall_start = std::chrono::high_resolution_clock::now();
        for (int s = 0; s<num_streams;s++) {
          alpaka::enqueue(queue[s], Kernel(s));
        }
-#ifdef MEASURE_D2H_TRANSFER
-       for (int s = 0; s<num_streams;s++) {
-         // DtoH
-         alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
-       }
-#endif
-       for (int s = 0; s<num_streams;s++) {
-       alpaka::wait(queue[s]); 
-      }
-       auto wall_stop = std::chrono::high_resolution_clock::now();
-       wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
      }
+     for (int s = 0; s<num_streams;s++) {
+       alpaka::wait(queue[s]); 
+     }
+     auto wall_stop = std::chrono::high_resolution_clock::now();
+     wall_time += static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(wall_stop-wall_start).count()) / 1e6;
 #endif
 
-#ifndef MEASURE_D2H_TRANSFER
+#ifndef include_data
      for (int s = 0; s<num_streams;s++) {
        // DtoH
        alpaka::memcpy(queue[s], outtrk_bufHosts[s], outtrk_bufDevs[s], extent_trk[s]); 
@@ -883,23 +1086,12 @@ int main (int argc, char* argv[]) {
      return wall_time;
    };
 
-   doWork("Warming up", NWARMUP);
+   //doWork("Warming up", NWARMUP);
    auto wall_time = doWork("Launching", NITER);
-
-#ifdef MEASURE_H2D_TRANSFER
-   printf("Measuring H2D Transfer\n");
-#else
-   printf("Excluding H2D Transfer\n");
-#endif
-#ifdef MEASURE_D2H_TRANSFER
-   printf("Measuring D2H Transfer\n");
-#else
-   printf("Excluding D2H Transfer\n");
-#endif
 
    printf("setup time time=%f (s)\n", (setup_stop-setup_start)*0.001);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
-   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER), nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, 1);
+   printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER), nevts, ntrks, bsize, nb, wall_time, (setup_stop-setup_start)*0.001, num_streams);
 
    int offset_trk = 0;
    for(int s=0;s<num_streams;s++){
@@ -907,66 +1099,110 @@ int main (int argc, char* argv[]) {
     offset_trk += chunkSize(s);
    }
 
-   float avgx = 0, avgy = 0, avgz = 0;
-   float avgpt = 0, avgphi = 0, avgtheta = 0;
-   float avgdx = 0, avgdy = 0, avgdz = 0;
+   int nnans = 0, nfail = 0;
+   double avgx = 0, avgy = 0, avgz = 0;
+   double avgpt = 0, avgphi = 0, avgtheta = 0;
+   double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
-       float pt_ = 1./ipt(outtrk,ie,it);
-       float phi_ = phi(outtrk,ie,it);
-       float theta_ = theta(outtrk,ie,it);
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = inputhits[nlayer-1].pos[0];
+       double hy_ = inputhits[nlayer-1].pos[1];
+       double hz_ = inputhits[nlayer-1].pos[2];
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
+	   ) {
+	 nnans++;
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+          ) {
+         nfail++;
+         continue;
+       }
        avgpt += pt_;
        avgphi += phi_;
        avgtheta += theta_;
        avgx += x_;
        avgy += y_;
        avgz += z_;
-       float hx_ = x(input_hit,ie,it);
-       float hy_ = y(input_hit,ie,it);
-       float hz_ = z(input_hit,ie,it);
        avgdx += (x_-hx_)/x_;
        avgdy += (y_-hy_)/y_;
        avgdz += (z_-hz_)/z_;
      }
    }
-   avgpt = avgpt/float(nevts*ntrks);
-   avgphi = avgphi/float(nevts*ntrks);
-   avgtheta = avgtheta/float(nevts*ntrks);
-   avgx = avgx/float(nevts*ntrks);
-   avgy = avgy/float(nevts*ntrks);
-   avgz = avgz/float(nevts*ntrks);
-   avgdx = avgdx/float(nevts*ntrks);
-   avgdy = avgdy/float(nevts*ntrks);
-   avgdz = avgdz/float(nevts*ntrks);
+   avgpt = avgpt/double(nevts*ntrks);
+   avgphi = avgphi/double(nevts*ntrks);
+   avgtheta = avgtheta/double(nevts*ntrks);
+   avgx = avgx/double(nevts*ntrks);
+   avgy = avgy/double(nevts*ntrks);
+   avgz = avgz/double(nevts*ntrks);
+   avgdx = avgdx/double(nevts*ntrks);
+   avgdy = avgdy/double(nevts*ntrks);
+   avgdz = avgdz/double(nevts*ntrks);
 
-   float stdx = 0, stdy = 0, stdz = 0;
-   float stddx = 0, stddy = 0, stddz = 0;
+   double stdx = 0, stdy = 0, stdz = 0;
+   double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(outtrk,ie,it);
-       float y_ = y(outtrk,ie,it);
-       float z_ = z(outtrk,ie,it);
+       double x_ = x(outtrk,ie,it);
+       double y_ = y(outtrk,ie,it);
+       double z_ = z(outtrk,ie,it);
+       double pt_ = 1./ipt(outtrk,ie,it);
+       double phi_ = phi(outtrk,ie,it);
+       double theta_ = theta(outtrk,ie,it);
+       double hx_ = inputhits[nlayer-1].pos[0];
+       double hy_ = inputhits[nlayer-1].pos[1];
+       double hz_ = inputhits[nlayer-1].pos[2];
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
+	   ) {
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+          ) {
+         continue;
+       }
        stdx += (x_-avgx)*(x_-avgx);
        stdy += (y_-avgy)*(y_-avgy);
        stdz += (z_-avgz)*(z_-avgz);
-       float hx_ = x(input_hit,ie,it);
-       float hy_ = y(input_hit,ie,it);
-       float hz_ = z(input_hit,ie,it);
        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
      }
    }
 
-   stdx = sqrtf(stdx/float(nevts*ntrks));
-   stdy = sqrtf(stdy/float(nevts*ntrks));
-   stdz = sqrtf(stdz/float(nevts*ntrks));
-   stddx = sqrtf(stddx/float(nevts*ntrks));
-   stddy = sqrtf(stddy/float(nevts*ntrks));
-   stddz = sqrtf(stddz/float(nevts*ntrks));
+   stdx = sqrtf(stdx/double(nevts*ntrks));
+   stdy = sqrtf(stdy/double(nevts*ntrks));
+   stdz = sqrtf(stdz/double(nevts*ntrks));
+   stddx = sqrtf(stddx/double(nevts*ntrks));
+   stddy = sqrtf(stddy/double(nevts*ntrks));
+   stddz = sqrtf(stddz/double(nevts*ntrks));
 
    printf("track x avg=%f std/avg=%f\n", avgx, fabs(stdx/avgx));
    printf("track y avg=%f std/avg=%f\n", avgy, fabs(stdy/avgy));
@@ -977,6 +1213,8 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
+   printf("number of tracks with nans=%i\n", nnans);
+   printf("number of tracks failed=%i\n", nfail);
 
    return 0;
 }

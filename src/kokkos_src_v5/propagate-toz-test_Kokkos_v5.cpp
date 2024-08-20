@@ -13,6 +13,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 
 #include <Kokkos_Core.hpp>
 
+//#define DUMP_OUTPUT
 #define FIXED_RSEED
 
 #ifndef bsize
@@ -26,7 +27,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #ifndef nevts
 #define nevts 100
 #endif
-#define smear 0.1
+#define smear 0.0000001
 
 #ifndef NITER
 #define NITER 5
@@ -47,6 +48,13 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
 #define num_streams 1
 #endif
 
+#ifndef prepin_hostmem
+#define prepin_hostmem 0
+#endif
+
+#define ExecSpace Kokkos::DefaultExecutionSpace
+#define MemSpace ExecSpace::memory_space
+
 #define loadData(dst, src, tid, itrsize) \
   _Pragma("unroll")                      \
   for(int ip=0; ip<itrsize; ++ip) {      \
@@ -57,7 +65,7 @@ icc propagate-toz-test.C -o propagate-toz-test.exe -fopenmp -O3
   _Pragma("unroll")                      \
   for(int ip=0; ip<itrsize; ++ip) {      \
     dst[ip*bsize + tid] = src[ip];       \
-  }                               
+  }         
 
 #define iparX     0
 #define iparY     1
@@ -80,11 +88,12 @@ size_t SymOffsets66(size_t i) {
   return offs[i];
 }
 
+
 struct ATRK {
   float par[6];
   float cov[21];
   int q;
-  //  int hitidx[22];
+//  int hitidx[22];
 };
 
 struct AHIT {
@@ -128,11 +137,23 @@ struct MP6x6F {
   float data[36*bsize];
 };
 
+struct MP2x2SF {
+  float data[3*bsize];
+};
+
+struct MP2x6 {
+  float data[12*bsize];
+};
+
+struct MP2F {
+  float data[2*bsize];
+};
+
 struct MPTRK {
   MP6F    par;
   MP6x6SF cov;
   MP1I    q;
-  //  MP22I   hitidx;
+//  MP22I   hitidx;
 };
 
 struct MPHIT {
@@ -175,6 +196,18 @@ struct MP6x6F_ {
   float data[36];
 };
 
+struct MP2x2SF_ {
+  float data[3];
+};
+
+struct MP2x6_ {
+  float data[12];
+};
+
+struct MP2F_ {
+  float data[2];
+};
+
 struct MPTRK_ {
   MP6F_    par;
   MP6x6SF_ cov;
@@ -186,6 +219,7 @@ struct MPHIT_ {
   MP3F_    pos;
   MP3x3SF_ cov;
 };
+
 
 float randn(float mu, float sigma) {
   float U1, U2, W, mult;
@@ -199,11 +233,11 @@ float randn(float mu, float sigma) {
     U2 = -1 + ((float) rand () / RAND_MAX) * 2;
     W = pow (U1, 2) + pow (U2, 2);
   }
-  while (W >= 1 || W == 0); 
+  while (W >= 1 || W == 0);
   mult = sqrt ((-2 * log (W)) / W);
   X1 = U1 * mult;
-  X2 = U2 * mult; 
-  call = !call; 
+  X2 = U2 * mult;
+  call = !call;
   return (mu + sigma * (float) X1);
 }
 
@@ -219,7 +253,7 @@ KOKKOS_FUNCTION MPTRK* bTk(const Kokkos::View<MPTRK*> &tracks, size_t ev, size_t
   return &(tracks(ib + nb*ev));
 }
 
-KOKKOS_FUNCTION float q(const MP1I* bq, size_t it){
+KOKKOS_FUNCTION int q(const MP1I* bq, size_t it){
   return (*bq).data[it];
 }
 //
@@ -329,8 +363,8 @@ KOKKOS_FUNCTION float z(const Kokkos::View<MPHIT*> &hits, size_t it)    { return
 //
 KOKKOS_FUNCTION float pos(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk, size_t ipar){
   size_t ib = tk/bsize;
-  //[DEBUG on Dec. 22, 2020] add 4th argument(nlayer-1) to bHit() below.
-  const MPHIT* bhits = bHit(hits, ev, ib,nlayer-1);
+  //[DEBUG by Seyong on Dec. 28, 2020] add 4th argument(nlayer-1) to bHit() below.
+  const MPHIT* bhits = bHit(hits, ev, ib, nlayer-1);
   size_t it = tk % bsize;
   return pos(bhits,it,ipar);
 }
@@ -338,8 +372,11 @@ KOKKOS_FUNCTION float x(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk) 
 KOKKOS_FUNCTION float y(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 1); }
 KOKKOS_FUNCTION float z(const Kokkos::View<MPHIT*> &hits, size_t ev, size_t tk)    { return pos(hits, ev, tk, 2); }
 
-Kokkos::View<MPTRK*>::HostMirror prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK*> &trk) {
-  auto result = Kokkos::create_mirror_view(trk);
+#if prepin_hostmem == 1
+void prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> &result) {
+#else
+void prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK*>::HostMirror &result) {
+#endif
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t ie=0;ie<nevts;++ie) {
     for (size_t ib=0;ib<nb;++ib) {
@@ -348,22 +385,27 @@ Kokkos::View<MPTRK*>::HostMirror prepareTracks(ATRK inputtrk, Kokkos::View<MPTRK
     	for (size_t ip=0;ip<6;++ip) {
     	  result(ib + nb*ie).par.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.par[ip];
     	}
-    	//cov
+    	//cov, scale by factor 100
     	for (size_t ip=0;ip<21;++ip) {
-    	  result(ib + nb*ie).cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip];
+    	  result(ib + nb*ie).cov.data[it + ip*bsize] = (1+smear*randn(0,1))*inputtrk.cov[ip]*100;
     	}
     	//q
-    	result(ib + nb*ie).q.data[it] = inputtrk.q-2*ceil(-0.5 + (float)rand() / RAND_MAX);//fixme check
+    	result(ib + nb*ie).q.data[it] = inputtrk.q;//can't really smear this or fit will be wrong
       }
     }
   }
-  return result;
 }
 
-Kokkos::View<MPHIT*>::HostMirror prepareHits(AHIT inputhit, Kokkos::View<MPHIT*> &hit) {
-  auto result = Kokkos::create_mirror_view(hit);
+#if prepin_hostmem == 1
+void prepareHits(AHIT* inputhits, Kokkos::View<MPHIT*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> &result) {
+#else
+void prepareHits(AHIT* inputhits, Kokkos::View<MPHIT*>::HostMirror &result) {
+#endif
   // store in element order for bunches of bsize matrices (a la matriplex)
   for (size_t lay=0;lay<nlayer;++lay) {
+
+    struct AHIT inputhit = inputhits[lay];
+
     for (size_t ie=0;ie<nevts;++ie) {
       for (size_t ib=0;ib<nb;++ib) {
         for (size_t it=0;it<bsize;++it) {
@@ -379,7 +421,6 @@ Kokkos::View<MPHIT*>::HostMirror prepareHits(AHIT inputhit, Kokkos::View<MPHIT*>
       }
     }
   }
-  return result;
 }
 
 #define N bsize
@@ -583,7 +624,110 @@ KOKKOS_FUNCTION void KalmanUpdate(MP6x6SF_* trkErr, MP6F_* inPar, const MP3x3SF_
   });
 }
 
-constexpr float kfact = 100/3.8;
+template <typename member_type>
+KOKKOS_FUNCTION void KalmanUpdate_v2(MP6x6SF_* trkErr, MP6F_* inPar, const MP3x3SF_* hitErr, const MP3F_* msP, const member_type& teamMember){
+   struct MP2x2SF_ resErr_loc; 
+   struct MP2x6_ kGain;
+   struct MP2F_ res_loc;
+   struct MP6x6SF_ newErr;
+
+   float *inParData = inPar->data;
+   float *trkErrData = trkErr->data;
+   const float *hitErrData = hitErr->data;
+   // AddIntoUpperLeft2x2(psErr, msErr, resErr);
+   Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it)
+   {
+     resErr_loc.data[0] = trkErrData[0] + hitErrData[0];
+     resErr_loc.data[1] = trkErrData[1] + hitErrData[1];
+     resErr_loc.data[2] = trkErrData[2] + hitErrData[2];
+   });
+
+   // Matriplex::InvertCramerSym(resErr);
+   Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it)
+   {
+     const double det = (double)resErr_loc.data[0] * resErr_loc.data[2] -
+                        (double)resErr_loc.data[1] * resErr_loc.data[1];
+     const float s   = 1.f / det;
+     const float tmp = s * resErr_loc.data[2];
+     resErr_loc.data[1] *= -s;
+     resErr_loc.data[2]  = s * resErr_loc.data[0];
+     resErr_loc.data[0]  = tmp;
+   });
+
+   // KalmanGain(psErr, resErr, K);
+   Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it)
+   {
+      kGain.data[ 0] = trkErrData[ 0]*resErr_loc.data[ 0] + trkErrData[ 1]*resErr_loc.data[ 1];
+      kGain.data[ 1] = trkErrData[ 0]*resErr_loc.data[ 1] + trkErrData[ 1]*resErr_loc.data[ 2];
+      kGain.data[ 2] = trkErrData[ 1]*resErr_loc.data[ 0] + trkErrData[ 2]*resErr_loc.data[ 1];
+      kGain.data[ 3] = trkErrData[ 1]*resErr_loc.data[ 1] + trkErrData[ 2]*resErr_loc.data[ 2];
+      kGain.data[ 4] = trkErrData[ 3]*resErr_loc.data[ 0] + trkErrData[ 4]*resErr_loc.data[ 1];
+      kGain.data[ 5] = trkErrData[ 3]*resErr_loc.data[ 1] + trkErrData[ 4]*resErr_loc.data[ 2];
+      kGain.data[ 6] = trkErrData[ 6]*resErr_loc.data[ 0] + trkErrData[ 7]*resErr_loc.data[ 1];
+      kGain.data[ 7] = trkErrData[ 6]*resErr_loc.data[ 1] + trkErrData[ 7]*resErr_loc.data[ 2];
+      kGain.data[ 8] = trkErrData[10]*resErr_loc.data[ 0] + trkErrData[11]*resErr_loc.data[ 1];
+      kGain.data[ 9] = trkErrData[10]*resErr_loc.data[ 1] + trkErrData[11]*resErr_loc.data[ 2];
+      kGain.data[10] = trkErrData[15]*resErr_loc.data[ 0] + trkErrData[16]*resErr_loc.data[ 1];
+      kGain.data[11] = trkErrData[15]*resErr_loc.data[ 1] + trkErrData[16]*resErr_loc.data[ 2];
+   });
+
+   // SubtractFirst2(msPar, psPar, res);
+   // MultResidualsAdd(K, psPar, res, outPar);
+   Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it)
+   {
+     const float *msPData = msP->data;
+     res_loc.data[0] =  msPData[iparX] - inParData[iparX];
+     res_loc.data[1] =  msPData[iparY] - inParData[iparY];
+
+     inParData[iparX] = inParData[iparX] + kGain.data[ 0] * res_loc.data[ 0] + kGain.data[ 1] * res_loc.data[ 1];
+     inParData[iparY] = inParData[iparY] + kGain.data[ 2] * res_loc.data[ 0] + kGain.data[ 3] * res_loc.data[ 1];
+     inParData[iparZ] = inParData[iparZ] + kGain.data[ 4] * res_loc.data[ 0] + kGain.data[ 5] * res_loc.data[ 1];
+     inParData[iparIpt] = inParData[iparIpt] + kGain.data[ 6] * res_loc.data[ 0] + kGain.data[ 7] * res_loc.data[ 1];
+     inParData[iparPhi] = inParData[iparPhi] + kGain.data[ 8] * res_loc.data[ 0] + kGain.data[ 9] * res_loc.data[ 1];
+     inParData[iparTheta] = inParData[iparTheta] + kGain.data[10] * res_loc.data[ 0] + kGain.data[11] * res_loc.data[ 1];
+     //note: if ipt changes sign we should update the charge, or we should get rid of the charge altogether and just use the sign of ipt
+   });
+
+   // squashPhiMPlex(outPar,N_proc); // ensure phi is between |pi|
+   // missing
+
+   // KHC(K, psErr, outErr);
+   // outErr.Subtract(psErr, outErr);
+   Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it)
+   {
+      newErr.data[ 0] = kGain.data[ 0]*trkErrData[ 0] + kGain.data[ 1]*trkErrData[ 1];
+      newErr.data[ 1] = kGain.data[ 2]*trkErrData[ 0] + kGain.data[ 3]*trkErrData[ 1];
+      newErr.data[ 2] = kGain.data[ 2]*trkErrData[ 1] + kGain.data[ 3]*trkErrData[ 2];
+      newErr.data[ 3] = kGain.data[ 4]*trkErrData[ 0] + kGain.data[ 5]*trkErrData[ 1];
+      newErr.data[ 4] = kGain.data[ 4]*trkErrData[ 1] + kGain.data[ 5]*trkErrData[ 2];
+      newErr.data[ 5] = kGain.data[ 4]*trkErrData[ 3] + kGain.data[ 5]*trkErrData[ 4];
+      newErr.data[ 6] = kGain.data[ 6]*trkErrData[ 0] + kGain.data[ 7]*trkErrData[ 1];
+      newErr.data[ 7] = kGain.data[ 6]*trkErrData[ 1] + kGain.data[ 7]*trkErrData[ 2];
+      newErr.data[ 8] = kGain.data[ 6]*trkErrData[ 3] + kGain.data[ 7]*trkErrData[ 4];
+      newErr.data[ 9] = kGain.data[ 6]*trkErrData[ 6] + kGain.data[ 7]*trkErrData[ 7];
+      newErr.data[10] = kGain.data[ 8]*trkErrData[ 0] + kGain.data[ 9]*trkErrData[ 1];
+      newErr.data[11] = kGain.data[ 8]*trkErrData[ 1] + kGain.data[ 9]*trkErrData[ 2];
+      newErr.data[12] = kGain.data[ 8]*trkErrData[ 3] + kGain.data[ 9]*trkErrData[ 4];
+      newErr.data[13] = kGain.data[ 8]*trkErrData[ 6] + kGain.data[ 9]*trkErrData[ 7];
+      newErr.data[14] = kGain.data[ 8]*trkErrData[10] + kGain.data[ 9]*trkErrData[11];
+      newErr.data[15] = kGain.data[10]*trkErrData[ 0] + kGain.data[11]*trkErrData[ 1];
+      newErr.data[16] = kGain.data[10]*trkErrData[ 1] + kGain.data[11]*trkErrData[ 2];
+      newErr.data[17] = kGain.data[10]*trkErrData[ 3] + kGain.data[11]*trkErrData[ 4];
+      newErr.data[18] = kGain.data[10]*trkErrData[ 6] + kGain.data[11]*trkErrData[ 7];
+      newErr.data[19] = kGain.data[10]*trkErrData[10] + kGain.data[11]*trkErrData[11];
+      newErr.data[20] = kGain.data[10]*trkErrData[15] + kGain.data[11]*trkErrData[16];
+   });
+
+  Kokkos::parallel_for( Kokkos::TeamThreadRange(teamMember, bsize),[&](const size_t it)
+  {
+    #pragma unroll
+    for (int i = 0; i < 21; i++){
+      trkErrData[ i] = trkErrData[ i] - newErr.data[ i];
+    }
+  });
+}
+
+constexpr float kfact = 100./(-0.299792458*3.8112);
 
 template <typename member_type>
 KOKKOS_FUNCTION void propagateToZ(const MP6x6SF_* inErr, const MP6F_* inPar,
@@ -657,27 +801,24 @@ int main (int argc, char* argv[]) {
   printf("Measure Compute Times Only!\n");
 #endif
 
-   int itr;
-   ATRK inputtrk = {
-     {-12.806846618652344, -7.723824977874756, 38.13014221191406,0.23732035065189902, -2.613372802734375, 0.35594117641448975},
-     {6.290299552347278e-07,4.1375109560704004e-08,7.526661534029699e-07,2.0973730840978533e-07,1.5431574240665213e-07,9.626245400795597e-08,-2.804026640189443e-06,
-      6.219111130687595e-06,2.649119409845118e-07,0.00253512163402557,-2.419662877381737e-07,4.3124190760040646e-07,3.1068903991780678e-09,0.000923913115050627,
-      0.00040678296006807003,-7.755406890332818e-07,1.68539375883925e-06,6.676875566525437e-08,0.0008420574605423793,7.356584799406111e-05,0.0002306247719158348},
-     1
-   };
+#include "input_track.h"
 
-   AHIT inputhit = {
-     {-20.7824649810791, -12.24150276184082, 57.8067626953125},
-     {2.545517190810642e-06,-2.6680759219743777e-06,2.8030024168401724e-06,0.00014160551654640585,0.00012282167153898627,11.385087966918945}
-   };
+   struct AHIT inputhits[26] = {inputhit25,inputhit24,inputhit23,inputhit22,inputhit21,inputhit20,inputhit19,inputhit18,inputhit17,
+				inputhit16,inputhit15,inputhit14,inputhit13,inputhit12,inputhit11,inputhit10,inputhit09,inputhit08,
+				inputhit07,inputhit06,inputhit05,inputhit04,inputhit03,inputhit02,inputhit01,inputhit00};
 
-   printf("track in pos: %f, %f, %f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2]);
+   printf("track in pos: x=%f, y=%f, z=%f, r=%f, pt=%f, phi=%f, theta=%f \n", inputtrk.par[0], inputtrk.par[1], inputtrk.par[2],
+	  sqrtf(inputtrk.par[0]*inputtrk.par[0] + inputtrk.par[1]*inputtrk.par[1]),
+	  1./inputtrk.par[3], inputtrk.par[4], inputtrk.par[5]);
+
    printf("track in cov: %.2e, %.2e, %.2e \n", inputtrk.cov[SymOffsets66(PosInMtrx(0,0,6))],
-	                                       inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
+                                               inputtrk.cov[SymOffsets66(PosInMtrx(1,1,6))],
 	                                       inputtrk.cov[SymOffsets66(PosInMtrx(2,2,6))]);
-   printf("hit in pos: %f %f %f \n", inputhit.pos[0], inputhit.pos[1], inputhit.pos[2]);
-   
-   printf("produce nevts=%i ntrks=%i smearing by=%f \n", nevts, ntrks, smear);
+   for (size_t lay=0; lay<nlayer; lay++){
+     printf("hit in layer=%lu, pos: x=%f, y=%f, z=%f, r=%f \n", lay, inputhits[lay].pos[0], inputhits[lay].pos[1], inputhits[lay].pos[2], sqrtf(inputhits[lay].pos[0]*inputhits[lay].pos[0] + inputhits[lay].pos[1]*inputhits[lay].pos[1]));
+   }
+
+   printf("produce nevts=%i ntrks=%i smearing by=%2.1e \n", nevts, ntrks, smear);
    printf("NITER=%d\n", NITER);
    
    long setup_start, setup_stop;
@@ -693,36 +834,37 @@ int main (int argc, char* argv[]) {
    Kokkos::initialize(argc, argv);
    {
 
-   #ifdef KOKKOS_ENABLE_CUDA
-   #define MemSpace Kokkos::CudaSpace
-   #endif
-   #ifdef KOKKOS_ENABLE_HIP
-   #define MemSpace Kokkos::Experimental::HIPSpace
-   #endif
-   #ifdef KOKKOS_ENABLE_OPENMPTARGET
-   #define MemSpace Kokkos::OpenMPTargetSpace
-   #endif
-
-   #ifndef MemSpace
-   #define MemSpace Kokkos::HostSpace
-   #endif
 
    printf("After kokkos::init\n");
-   using ExecSpace = MemSpace::execution_space;
    ExecSpace e;
    e.print_configuration(std::cout, true);
 
    Kokkos::View<MPTRK*> trk("trk", nevts*nb);
-   Kokkos::View<MPTRK*>::HostMirror h_trk = prepareTracks(inputtrk, trk);
+#if prepin_hostmem == 1
+   Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_trk("h_trk", nevts*nb);
+   prepareTracks(inputtrk, h_trk);
+#else
+   Kokkos::View<MPTRK*>::HostMirror h_trk = Kokkos::create_mirror_view(trk);
+   prepareTracks(inputtrk, h_trk);
+#endif
    //Kokkos::deep_copy(trk, h_trk);
  
    Kokkos::View<MPHIT*> hit("hit", nevts*nb*nlayer);
-   Kokkos::View<MPHIT*>::HostMirror h_hit = prepareHits(inputhit, hit);
+#if prepin_hostmem == 1
+   Kokkos::View<MPHIT*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_hit("h_hit", nevts*nb*nlayer);
+   prepareHits(inputhits, h_hit);
+#else
+   Kokkos::View<MPHIT*>::HostMirror h_hit = Kokkos::create_mirror_view(hit);
+   prepareHits(inputhits, h_hit);
+#endif
    //Kokkos::deep_copy(hit, h_hit);
 
-   //MPTRK* outtrk = (MPTRK*) malloc(nevts*nb*sizeof(MPTRK));
    Kokkos::View<MPTRK*> outtrk("outtrk", nevts*nb);
+#if prepin_hostmem == 1
+   Kokkos::View<MPTRK*, ExecSpace::array_layout, Kokkos::CudaHostPinnedSpace> h_outtrk("h_outtrk", nevts*nb);
+#else
    Kokkos::View<MPTRK*>::HostMirror h_outtrk = Kokkos::create_mirror_view(outtrk);
+#endif
 
    gettimeofday(&timecheck, NULL);
    setup_stop = (long)timecheck.tv_sec * 1000 + (long)timecheck.tv_usec / 1000;
@@ -732,7 +874,7 @@ int main (int argc, char* argv[]) {
    
    printf("Size of struct MPTRK trk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
    printf("Size of struct MPTRK outtrk[] = %ld\n", nevts*nb*sizeof(struct MPTRK));
-   printf("Size of struct struct MPHIT hit[] = %ld\n", nevts*nb*sizeof(struct MPHIT));
+   printf("Size of struct struct MPHIT hit[] = %ld\n", nlayer*nevts*nb*sizeof(struct MPHIT));
 
    typedef Kokkos::TeamPolicy<>               team_policy;
    typedef Kokkos::TeamPolicy<>::member_type  member_type;
@@ -749,6 +891,7 @@ int main (int argc, char* argv[]) {
 
    auto wall_start = std::chrono::high_resolution_clock::now();
 
+   int itr;
    for(itr=0; itr<NITER; itr++) {
 #ifdef include_data
      Kokkos::deep_copy(trk, h_trk);
@@ -770,6 +913,7 @@ int main (int argc, char* argv[]) {
          int *dstPtrI = btracks.q.data; 
          int *srcPtrI = trk[ti].q.data;
          loadData(dstPtrI,srcPtrI,idx,1);
+         obtracks = btracks;
 
 #pragma unroll
          for(size_t layer=0; layer<nlayer; ++layer) {
@@ -781,18 +925,19 @@ int main (int argc, char* argv[]) {
             srcPtr2 = hit[layer+ti*nlayer].cov.data;
             loadData(dstPtr2,srcPtr2,idx,6);
 
-            propagateToZ(&(btracks.cov), &(btracks.par), &(btracks.q), &(bhits.pos), &(obtracks.cov), &(obtracks.par), teamMember); // vectorized function
-            KalmanUpdate(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos), teamMember);
+            propagateToZ(&(obtracks.cov), &(obtracks.par), &(obtracks.q), &(bhits.pos), &(obtracks.cov), &(obtracks.par), teamMember); // vectorized function
+            //KalmanUpdate(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos), teamMember);
+            KalmanUpdate_v2(&(obtracks.cov),&(obtracks.par),&(bhits.cov),&(bhits.pos), teamMember);
          }
-         dstPtr = outtrk[ti].par.data;
-         srcPtr = obtracks.par.data;
-         saveData(dstPtr,srcPtr,idx,6);
-         dstPtr = outtrk[ti].cov.data;
-         srcPtr = obtracks.cov.data;
-         saveData(dstPtr,srcPtr,idx,21);
-         dstPtrI = outtrk[ti].q.data;
-         srcPtrI = obtracks.q.data;
-         saveData(dstPtrI,srcPtrI,idx,1);
+         float *dstPtr2 = outtrk[ti].par.data;
+         float *srcPtr2 = obtracks.par.data;
+         saveData(dstPtr2,srcPtr2,idx,6);
+         dstPtr2 = outtrk[ti].cov.data;
+         srcPtr2 = obtracks.cov.data;
+         saveData(dstPtr2,srcPtr2,idx,21);
+         int *dstPtrI2 = outtrk[ti].q.data;
+         int *srcPtrI2 = obtracks.q.data;
+         saveData(dstPtrI2,srcPtrI2,idx,1);
 
      }); 
    }  
@@ -814,32 +959,75 @@ int main (int argc, char* argv[]) {
    printf("setup time time=%f (s)\n", setup_time);
    printf("done ntracks=%i tot time=%f (s) time/trk=%e (s)\n", nevts*ntrks*int(NITER), wall_time, wall_time/(nevts*ntrks*int(NITER)));
    printf("formatted %i %i %i %i %i %f 0 %f %i\n",int(NITER),nevts, ntrks, bsize, nb, wall_time, setup_time, -1);
+#ifdef DUMP_OUTPUT
+   FILE *fp_x;
+   FILE *fp_y;
+   FILE *fp_z;
+   fp_x = fopen("output_x.txt", "w");
+   fp_y = fopen("output_y.txt", "w");
+   fp_z = fopen("output_z.txt", "w");
+#endif
 
+   int nnans = 0, nfail = 0;
    double avgx = 0, avgy = 0, avgz = 0;
    double avgpt = 0, avgphi = 0, avgtheta = 0;
    double avgdx = 0, avgdy = 0, avgdz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(h_outtrk.data(),ie,it);
-       float y_ = y(h_outtrk.data(),ie,it);
-       float z_ = z(h_outtrk.data(),ie,it);
-       float pt_ = 1./ipt(h_outtrk.data(),ie,it);
-       float phi_ = phi(h_outtrk.data(),ie,it);
-       float theta_ = theta(h_outtrk.data(),ie,it);
+       double x_ = x(h_outtrk.data(),ie,it);
+       double y_ = y(h_outtrk.data(),ie,it);
+       double z_ = z(h_outtrk.data(),ie,it);
+       double pt_ = 1./ipt(h_outtrk.data(),ie,it);
+       double phi_ = phi(h_outtrk.data(),ie,it);
+       double theta_ = theta(h_outtrk.data(),ie,it);
+       double hx_ = x(h_hit.data(),ie,it);
+       double hy_ = y(h_hit.data(),ie,it);
+       double hz_ = z(h_hit.data(),ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
+	   ) {
+	 nnans++;
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+           ) {
+	 nfail++;
+	 continue;
+       }
+#ifdef DUMP_OUTPUT
+       fprintf(fp_x, "%f\n", x_);
+       fprintf(fp_y, "%f\n", y_);
+       fprintf(fp_z, "%f\n", z_);
+#endif
        avgpt += pt_;
        avgphi += phi_;
        avgtheta += theta_;
        avgx += x_;
        avgy += y_;
        avgz += z_;
-       float hx_ = x(h_hit.data(),ie,it);
-       float hy_ = y(h_hit.data(),ie,it);
-       float hz_ = z(h_hit.data(),ie,it);
        avgdx += (x_-hx_)/x_;
        avgdy += (y_-hy_)/y_;
        avgdz += (z_-hz_)/z_;
      }
    }
+#ifdef DUMP_OUTPUT
+   fclose(fp_x);
+   fclose(fp_y);
+   fclose(fp_z);
+   fp_x = fopen("input_x.txt", "w");
+   fp_y = fopen("input_y.txt", "w");
+   fp_z = fopen("input_z.txt", "w");
+#endif
    avgpt = avgpt/double(nevts*ntrks);
    avgphi = avgphi/double(nevts*ntrks);
    avgtheta = avgtheta/double(nevts*ntrks);
@@ -854,20 +1042,55 @@ int main (int argc, char* argv[]) {
    double stddx = 0, stddy = 0, stddz = 0;
    for (size_t ie=0;ie<nevts;++ie) {
      for (size_t it=0;it<ntrks;++it) {
-       float x_ = x(h_outtrk.data(),ie,it);
-       float y_ = y(h_outtrk.data(),ie,it);
-       float z_ = z(h_outtrk.data(),ie,it);
+       double x_ = x(h_outtrk.data(),ie,it);
+       double y_ = y(h_outtrk.data(),ie,it);
+       double z_ = z(h_outtrk.data(),ie,it);
+       double pt_ = 1./ipt(h_outtrk.data(),ie,it);
+       double phi_ = phi(h_outtrk.data(),ie,it);
+       double theta_ = theta(h_outtrk.data(),ie,it);
+       double hx_ = x(h_hit.data(),ie,it);
+       double hy_ = y(h_hit.data(),ie,it);
+       double hz_ = z(h_hit.data(),ie,it);
+       double hr_ = sqrtf(hx_*hx_ + hy_*hy_);
+       if (std::isfinite(x_)==false ||
+	   std::isfinite(y_)==false ||
+	   std::isfinite(z_)==false ||
+	   std::isfinite(pt_)==false ||
+	   std::isfinite(phi_)==false ||
+	   std::isfinite(theta_)==false
+	   ) {
+	 continue;
+       }
+       if (fabs( (x_-hx_)/hx_ )>1. ||
+           fabs( (y_-hy_)/hy_ )>1. ||
+           fabs( (z_-hz_)/hz_ )>1. ||
+           fabs( (pt_-12.)/12.)>1. ||
+           fabs( (phi_-1.3)/1.3)>1. ||
+           fabs( (theta_-2.8)/2.8)>1.
+           ) {
+         continue;
+       }
        stdx += (x_-avgx)*(x_-avgx);
        stdy += (y_-avgy)*(y_-avgy);
        stdz += (z_-avgz)*(z_-avgz);
-       float hx_ = x(h_hit.data(),ie,it);
-       float hy_ = y(h_hit.data(),ie,it);
-       float hz_ = z(h_hit.data(),ie,it);
        stddx += ((x_-hx_)/x_-avgdx)*((x_-hx_)/x_-avgdx);
        stddy += ((y_-hy_)/y_-avgdy)*((y_-hy_)/y_-avgdy);
        stddz += ((z_-hz_)/z_-avgdz)*((z_-hz_)/z_-avgdz);
+#ifdef DUMP_OUTPUT
+       x_ = x(h_outtrk.data(),ie,it);
+       y_ = y(h_outtrk.data(),ie,it);
+       z_ = z(h_outtrk.data(),ie,it);
+       fprintf(fp_x, "%f\n", x_);
+       fprintf(fp_y, "%f\n", y_);
+       fprintf(fp_z, "%f\n", z_);
+#endif
      }
    }
+#ifdef DUMP_OUTPUT
+   fclose(fp_x);
+   fclose(fp_y);
+   fclose(fp_z);
+#endif
 
    stdx = sqrtf(stdx/double(nevts*ntrks));
    stdy = sqrtf(stdy/double(nevts*ntrks));
@@ -885,6 +1108,8 @@ int main (int argc, char* argv[]) {
    printf("track pt avg=%f\n", avgpt);
    printf("track phi avg=%f\n", avgphi);
    printf("track theta avg=%f\n", avgtheta);
+   printf("number of tracks with nans=%i\n", nnans);
+   printf("number of tracks failed=%i\n", nfail);
 
    }
    Kokkos::finalize();

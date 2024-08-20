@@ -8,17 +8,14 @@ mkdir build && cd build\
 cmake -DCMAKE_INSTALL_PREFIX=/install/ ..\
 cmake --install .
 
-## For the regular CPU version
-Using Makefile on UO apollo requires alpaka/include to the path. Switch cpu acc in the main() function
-
-cd ~/p2z-tests/\
-make COMPILER=gcc MODE=alpaka\
-./bin/propagate_gcc_alpaka
-
 ## For the GPU & CPU version 
-Using Cmake options, requires cudatoolkit. Switch acc in the config.sh
+Using Makefile in ${p2z-tests-root-dir} directory
 
-cd ~/p2z-tests/src/alpaka_src_gpu/build\
-source config.sh\
-make\
-./alpaka_src_gpu
+cd ${p2z-tests-root-dir}
+//For GPU
+make COMPILER=nvcc MODE=alpaka
+./bin/propagate_nvcc_alpaka
+
+//For CPU
+make COMPILER=gcc MODE=alpaka
+./bin/propagate_gcc_alpaka
