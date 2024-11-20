@@ -1,5 +1,31 @@
 # p2z-tests
 
+## Peer-reviewed publication
+
+Our results are published as "Exploring code portability solutions for HEP with a particle tracking test code", Front. Big Data, 22 October 2024, Sec. Big Data and AI in High Energy Physics, Volume 7 - 2024 (https://doi.org/10.3389/fdata.2024.1485344).
+
+Versions from this repository used in the paper figures are:
+
+* Figure 2,3,4,7:
+	* CUDA: [src/propagate-toz-test_CUDA_v4.cu](https://github.com/cerati/p2z-tests/blob/v1.0/src/propagate-toz-test_CUDA_v4.cu)
+	* Alpaka: [src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu_v4.cpp](https://github.com/cerati/p2z-tests/blob/v1.0/src/alpaka_src_gpu/src/propagate-toz-test_alpaka_cpu_gpu_v4.cpp)
+	* Kokkos: [src/kokkos_src_v6_2/propagate-toz-test_Kokkos_v6_2.cpp](https://github.com/cerati/p2z-tests/blob/v1.0/src/kokkos_src_v6_2/propagate-toz-test_Kokkos_v6_2.cpp)
+	* OpenMP4: [src/propagate-toz-test_OpenMP4_async_v4.c](https://github.com/cerati/p2z-tests/blob/v1.0/src/propagate-toz-test_OpenMP4_async_v4.c)
+	* OpenACC: [src/propagate-toz-test_Openly_Sung_v4.c](https://github.com/cerati/p2z-tests/blob/v1.0/src/propagate-toz-test_OpenACC_async_v4.c)
+	* stdpar: [src/propagate-toz-test_pstl_v2.cpp](https://github.com/cerati/p2z-tests/blob/v1.0/src/propagate-toz-test_pstl_v2.cpp)
+ 	* TBB: [src/propagate-toz-test_tbb.cpp](https://github.com/cerati/p2z-tests/blob/v1.0/src/src/propagate-toz-test_tbb.cpp)
+
+* Figure 5 (memory prepinning test):
+	* OpenACC batched, sync: [src/propagate-toz-test_OpenACC_sync.c](https://github.com/cerati/p2z-tests/blob/v1.0/src/propagate-toz-test_OpenACC_sync.c)
+	* OpenACC batched, async: [src/propagate-toz-test_OpenACC_async.c](https://github.com/cerati/p2z-tests/blob/v1.0/src/propagate-toz-test_OpenACC_async.c)
+	* OpenACC thread-local, async: [src/propagate-toz-test_OpenACC_async_v4.c](https://github.com/cerati/p2z-tests/blob/v1.0/src/propagate-toz-test_OpenACC_async_v4.c)
+	* Kokkos batched, sync: [src/kokkos_src_v3_2/propagate-toz-test_Kokkos_v3_2.cpp](https://github.com/cerati/p2z-tests/blob/v1.0/src/kokkos_src_v3_2/propagate-toz-test_Kokkos_v3_2.cpp)
+	* Kokkos batched, async: [src/kokkos_src_v4_2/propagate-toz-test_Kokkos_v4_2.cpp](https://github.com/cerati/p2z-tests/blob/v1.0/src/kokkos_src_v4_2/propagate-toz-test_Kokkos_v4_2.cpp)
+	* Kokkos thread-local, sync: [src/kokkos_src_v5_2/propagate-toz-test_Kokkos_v5_2.cpp](https://github.com/cerati/p2z-tests/blob/v1.0/src/kokkos_src_v5_2/propagate-toz-test_Kokkos_v5_2.cpp)
+	* Kokkos thread-local, async: [src/kokkos_src_v6_2/propagate-toz-test_Kokkos_v6_2.cpp](https://github.com/cerati/p2z-tests/blob/v1.0/src/kokkos_src_v6_2/propagate-toz-test_Kokkos_v6_2.cpp)
+
+Please find them as used in the paper at the tagged version of this repository: https://github.com/cerati/p2z-tests/releases/tag/v1.0. 
+
 ## OpenMP
 #### Compilers: gcc, icc, nvhpc.
 Version 3 is most up to date. 
